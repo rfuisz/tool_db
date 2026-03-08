@@ -8,7 +8,10 @@ from tool_db_backend.config import Settings
 class SemanticScholarClient:
     def __init__(self, settings: Settings, client: Optional[httpx.Client] = None) -> None:
         self.settings = settings
-        headers = {"User-Agent": "tool-db-backend/0.1.0"}
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+            "Accept": "application/json",
+        }
         if self.settings.semantic_scholar_api_key:
             headers["x-api-key"] = self.settings.semantic_scholar_api_key
 

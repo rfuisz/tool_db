@@ -68,40 +68,40 @@ function ItemsBrowseInner() {
       <div className="mb-8 flex flex-wrap items-center gap-3 font-ui text-sm">
         <input
           type="text"
-          placeholder="Search\u2026"
+          placeholder={"Search\u2026"}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="h-9 w-52 border-b border-edge bg-transparent px-0 text-ink placeholder-ink-muted outline-none transition-colors focus:border-accent"
         />
 
         <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}
-          className="h-9 border-b border-edge bg-transparent text-ink-secondary outline-none focus:border-accent">
+          className="h-9 border-b border-edge bg-transparent text-sm text-ink-secondary outline-none">
           <option value="">All types</option>
           {allTypes.map((t) => <option key={t} value={t}>{ITEM_TYPE_LABELS[t as ItemType]}</option>)}
         </select>
 
         <select value={mechanismFilter} onChange={(e) => setMechanismFilter(e.target.value)}
-          className="h-9 border-b border-edge bg-transparent text-ink-secondary outline-none focus:border-accent">
+          className="h-9 border-b border-edge bg-transparent text-sm text-ink-secondary outline-none">
           <option value="">All mechanisms</option>
           {allMechanisms.map((m) => <option key={m} value={m}>{MECHANISM_LABELS[m] ?? m.replace(/_/g, " ")}</option>)}
         </select>
 
         <select value={techniqueFilter} onChange={(e) => setTechniqueFilter(e.target.value)}
-          className="h-9 border-b border-edge bg-transparent text-ink-secondary outline-none focus:border-accent">
+          className="h-9 border-b border-edge bg-transparent text-sm text-ink-secondary outline-none">
           <option value="">All techniques</option>
           {allTechniques.map((t) => <option key={t} value={t}>{TECHNIQUE_LABELS[t] ?? t.replace(/_/g, " ")}</option>)}
         </select>
 
         <select value={familyFilter} onChange={(e) => setFamilyFilter(e.target.value)}
-          className="h-9 border-b border-edge bg-transparent text-ink-secondary outline-none focus:border-accent">
+          className="h-9 border-b border-edge bg-transparent text-sm text-ink-secondary outline-none">
           <option value="">All families</option>
           {allFamilies.map((f) => <option key={f} value={f}>{f}</option>)}
         </select>
 
         <div className="ml-auto flex items-center gap-2 text-ink-muted">
-          <span className="text-xs">Sort</span>
+          <span className="small-caps">Sort</span>
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-            className="h-9 border-b border-edge bg-transparent text-ink-secondary outline-none focus:border-accent">
+            className="h-9 border-b border-edge bg-transparent text-sm text-ink-secondary outline-none">
             <option value="name">Name</option>
             <option value="evidence">Evidence</option>
             <option value="replication">Replication</option>

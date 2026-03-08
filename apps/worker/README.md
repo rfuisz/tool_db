@@ -94,3 +94,11 @@ Run the packet ingest pipeline end to end:
 ```bash
 .venv/bin/python -m apps.worker.main ingest-packet review_extract_v1 tests/fixtures/review_extract_v1.sample.json --apply
 ```
+
+Pull a modest real-data smoke-test batch:
+
+```bash
+.venv/bin/python -m apps.worker.main smoke-test-real-data
+```
+
+This fetches a small batch from literature/problem sources and writes a manifest plus raw payload snapshots so you can sanity-check entry counts and payload shape before heavier ingestion work.

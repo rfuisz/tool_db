@@ -23,6 +23,7 @@ from tool_db_backend.postgres_loader import PostgresLoadPlanExecutor
 from tool_db_backend.raw_store import RawPayloadStore
 from tool_db_backend.seed_export import SeedExporter
 from tool_db_backend.schema_validation import PACKET_TO_SCHEMA, PacketValidationError, validate_packet
+from tool_db_backend.source_smoke_test import RealDataSmokeTester
 
 
 def validate_packet_file(packet_kind: str, packet_path: str) -> int:
@@ -200,6 +201,17 @@ def ingest_packet(
     return 0
 
 
+def smoke_test_real_data(artifact_dir: Optional[str] = None) -> int:
+    settings = get_settings()
+    tester = RealDataSmokeTester(settings)
+    try:
+        result = tester.run(Path(artifact_dir) if artifact_dir else None)
+    finally:
+        tester.close()
+    print(json.dumps(result, indent=2))
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     args = argv or sys.argv[1:]
     if len(args) == 2 and args[0] in PACKET_TO_SCHEMA:
@@ -287,6 +299,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     ingest_parser.add_argument("--artifact-dir")
     ingest_parser.add_argument("--review-output-path")
 
+    smoke_test_parser = subparsers.add_parser(
+        "smoke-test-real-data",
+        help="Fetch a modest batch of real literature and gap/problem data.",
+    )
+    smoke_test_parser.add_argument("--artifact-dir")
+
     parsed = parser.parse_args(args)
 
     if parsed.command == "validate-packet":
@@ -319,6 +337,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             parsed.artifact_dir,
             parsed.review_output_path,
         )
+    if parsed.command == "smoke-test-real-data":
+        return smoke_test_real_data(parsed.artifact_dir)
 
     parser.print_help()
     return 2

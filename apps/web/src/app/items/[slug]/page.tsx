@@ -10,6 +10,7 @@ import {
 import { ScoreBreakdown } from "@/components/score-bar";
 import { ValidationMatrix } from "@/components/validation-dots";
 import { CitationList } from "@/components/citation-list";
+import { TypeBadge, MaturityBadge, StatusBadge, ModalityLabel, MechanismTag, TechniqueTag } from "@/components/detail-tooltips";
 import type { ValidationObservation } from "@/lib/types";
 
 export function generateStaticParams() {
@@ -104,15 +105,26 @@ export default async function ItemDetailPage({
       {/* Header */}
       <header className="mb-12">
         <h1 className="mb-3">{item.canonical_name}</h1>
-        <p className="font-ui text-sm text-ink-muted">
-          {ITEM_TYPE_LABELS[item.item_type]}
-          {item.family && <> &middot; {item.family}</>}
-          {" "}&middot; {MATURITY_LABELS[item.maturity_stage]}
-          {item.first_publication_year && <> &middot; Since {item.first_publication_year}</>}
-          {item.status === "seed" && (
-            <span className="ml-2 text-caution">Seed — needs curation</span>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-ui text-sm text-ink-muted">
+          <TypeBadge type={item.item_type} />
+          {item.family && (
+            <>
+              <span className="text-ink-faint">&middot;</span>
+              <Link href={`/items?family=${item.family}`} className="transition-colors hover:text-accent">
+                {item.family}
+              </Link>
+            </>
           )}
-        </p>
+          <span className="text-ink-faint">&middot;</span>
+          <MaturityBadge stage={item.maturity_stage} />
+          {item.first_publication_year && (
+            <>
+              <span className="text-ink-faint">&middot;</span>
+              <span>Since {item.first_publication_year}</span>
+            </>
+          )}
+          <StatusBadge status={item.status} />
+        </div>
         {item.synonyms.length > 0 && (
           <p className="mt-1 font-ui text-sm italic text-ink-faint">
             Also known as: {item.synonyms.join(", ")}
@@ -137,13 +149,7 @@ export default async function ItemDetailPage({
                 <div>
                   <p className="mb-1 text-xs text-ink-muted">Mechanisms</p>
                   {item.mechanisms.map((m) => (
-                    <Link
-                      key={m}
-                      href={`/items?mechanism=${m}`}
-                      className="mr-2 text-ink-secondary hover:text-accent"
-                    >
-                      {m.replace(/_/g, " ")}
-                    </Link>
+                    <MechanismTag key={m} mechanism={m} />
                   ))}
                 </div>
               )}
@@ -151,13 +157,7 @@ export default async function ItemDetailPage({
                 <div>
                   <p className="mb-1 text-xs text-ink-muted">Techniques</p>
                   {item.techniques.map((t) => (
-                    <Link
-                      key={t}
-                      href={`/items?technique=${t}`}
-                      className="mr-2 text-ink-secondary hover:text-accent"
-                    >
-                      {t.replace(/_/g, " ")}
-                    </Link>
+                    <TechniqueTag key={t} technique={t} />
                   ))}
                 </div>
               )}
@@ -169,16 +169,10 @@ export default async function ItemDetailPage({
               </div>
               <div>
                 {item.primary_input_modality && (
-                  <p className="text-ink-secondary">
-                    <span className="text-xs text-ink-muted">Input: </span>
-                    {MODALITY_LABELS[item.primary_input_modality]}
-                  </p>
+                  <ModalityLabel modality={item.primary_input_modality} direction="Input" />
                 )}
                 {item.primary_output_modality && (
-                  <p className="text-ink-secondary">
-                    <span className="text-xs text-ink-muted">Output: </span>
-                    {MODALITY_LABELS[item.primary_output_modality]}
-                  </p>
+                  <ModalityLabel modality={item.primary_output_modality} direction="Output" />
                 )}
               </div>
             </div>

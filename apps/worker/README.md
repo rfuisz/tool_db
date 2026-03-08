@@ -9,6 +9,20 @@ Worker-side utilities and future background jobs for ingestion and scoring.
 - workflow rollups
 - gap-link scoring
 
+## Local Database
+
+Use the repo's local PostgreSQL setup rather than SQLite for canonical data:
+
+```bash
+docker compose -f docker-compose.local.yml up -d
+```
+
+Set:
+
+```bash
+DATABASE_URL=postgresql://tooldb:tooldb@localhost:5432/tooldb
+```
+
 ## Current Utility
 
 Validate an extraction packet against the repo's JSON Schemas:

@@ -74,6 +74,8 @@ class LLMExtractionRunner:
         schema_text: str,
         job: Dict[str, Any],
     ) -> List[Dict[str, str]]:
+        common_schema_path = self.settings.repo_root / "schemas" / "extraction" / "common.v1.schema.json"
+        common_schema_text = common_schema_path.read_text()
         return [
             {
                 "role": "system",
@@ -90,6 +92,8 @@ class LLMExtractionRunner:
                     f"{prompt_template}\n\n"
                     "## JSON Schema\n"
                     f"{schema_text}\n\n"
+                    "## Common JSON Schema Definitions\n"
+                    f"{common_schema_text}\n\n"
                     "## Extraction Job\n"
                     f"{json.dumps(job, indent=2)}\n"
                 ),
@@ -104,6 +108,8 @@ class LLMExtractionRunner:
         invalid_packet: Dict[str, Any],
         validation_error: str,
     ) -> Dict[str, Any]:
+        common_schema_path = self.settings.repo_root / "schemas" / "extraction" / "common.v1.schema.json"
+        common_schema_text = common_schema_path.read_text()
         return self._request_json_object(
             purpose=f"repair:{job.get('target_packet_type', 'unknown')}",
             messages=[
@@ -120,6 +126,8 @@ class LLMExtractionRunner:
                         f"{prompt_template}\n\n"
                         "## JSON Schema\n"
                         f"{schema_text}\n\n"
+                        "## Common JSON Schema Definitions\n"
+                        f"{common_schema_text}\n\n"
                         "## Original Extraction Job\n"
                         f"{json.dumps(job, indent=2)}\n\n"
                         "## Invalid Packet\n"

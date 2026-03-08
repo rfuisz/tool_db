@@ -189,6 +189,12 @@ export interface WorkflowStep {
   output_artifact: string | null;
 }
 
+export interface WorkflowReference {
+  title: string;
+  href: string;
+  note: string;
+}
+
 export interface WorkflowTemplate {
   id: string;
   slug: string;
@@ -198,4 +204,9 @@ export interface WorkflowTemplate {
   throughput_class: string | null;
   recommended_for: string | null;
   steps: WorkflowStep[];
+  simple_summary?: string | null;
+  how_to_implement?: string[];
+  used_when?: string[];
+  tradeoffs?: string[];
+  citations?: WorkflowReference[];
 }

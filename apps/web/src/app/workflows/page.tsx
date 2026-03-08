@@ -1,5 +1,6 @@
 import { WORKFLOWS } from "@/lib/data";
 import { WORKFLOW_FAMILY_LABELS } from "@/lib/vocabularies";
+import { WorkflowPhaseBreakdown } from "@/components/workflow-phase-breakdown";
 import { WorkflowTimeline } from "@/components/workflow-timeline";
 
 export default function WorkflowsPage() {
@@ -30,9 +31,89 @@ export default function WorkflowsPage() {
               )}
             </div>
 
+            <div className="mb-6">
+              <WorkflowPhaseBreakdown steps={w.steps} />
+            </div>
+
             <div className="rounded-lg bg-surface p-6">
               <WorkflowTimeline steps={w.steps} />
             </div>
+
+            {(w.simple_summary ||
+              (w.how_to_implement && w.how_to_implement.length > 0) ||
+              (w.used_when && w.used_when.length > 0) ||
+              (w.tradeoffs && w.tradeoffs.length > 0) ||
+              (w.citations && w.citations.length > 0)) && (
+              <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                {w.simple_summary && (
+                  <div className="rounded-lg border border-edge bg-surface-alt p-5">
+                    <p className="small-caps mb-3">Simple Summary</p>
+                    <p className="text-sm leading-6 text-ink-secondary">
+                      {w.simple_summary}
+                    </p>
+                  </div>
+                )}
+
+                {w.used_when && w.used_when.length > 0 && (
+                  <div className="rounded-lg border border-edge bg-surface-alt p-5">
+                    <p className="small-caps mb-3">Used When</p>
+                    <ul className="space-y-2 text-sm leading-6 text-ink-secondary">
+                      {w.used_when.map((note) => (
+                        <li key={note}>{note}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {w.how_to_implement && w.how_to_implement.length > 0 && (
+                  <div className="rounded-lg border border-edge bg-surface-alt p-5">
+                    <p className="small-caps mb-3">How To Implement</p>
+                    <ol className="space-y-2 text-sm leading-6 text-ink-secondary">
+                      {w.how_to_implement.map((note, index) => (
+                        <li key={note}>
+                          <span className="mr-2 font-data text-ink-muted">
+                            {index + 1}.
+                          </span>
+                          {note}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+
+                {w.tradeoffs && w.tradeoffs.length > 0 && (
+                  <div className="rounded-lg border border-edge bg-surface-alt p-5">
+                    <p className="small-caps mb-3">Tradeoffs</p>
+                    <ul className="space-y-2 text-sm leading-6 text-ink-secondary">
+                      {w.tradeoffs.map((note) => (
+                        <li key={note}>{note}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {w.citations && w.citations.length > 0 && (
+                  <div className="rounded-lg border border-edge bg-surface-alt p-5 lg:col-span-2">
+                    <p className="small-caps mb-3">Key Citations</p>
+                    <ul className="space-y-3">
+                      {w.citations.map((citation) => (
+                        <li key={citation.href} className="text-sm leading-6 text-ink-secondary">
+                          <a
+                            href={citation.href}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-brand hover:text-accent"
+                          >
+                            {citation.title}
+                          </a>
+                          <p className="text-ink-muted">{citation.note}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
 
             <hr className="mt-16" />
           </section>

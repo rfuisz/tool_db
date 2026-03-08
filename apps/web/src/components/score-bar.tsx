@@ -1,3 +1,8 @@
+"use client";
+
+import { Tooltip } from "./tooltip";
+import { SCORE_EXPLANATIONS } from "@/lib/explanations";
+
 function scoreColor(value: number): string {
   if (value >= 0.75) return "bg-emerald-500";
   if (value >= 0.5) return "bg-amber-400";
@@ -23,10 +28,23 @@ export function ScoreBar({
   }
 
   const pct = Math.round(value * 100);
+  const explanation = SCORE_EXPLANATIONS[label];
+
+  const labelEl = (
+    <span className={`w-24 shrink-0 text-xs text-ink-muted ${explanation ? "cursor-help border-b border-dotted border-ink-faint" : ""}`}>
+      {label}
+    </span>
+  );
 
   return (
     <div className="flex items-center gap-2">
-      <span className="w-24 shrink-0 text-xs text-ink-muted">{label}</span>
+      {explanation ? (
+        <Tooltip content={explanation} position="bottom">
+          {labelEl}
+        </Tooltip>
+      ) : (
+        labelEl
+      )}
       <div className="h-1.5 flex-1 rounded-full bg-surface-alt">
         <div
           className={`h-1.5 rounded-full transition-all ${scoreColor(value)}`}
@@ -34,9 +52,14 @@ export function ScoreBar({
         />
       </div>
       {showValue && (
-        <span className="w-8 text-right font-data text-xs font-medium tabular-nums text-ink-secondary">
-          {pct}
-        </span>
+        <Tooltip
+          content={`${pct}/100 — ${pct >= 75 ? "Strong" : pct >= 50 ? "Moderate" : "Weak"}`}
+          position="bottom"
+        >
+          <span className="w-8 cursor-help text-right font-data text-xs font-medium tabular-nums text-ink-secondary">
+            {pct}
+          </span>
+        </Tooltip>
       )}
     </div>
   );

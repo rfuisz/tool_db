@@ -1,8 +1,40 @@
+"use client";
+
 import Link from "next/link";
 import type { ToolkitItem } from "@/lib/types";
-import { ITEM_TYPE_LABELS } from "@/lib/vocabularies";
-import { ScoreBar } from "./score-bar";
+import { ITEM_TYPE_LABELS, MECHANISM_LABELS, TECHNIQUE_LABELS } from "@/lib/vocabularies";
+import { Tooltip } from "./tooltip";
 import { ValidationDots } from "./validation-dots";
+import { MECHANISM_EXPLANATIONS, STATUS_EXPLANATIONS } from "@/lib/explanations";
+
+function Tag({
+  label,
+  href,
+  tooltip,
+}: {
+  label: string;
+  href: string;
+  tooltip?: string;
+}) {
+  const inner = (
+    <Link
+      href={href}
+      onClick={(e) => e.stopPropagation()}
+      className="inline-block rounded bg-surface-alt px-1.5 py-0.5 text-ink-muted transition-colors hover:bg-edge hover:text-ink"
+    >
+      {label}
+    </Link>
+  );
+
+  if (tooltip) {
+    return (
+      <Tooltip content={tooltip} position="bottom">
+        {inner}
+      </Tooltip>
+    );
+  }
+  return inner;
+}
 
 export function ItemCard({ item }: { item: ToolkitItem }) {
   return (
@@ -15,21 +47,56 @@ export function ItemCard({ item }: { item: ToolkitItem }) {
         <h3 className="text-lg text-ink group-hover:text-accent">
           {item.canonical_name}
         </h3>
-        <span className="small-caps shrink-0">
-          {ITEM_TYPE_LABELS[item.item_type]}
-        </span>
+        <Tooltip
+          content={`Filter by ${ITEM_TYPE_LABELS[item.item_type]}`}
+          position="bottom"
+        >
+          <Link
+            href={`/items?type=${item.item_type}`}
+            onClick={(e) => e.stopPropagation()}
+            className="small-caps shrink-0 transition-colors hover:text-accent"
+          >
+            {ITEM_TYPE_LABELS[item.item_type]}
+          </Link>
+        </Tooltip>
       </div>
 
-      {/* Metadata line */}
-      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-ui text-xs text-ink-muted">
-        {item.family && <span>{item.family}</span>}
-        {item.first_publication_year && <span>Since {item.first_publication_year}</span>}
+      {/* Metadata tags */}
+      <div className="mb-2 flex flex-wrap items-center gap-1.5 font-ui text-xs">
+        {item.family && (
+          <Tag
+            label={item.family}
+            href={`/items?family=${item.family}`}
+            tooltip={`Filter by family: ${item.family}`}
+          />
+        )}
+        {item.first_publication_year && (
+          <Tooltip content={`First published in ${item.first_publication_year}`} position="bottom">
+            <span className="cursor-help px-1 text-ink-muted">
+              Since {item.first_publication_year}
+            </span>
+          </Tooltip>
+        )}
         {item.mechanisms.map((m) => (
-          <span key={m} className="text-ink-faint">{m.replace(/_/g, " ")}</span>
+          <Tag
+            key={m}
+            label={MECHANISM_LABELS[m] ?? m.replace(/_/g, " ")}
+            href={`/items?mechanism=${m}`}
+            tooltip={MECHANISM_EXPLANATIONS[m]}
+          />
         ))}
         {item.techniques.map((t) => (
-          <span key={t} className="text-ink-faint">{t.replace(/_/g, " ")}</span>
+          <Tag
+            key={t}
+            label={TECHNIQUE_LABELS[t] ?? t.replace(/_/g, " ")}
+            href={`/items?technique=${t}`}
+          />
         ))}
+        {item.status === "seed" && (
+          <Tooltip content={STATUS_EXPLANATIONS.seed} position="bottom">
+            <span className="cursor-help italic text-caution">seed</span>
+          </Tooltip>
+        )}
       </div>
 
       {/* Summary */}
@@ -44,19 +111,27 @@ export function ItemCard({ item }: { item: ToolkitItem }) {
         {item.validation_rollup ? (
           <ValidationDots rollup={item.validation_rollup} />
         ) : item.status === "seed" ? (
-          <span className="font-ui text-xs italic text-caution">seed &mdash; awaiting curation</span>
+          <Tooltip content="Validation data will appear after source-backed curation is complete." position="bottom">
+            <span className="cursor-help font-ui text-xs italic text-caution">awaiting curation</span>
+          </Tooltip>
         ) : null}
 
         {item.replication_summary ? (
           <div className="flex gap-4 font-data text-xs tabular-nums text-ink-muted">
             {item.replication_summary.evidence_strength_score !== null && (
-              <span>Ev <strong className="text-ink">{Math.round(item.replication_summary.evidence_strength_score * 100)}</strong></span>
+              <Tooltip content="Evidence strength: breadth and quality of published support" position="top">
+                <span className="cursor-help">Ev <strong className="text-ink">{Math.round(item.replication_summary.evidence_strength_score * 100)}</strong></span>
+              </Tooltip>
             )}
             {item.replication_summary.replication_score !== null && (
-              <span>Rep <strong className="text-ink">{Math.round(item.replication_summary.replication_score * 100)}</strong></span>
+              <Tooltip content="Replication: independent reproduction across labs and contexts" position="top">
+                <span className="cursor-help">Rep <strong className="text-ink">{Math.round(item.replication_summary.replication_score * 100)}</strong></span>
+              </Tooltip>
             )}
             {item.replication_summary.practicality_score !== null && (
-              <span>Pr <strong className="text-ink">{Math.round(item.replication_summary.practicality_score * 100)}</strong></span>
+              <Tooltip content="Practicality: ease of use, accounting for known pitfalls" position="top">
+                <span className="cursor-help">Pr <strong className="text-ink">{Math.round(item.replication_summary.practicality_score * 100)}</strong></span>
+              </Tooltip>
             )}
           </div>
         ) : null}

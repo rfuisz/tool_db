@@ -4,12 +4,16 @@ import {
   ITEMS as EXPANDED_ITEMS,
   WORKFLOWS as EXPANDED_WORKFLOWS,
 } from "./mock-data-expanded";
+import { WORKFLOW_EXPLAINERS } from "./workflow-explainers";
 
 // ── Exported data ────────────────────────────────────────────
 
 export const ITEMS: ToolkitItem[] = EXPANDED_ITEMS;
 
-export const WORKFLOWS: WorkflowTemplate[] = EXPANDED_WORKFLOWS;
+export const WORKFLOWS: WorkflowTemplate[] = EXPANDED_WORKFLOWS.map((workflow) => ({
+  ...workflow,
+  ...WORKFLOW_EXPLAINERS[workflow.slug],
+}));
 
 // ── Query helpers ────────────────────────────────────────────
 

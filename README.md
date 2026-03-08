@@ -9,6 +9,28 @@ Evidence-first engineering knowledge system for biological control surfaces, eng
 - Cursor-facing repo guidance via `AGENTS.md` and scoped rules
 - Seed knowledge artifacts that demonstrate the expected dossier pattern
 
+## Local Database
+
+Use PostgreSQL locally, not SQLite, for the canonical store.
+
+Why:
+
+- the schema already depends on PostgreSQL enums, `jsonb`, `pgcrypto`, and `pgvector`
+- the migration and load-plan executors already use `psycopg`
+- keeping local and hosted database semantics aligned is more valuable here than a lighter-weight local setup
+
+Quick start:
+
+1. Copy `.env.example` to `.env` and set `DATABASE_URL`.
+2. Start Postgres with `docker compose -f docker-compose.local.yml up -d`.
+3. Run migrations with `.venv/bin/python -m apps.worker.main run-migrations`.
+
+Recommended local `DATABASE_URL`:
+
+```text
+postgresql://tooldb:tooldb@localhost:5432/tooldb
+```
+
 ## Core Modeling Rule
 
 The primary unit of truth is `claim + context + evidence`.

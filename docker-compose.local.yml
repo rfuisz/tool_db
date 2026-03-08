@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: tool_db_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tooldb
+      POSTGRES_USER: tooldb
+      POSTGRES_PASSWORD: tooldb
+    ports:
+      - "5432:5432"
+    volumes:
+      - tool_db_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tooldb -d tooldb"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  tool_db_postgres_data:

@@ -19,6 +19,10 @@ def test_load_plan_builder_creates_existing_item_actions() -> None:
     assert any(action["action"] == "attach_evidence_to_existing_item" for action in toolkit_actions)
     claim_actions = load_plan["actions"]["claims"]
     assert claim_actions[0]["subject_targets"][0]["target_kind"] == "existing_item"
+    workflow_actions = load_plan["actions"]["workflows"]
+    assert workflow_actions[0]["action"] == "upsert_workflow_stages_for_existing_workflow"
+    assert workflow_actions[0]["target_slug"] == "fast-no-cloning-screen"
+    assert len(workflow_actions[0]["stages"]) == 2
 
 
 def test_load_plan_writer_outputs_json(tmp_path: Path) -> None:

@@ -9,7 +9,11 @@ export type ItemType =
   | "delivery_harness";
 
 export type ItemStatus = "seed" | "normalized" | "curated" | "deprecated";
-export type MaturityStage = "research" | "preclinical" | "clinical" | "deployed";
+export type MaturityStage =
+  | "research"
+  | "preclinical"
+  | "clinical"
+  | "deployed";
 
 export type Modality =
   | "light"
@@ -26,6 +30,7 @@ export type Modality =
   | "localization"
   | "degradation"
   | "signaling"
+  | "recombination"
   | "editing"
   | "selection"
   | "assay_readout"
@@ -84,6 +89,33 @@ export type WorkflowStepType =
   | "decision"
   | "packaging"
   | "delivery";
+
+export type WorkflowStageKind =
+  | "in_silico_filter"
+  | "library_design"
+  | "library_build"
+  | "broad_screen"
+  | "selection"
+  | "counter_screen"
+  | "recovery"
+  | "sequencing_readout"
+  | "hit_picking"
+  | "functional_characterization"
+  | "secondary_characterization"
+  | "confirmatory_validation"
+  | "in_vivo_validation"
+  | "decision_gate";
+
+export type WorkflowSearchModality =
+  | "in_silico"
+  | "display"
+  | "pooled_library"
+  | "cell_free"
+  | "cell_based"
+  | "biochemical"
+  | "sequencing"
+  | "structural"
+  | "animal";
 
 export interface ValidationRollup {
   has_cell_free_validation: boolean;
@@ -179,6 +211,7 @@ export interface ToolkitItem {
 export interface WorkflowStep {
   id: string;
   step_name: string;
+  stage_name?: string | null;
   step_type: WorkflowStepType;
   duration_typical_hours: number | null;
   hands_on_hours: number | null;
@@ -187,6 +220,25 @@ export interface WorkflowStep {
   failure_probability: number | null;
   input_artifact: string | null;
   output_artifact: string | null;
+}
+
+export interface WorkflowStage {
+  id: string;
+  stage_name: string;
+  stage_kind: WorkflowStageKind;
+  stage_order: number;
+  search_modality: WorkflowSearchModality | null;
+  input_candidate_count_typical: number | null;
+  output_candidate_count_typical: number | null;
+  candidate_unit: string | null;
+  selection_basis: string | null;
+  counterselection_basis: string | null;
+  enriches_for_axes: string[];
+  guards_against_axes: string[];
+  preserves_downstream_property_axes: string[];
+  advance_criteria: string | null;
+  bottleneck_risk: string | null;
+  higher_fidelity_than_previous: boolean | null;
 }
 
 export interface WorkflowReference {
@@ -203,10 +255,55 @@ export interface WorkflowTemplate {
   objective: string;
   throughput_class: string | null;
   recommended_for: string | null;
+  stages?: WorkflowStage[];
   steps: WorkflowStep[];
   simple_summary?: string | null;
   how_to_implement?: string[];
   used_when?: string[];
   tradeoffs?: string[];
   citations?: WorkflowReference[];
+}
+
+export interface FirstPassSourceDocument {
+  id: string;
+  title: string;
+  source_type: string;
+  publication_year: number | null;
+  journal_or_source: string | null;
+  doi: string | null;
+  pmid: string | null;
+}
+
+export interface FirstPassEvidenceSnippet {
+  text: string;
+  source_document: FirstPassSourceDocument | null;
+}
+
+export interface FirstPassClaim {
+  id: string;
+  claim_type: string;
+  claim_text_normalized: string;
+  polarity: string;
+  source_locator: Record<string, unknown>;
+  metrics: Array<Record<string, unknown>>;
+  source_document: FirstPassSourceDocument;
+}
+
+export interface FirstPassItemSummary {
+  slug: string;
+  canonical_name: string;
+  item_type: string | null;
+  matched_slug: string | null;
+  source_document_count: number;
+  claim_count: number;
+  aliases: string[];
+  evidence_preview: string | null;
+  evidence_previews: string[];
+  claim_previews: string[];
+}
+
+export interface FirstPassItemDetail extends FirstPassItemSummary {
+  evidence_snippets: FirstPassEvidenceSnippet[];
+  source_documents: FirstPassSourceDocument[];
+  claims: FirstPassClaim[];
 }

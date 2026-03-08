@@ -1,235 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-03-08T22:48:46+00:00",
-  "vocabularies": {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "version": "v1",
-    "item_types": [
-      "protein_domain",
-      "multi_component_switch",
-      "rna_element",
-      "construct_pattern",
-      "engineering_method",
-      "assay_method",
-      "computation_method",
-      "delivery_harness"
-    ],
-    "item_statuses": [
-      "seed",
-      "normalized",
-      "curated",
-      "deprecated"
-    ],
-    "maturity_stages": [
-      "research",
-      "preclinical",
-      "clinical",
-      "deployed"
-    ],
-    "source_types": [
-      "review",
-      "primary_paper",
-      "trial_record",
-      "database_entry",
-      "protocol",
-      "benchmark",
-      "preprint"
-    ],
-    "claim_polarities": [
-      "supports",
-      "contradicts",
-      "mixed",
-      "neutral"
-    ],
-    "citation_roles": [
-      "foundational",
-      "best_review",
-      "independent_validation",
-      "benchmark",
-      "protocol",
-      "therapeutic",
-      "negative_result",
-      "structural",
-      "database_reference"
-    ],
-    "biological_system_levels": [
-      "cell_free",
-      "bacteria",
-      "yeast",
-      "mammalian_cell_line",
-      "primary_cells",
-      "organoid",
-      "mouse",
-      "large_animal",
-      "human_clinical"
-    ],
-    "observation_types": [
-      "mechanistic_demo",
-      "application_demo",
-      "benchmark",
-      "therapeutic_use",
-      "manufacturing_use",
-      "failed_attempt"
-    ],
-    "success_outcomes": [
-      "success",
-      "mixed",
-      "failed"
-    ],
-    "workflow_families": [
-      "fast_screen",
-      "standard_construct",
-      "library_selection",
-      "in_vivo_pilot",
-      "custom"
-    ],
-    "workflow_step_types": [
-      "design",
-      "dna_acquisition",
-      "assembly",
-      "transformation",
-      "colony_screen",
-      "sequence_verification",
-      "transfection",
-      "expression",
-      "selection_round",
-      "assay",
-      "analysis",
-      "decision",
-      "packaging",
-      "delivery"
-    ],
-    "workflow_stage_kinds": [
-      "in_silico_filter",
-      "library_design",
-      "library_build",
-      "broad_screen",
-      "selection",
-      "counter_screen",
-      "recovery",
-      "sequencing_readout",
-      "hit_picking",
-      "functional_characterization",
-      "secondary_characterization",
-      "confirmatory_validation",
-      "in_vivo_validation",
-      "decision_gate"
-    ],
-    "workflow_search_modalities": [
-      "in_silico",
-      "display",
-      "pooled_library",
-      "cell_free",
-      "cell_based",
-      "biochemical",
-      "sequencing",
-      "structural",
-      "animal"
-    ],
-    "common_metric_names": [
-      "fold_induction",
-      "repression_efficiency",
-      "dark_state_leak",
-      "on_kinetics_minutes",
-      "off_kinetics_minutes",
-      "affinity_kd",
-      "viability_percent",
-      "toxicity_signal",
-      "editing_efficiency_percent",
-      "localization_precision",
-      "signal_to_noise",
-      "tissue_penetration_compatibility"
-    ],
-    "mechanism_families": [
-      "heterodimerization",
-      "oligomerization",
-      "conformational_uncaging",
-      "membrane_recruitment",
-      "photocleavage",
-      "dna_binding",
-      "rna_binding",
-      "degradation",
-      "translation_control"
-    ],
-    "technique_families": [
-      "computational_design",
-      "selection_enrichment",
-      "directed_evolution",
-      "sequence_verification",
-      "functional_assay",
-      "structural_characterization",
-      "delivery_optimization"
-    ],
-    "target_processes": [
-      "transcription",
-      "translation",
-      "localization",
-      "degradation",
-      "signaling",
-      "editing",
-      "selection",
-      "manufacturing",
-      "diagnostic"
-    ],
-    "problem_link_breakdown_keys": [
-      "mechanistic_match_score",
-      "context_match_score",
-      "throughput_match_score",
-      "time_to_first_test_score",
-      "cost_to_first_test_score",
-      "replication_confidence_modifier",
-      "practicality_modifier",
-      "translatability_modifier",
-      "overall_gap_applicability_score"
-    ]
-  },
-  "source_registry": [
-    {
-      "source_key": "optobase",
-      "display_name": "OptoBase",
-      "source_kind": "database_entry",
-      "sync_mode": "seed_then_refresh",
-      "role": "curated optogenetics seed catalog",
-      "status": "planned",
-      "base_url": "https://optobase.org/"
-    },
-    {
-      "source_key": "openalex",
-      "display_name": "OpenAlex",
-      "source_kind": "database_entry",
-      "sync_mode": "periodic_api_sync",
-      "role": "work metadata and citation graph",
-      "status": "planned",
-      "base_url": "https://api.openalex.org/"
-    },
-    {
-      "source_key": "semantic_scholar",
-      "display_name": "Semantic Scholar",
-      "source_kind": "database_entry",
-      "sync_mode": "periodic_api_sync",
-      "role": "paper graph and recommendation expansion",
-      "status": "planned",
-      "base_url": "https://api.semanticscholar.org/"
-    },
-    {
-      "source_key": "clinicaltrials_gov",
-      "display_name": "ClinicalTrials.gov",
-      "source_kind": "trial_record",
-      "sync_mode": "periodic_api_sync",
-      "role": "human-use and therapeutic evidence",
-      "status": "planned",
-      "base_url": "https://clinicaltrials.gov/api/query/"
-    },
-    {
-      "source_key": "gap_map",
-      "display_name": "Gap Map",
-      "source_kind": "database_entry",
-      "sync_mode": "periodic_json_sync",
-      "role": "problem catalog for explainable item-gap links",
-      "status": "planned",
-      "base_url": "https://gap-map.org/"
-    }
-  ],
+  "generated_at": "2026-03-08T23:09:15+00:00",
   "items": [
     {
       "slug": "aslov2",
@@ -306,7 +77,9 @@
         "primary_output_modality": "signaling",
         "external_ids": {},
         "synonyms": [
-          "CRY2-CIB1"
+          "CRY2-CIB1",
+          "CRY2-CIB dimerizer",
+          "CRY2-CIB dimerizers"
         ],
         "components": [
           "CRY2",
@@ -573,9 +346,47 @@
           "early triage before larger build campaigns"
         ],
         "default_parallelization_assumption": "Candidate design can happen while ordering decisions are being finalized, but DNA acquisition remains the dominant serial dependency.\n",
+        "stage_templates": [
+          {
+            "stage_name": "broad first-pass screen",
+            "stage_kind": "broad_screen",
+            "stage_order": 1,
+            "search_modality": "cell_free",
+            "input_candidate_count_typical": 8,
+            "output_candidate_count_typical": 2,
+            "candidate_unit": "candidate designs",
+            "selection_basis": "measurable signal in a rapid assay with acceptable background",
+            "enriches_for_axes": [
+              "time to first signal",
+              "basic functional activity"
+            ],
+            "guards_against_axes": [
+              "spending cloning time on clearly weak designs",
+              "early host-specific confounding"
+            ],
+            "advance_criteria": "clear stimulated-versus-baseline separation in the first-pass assay",
+            "bottleneck_risk": "DNA acquisition still dominates the calendar even in a fast screen"
+          },
+          {
+            "stage_name": "go or no-go decision",
+            "stage_kind": "decision_gate",
+            "stage_order": 2,
+            "search_modality": "cell_based",
+            "input_candidate_count_typical": 2,
+            "output_candidate_count_typical": 1,
+            "candidate_unit": "shortlisted designs",
+            "selection_basis": "whether the first-pass hit is strong enough to justify a slower host-context loop",
+            "preserves_downstream_property_axes": [
+              "downstream build capacity",
+              "host-context follow-up bandwidth"
+            ],
+            "advance_criteria": "only carry forward designs that justify a more realistic validation loop"
+          }
+        ],
         "step_templates": [
           {
             "step_name": "design candidate",
+            "stage_name": "broad first-pass screen",
             "step_type": "design",
             "duration_typical_hours": 4,
             "queue_time_typical_hours": 0,
@@ -585,6 +396,7 @@
           },
           {
             "step_name": "order DNA fragment",
+            "stage_name": "broad first-pass screen",
             "step_type": "dna_acquisition",
             "duration_typical_hours": 72,
             "queue_time_typical_hours": 0,
@@ -595,6 +407,7 @@
           },
           {
             "step_name": "fast expression or assay",
+            "stage_name": "broad first-pass screen",
             "step_type": "assay",
             "duration_typical_hours": 3,
             "queue_time_typical_hours": 0.5,
@@ -604,6 +417,7 @@
           },
           {
             "step_name": "analyze and decide",
+            "stage_name": "go or no-go decision",
             "step_type": "decision",
             "duration_typical_hours": 2,
             "queue_time_typical_hours": 0,

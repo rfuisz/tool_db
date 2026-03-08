@@ -1,4 +1,3 @@
-import { ITEMS, WORKFLOWS } from "./data";
 import type { ToolkitItem, WorkflowTemplate } from "./types";
 
 const DEFAULT_LIMIT = 20;
@@ -38,12 +37,13 @@ function normalizeText(value: string | null | undefined): string {
 }
 
 function tokenizeQuery(query: string | undefined): string[] {
-  return normalizeText(query)
-    .split(/\s+/)
-    .filter(Boolean);
+  return normalizeText(query).split(/\s+/).filter(Boolean);
 }
 
-function matchesQuery(haystacks: Array<string | null | undefined>, query: string | undefined): boolean {
+function matchesQuery(
+  haystacks: Array<string | null | undefined>,
+  query: string | undefined,
+): boolean {
   const tokens = tokenizeQuery(query);
   if (tokens.length === 0) {
     return true;
@@ -62,13 +62,18 @@ function matchesAny(values: string[], expected: string[] | undefined): boolean {
   return expected.some((value) => normalizedValues.has(normalizeText(value)));
 }
 
-function matchesScalar(value: string | null | undefined, expected: string[] | undefined): boolean {
+function matchesScalar(
+  value: string | null | undefined,
+  expected: string[] | undefined,
+): boolean {
   if (!expected || expected.length === 0) {
     return true;
   }
 
   const normalizedValue = normalizeText(value);
-  return expected.some((candidate) => normalizeText(candidate) === normalizedValue);
+  return expected.some(
+    (candidate) => normalizeText(candidate) === normalizedValue,
+  );
 }
 
 function normalizeLimit(limit: number | undefined): number {
@@ -85,7 +90,11 @@ function normalizeOffset(offset: number | undefined): number {
   return Math.trunc(offset);
 }
 
-function paginate<T>(rows: T[], limit: number | undefined, offset: number | undefined): SearchResult<T> {
+function paginate<T>(
+  rows: T[],
+  limit: number | undefined,
+  offset: number | undefined,
+): SearchResult<T> {
   const normalizedLimit = normalizeLimit(limit);
   const normalizedOffset = normalizeOffset(offset);
 
@@ -104,7 +113,9 @@ export function splitMultiValue(rawValues: string[]): string[] {
     .filter(Boolean);
 }
 
-export function parseBooleanParam(rawValue: string | null): boolean | undefined {
+export function parseBooleanParam(
+  rawValue: string | null,
+): boolean | undefined {
   if (!rawValue) {
     return undefined;
   }
@@ -120,8 +131,11 @@ export function parseBooleanParam(rawValue: string | null): boolean | undefined 
   return undefined;
 }
 
-export function searchItems(filters: ItemSearchFilters): SearchResult<ToolkitItem> {
-  const filtered = ITEMS.filter((item) => {
+export function searchItems(
+  items: ToolkitItem[],
+  filters: ItemSearchFilters,
+): SearchResult<ToolkitItem> {
+  const filtered = items.filter((item) => {
     if (
       !matchesQuery(
         [
@@ -171,14 +185,16 @@ export function searchItems(filters: ItemSearchFilters): SearchResult<ToolkitIte
 
     if (
       filters.has_independent_replication !== undefined &&
-      (validation?.has_independent_replication ?? false) !== filters.has_independent_replication
+      (validation?.has_independent_replication ?? false) !==
+        filters.has_independent_replication
     ) {
       return false;
     }
 
     if (
       filters.has_mouse_in_vivo_validation !== undefined &&
-      (validation?.has_mouse_in_vivo_validation ?? false) !== filters.has_mouse_in_vivo_validation
+      (validation?.has_mouse_in_vivo_validation ?? false) !==
+        filters.has_mouse_in_vivo_validation
     ) {
       return false;
     }
@@ -196,8 +212,11 @@ export function searchItems(filters: ItemSearchFilters): SearchResult<ToolkitIte
   return paginate(filtered, filters.limit, filters.offset);
 }
 
-export function searchWorkflows(filters: WorkflowSearchFilters): SearchResult<WorkflowTemplate> {
-  const filtered = WORKFLOWS.filter((workflow) => {
+export function searchWorkflows(
+  workflows: WorkflowTemplate[],
+  filters: WorkflowSearchFilters,
+): SearchResult<WorkflowTemplate> {
+  const filtered = workflows.filter((workflow) => {
     if (
       !matchesQuery(
         [

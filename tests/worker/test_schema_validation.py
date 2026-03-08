@@ -23,6 +23,7 @@ def test_invalid_review_fixture_fails_validation() -> None:
             "title": "broken fixture"
         },
         "entity_candidates": [],
+        "workflow_stage_observations": [],
         "claims": [
             {
                 "local_id": "claim_1",

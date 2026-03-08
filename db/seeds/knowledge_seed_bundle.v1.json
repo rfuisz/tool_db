@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-03-08T22:48:46+00:00",
+  "generated_at": "2026-03-08T23:09:15+00:00",
   "items": [
     {
       "slug": "aslov2",
@@ -77,7 +77,9 @@
         "primary_output_modality": "signaling",
         "external_ids": {},
         "synonyms": [
-          "CRY2-CIB1"
+          "CRY2-CIB1",
+          "CRY2-CIB dimerizer",
+          "CRY2-CIB dimerizers"
         ],
         "components": [
           "CRY2",
@@ -344,9 +346,47 @@
           "early triage before larger build campaigns"
         ],
         "default_parallelization_assumption": "Candidate design can happen while ordering decisions are being finalized, but DNA acquisition remains the dominant serial dependency.\n",
+        "stage_templates": [
+          {
+            "stage_name": "broad first-pass screen",
+            "stage_kind": "broad_screen",
+            "stage_order": 1,
+            "search_modality": "cell_free",
+            "input_candidate_count_typical": 8,
+            "output_candidate_count_typical": 2,
+            "candidate_unit": "candidate designs",
+            "selection_basis": "measurable signal in a rapid assay with acceptable background",
+            "enriches_for_axes": [
+              "time to first signal",
+              "basic functional activity"
+            ],
+            "guards_against_axes": [
+              "spending cloning time on clearly weak designs",
+              "early host-specific confounding"
+            ],
+            "advance_criteria": "clear stimulated-versus-baseline separation in the first-pass assay",
+            "bottleneck_risk": "DNA acquisition still dominates the calendar even in a fast screen"
+          },
+          {
+            "stage_name": "go or no-go decision",
+            "stage_kind": "decision_gate",
+            "stage_order": 2,
+            "search_modality": "cell_based",
+            "input_candidate_count_typical": 2,
+            "output_candidate_count_typical": 1,
+            "candidate_unit": "shortlisted designs",
+            "selection_basis": "whether the first-pass hit is strong enough to justify a slower host-context loop",
+            "preserves_downstream_property_axes": [
+              "downstream build capacity",
+              "host-context follow-up bandwidth"
+            ],
+            "advance_criteria": "only carry forward designs that justify a more realistic validation loop"
+          }
+        ],
         "step_templates": [
           {
             "step_name": "design candidate",
+            "stage_name": "broad first-pass screen",
             "step_type": "design",
             "duration_typical_hours": 4,
             "queue_time_typical_hours": 0,
@@ -356,6 +396,7 @@
           },
           {
             "step_name": "order DNA fragment",
+            "stage_name": "broad first-pass screen",
             "step_type": "dna_acquisition",
             "duration_typical_hours": 72,
             "queue_time_typical_hours": 0,
@@ -366,6 +407,7 @@
           },
           {
             "step_name": "fast expression or assay",
+            "stage_name": "broad first-pass screen",
             "step_type": "assay",
             "duration_typical_hours": 3,
             "queue_time_typical_hours": 0.5,
@@ -375,6 +417,7 @@
           },
           {
             "step_name": "analyze and decide",
+            "stage_name": "go or no-go decision",
             "step_type": "decision",
             "duration_typical_hours": 2,
             "queue_time_typical_hours": 0,

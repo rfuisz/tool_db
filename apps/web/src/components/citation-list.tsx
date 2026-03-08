@@ -3,6 +3,7 @@
 import type { ItemCitation } from "@/lib/types";
 import { CITATION_ROLE_LABELS } from "@/lib/vocabularies";
 import { CITATION_ROLE_DESCRIPTIONS } from "@/lib/explanations";
+import { renderInlineTitle } from "@/lib/render-inline-title";
 import { PaperLink } from "./paper-link";
 import { Tooltip } from "./tooltip";
 
@@ -31,7 +32,7 @@ export function CitationList({ citations }: { citations: ItemCitation[] }) {
               whyThisMatters={cit.why_this_matters}
               className="font-body text-[15px] font-medium leading-snug text-ink"
             >
-              {cit.document.title}
+              {renderInlineTitle(cit.document.title)}
             </PaperLink>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-ui text-xs">
               <Tooltip

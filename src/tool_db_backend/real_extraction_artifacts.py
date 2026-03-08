@@ -4,8 +4,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from tool_db_backend.clients.europe_pmc import EuropePMCClient
+from tool_db_backend.clients.semantic_scholar import SemanticScholarClient
 from tool_db_backend.config import Settings
 from tool_db_backend.schema_validation import validate_packet
+from tool_db_backend.source_staging import OptoBaseSearchParser
 
 
 def _slugify(value: str) -> str:
@@ -29,12 +31,20 @@ def _reconstruct_openalex_abstract(inverted_index: Optional[Dict[str, List[int]]
 
 
 class RealExtractionArtifactBuilder:
-    def __init__(self, settings: Settings, europe_pmc_client: Optional[EuropePMCClient] = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        europe_pmc_client: Optional[EuropePMCClient] = None,
+        semantic_scholar_client: Optional[SemanticScholarClient] = None,
+    ) -> None:
         self.settings = settings
         self.europe_pmc_client = europe_pmc_client or EuropePMCClient(settings)
+        self.semantic_scholar_client = semantic_scholar_client or SemanticScholarClient(settings)
+        self.optobase_parser = OptoBaseSearchParser()
 
     def close(self) -> None:
         self.europe_pmc_client.close()
+        self.semantic_scholar_client.close()
 
     def build_from_smoke_test_manifest(
         self,
@@ -59,15 +69,34 @@ class RealExtractionArtifactBuilder:
             output_dir=output_dir / "openalex",
             limit=openalex_limit,
         )
+        semantic_scholar_summaries = self._build_semantic_scholar_summaries(
+            raw_search_paths=[
+                Path(path)
+                for path in manifest["sources"].get("semantic_scholar", {}).get("raw_paths", {}).values()
+            ],
+            output_dir=output_dir / "semantic_scholar",
+            limit=openalex_limit,
+        )
+        optobase_summaries = self._build_optobase_summaries(
+            raw_search_paths=[
+                Path(path)
+                for path in manifest["sources"].get("optobase", {}).get("raw_paths", {}).values()
+            ],
+            output_dir=output_dir / "optobase",
+        )
 
         result = {
             "artifact_type": "real_extraction_seed_v1",
             "gap_map_packet_count": len(gap_packets),
             "openalex_packet_count": len(openalex_outputs["packets"]),
             "openalex_job_count": len(openalex_outputs["jobs"]),
+            "semantic_scholar_summary_count": len(semantic_scholar_summaries),
+            "optobase_summary_count": len(optobase_summaries),
             "gap_map_packets": [str(path) for path in gap_packets],
             "openalex_packets": [str(path) for path in openalex_outputs["packets"]],
             "openalex_jobs": [str(path) for path in openalex_outputs["jobs"]],
+            "semantic_scholar_summaries": [str(path) for path in semantic_scholar_summaries],
+            "optobase_summaries": [str(path) for path in optobase_summaries],
         }
         manifest_out = output_dir / "manifest.json"
         manifest_out.write_text(json.dumps(result, indent=2) + "\n")
@@ -132,6 +161,64 @@ class RealExtractionArtifactBuilder:
             written_paths.append(path)
         return written_paths
 
+    def _build_semantic_scholar_summaries(
+        self,
+        raw_search_paths: List[Path],
+        output_dir: Path,
+        limit: int,
+    ) -> List[Path]:
+        if not raw_search_paths:
+            return []
+        output_dir.mkdir(parents=True, exist_ok=True)
+        self._clear_json_outputs(output_dir)
+        written_paths: List[Path] = []
+        seen_ids = set()
+        for raw_path in raw_search_paths:
+            raw_wrapper = json.loads(raw_path.read_text())
+            for result in raw_wrapper.get("payload", {}).get("data", []):
+                paper_id = result.get("paperId")
+                if not paper_id or paper_id in seen_ids:
+                    continue
+                seen_ids.add(paper_id)
+                summary = {
+                    "artifact_type": "semantic_scholar_paper_summary_v1",
+                    "paper_id": paper_id,
+                    "title": result.get("title"),
+                    "year": result.get("year"),
+                    "citation_count": result.get("citationCount"),
+                    "external_ids": result.get("externalIds", {}),
+                    "raw_payload_ref": str(raw_path),
+                }
+                out_path = self._unique_output_path(
+                    output_dir,
+                    slug=_slugify(result.get("title") or paper_id),
+                    suffix=".semantic_scholar_summary_v1.json",
+                    external_id=paper_id,
+                )
+                out_path.write_text(json.dumps(_compact_dict(summary), indent=2) + "\n")
+                written_paths.append(out_path)
+                if len(written_paths) >= limit:
+                    return written_paths
+        return written_paths
+
+    def _build_optobase_summaries(self, raw_search_paths: List[Path], output_dir: Path) -> List[Path]:
+        if not raw_search_paths:
+            return []
+        output_dir.mkdir(parents=True, exist_ok=True)
+        self._clear_json_outputs(output_dir)
+        written_paths: List[Path] = []
+        for raw_path in raw_search_paths:
+            summary = self.optobase_parser.parse_raw_file(raw_path)
+            out_path = self._unique_output_path(
+                output_dir,
+                slug=_slugify(summary.get("query") or raw_path.stem),
+                suffix=".optobase_search_summary_v1.json",
+                external_id=raw_path.stem,
+            )
+            out_path.write_text(json.dumps(summary, indent=2) + "\n")
+            written_paths.append(out_path)
+        return written_paths
+
     def _build_openalex_packets_and_jobs(
         self,
         raw_search_paths: List[Path],
@@ -163,7 +250,11 @@ class RealExtractionArtifactBuilder:
                 doi = self._normalize_doi(work.get("doi"))
                 pmid = self._extract_pmid(work.get("ids", {}))
                 abstract_text = _reconstruct_openalex_abstract(work.get("abstract_inverted_index"))
-                enrichment = self._enrich_openalex_work(doi=doi, pmid=pmid)
+                enrichment = self._enrich_openalex_work(
+                    title=work.get("display_name") or work.get("title") or openalex_id,
+                    doi=doi,
+                    pmid=pmid,
+                )
                 if len(abstract_text.strip()) < 80 and enrichment.get("abstract_text"):
                     abstract_text = enrichment["abstract_text"]
                 slug = _slugify(work.get("display_name") or work.get("title") or openalex_id)
@@ -176,8 +267,14 @@ class RealExtractionArtifactBuilder:
                     "doi": doi,
                     "openalex_id": openalex_id,
                     "pmid": pmid,
+                    "semantic_scholar_id": enrichment.get("semantic_scholar_id"),
                     "publication_year": work.get("publication_year"),
                     "journal_or_source": self._extract_source_name(work),
+                    "abstract_text": abstract_text or None,
+                    "fulltext_license_status": self._license_status(enrichment),
+                    "is_retracted": False,
+                    "retraction_metadata": {},
+                    "raw_payload_ref": str(raw_path),
                 })
                 if is_review:
                     packet = {
@@ -187,6 +284,7 @@ class RealExtractionArtifactBuilder:
                         "review_scope": "Metadata scaffold from OpenAlex review search result.",
                         "entity_candidates": [],
                         "claims": [],
+                        "workflow_stage_observations": [],
                         "recommended_seed_item_local_ids": [],
                         "unresolved_ambiguities": [
                             {
@@ -207,6 +305,7 @@ class RealExtractionArtifactBuilder:
                         "entity_candidates": [],
                         "claims": [],
                         "validation_observations": [],
+                        "workflow_stage_observations": [],
                         "replication_signals": {},
                         "unresolved_ambiguities": [
                             {
@@ -244,11 +343,13 @@ class RealExtractionArtifactBuilder:
                             "cited_by_count": work.get("cited_by_count"),
                             "concepts": work.get("concepts", []),
                         },
+                        "semantic_scholar_metadata": enrichment.get("semantic_scholar"),
                         "enrichment_metadata": enrichment,
                     },
                     "notes": [
                         "LLM extraction should populate packet content conservatively from available evidence.",
                         "Do not invent canonical item IDs or merges.",
+                        "Preserve source_document identifiers and metadata from the job payload when they are already supplied.",
                     ],
                 }
                 job_path = self._unique_output_path(
@@ -301,19 +402,72 @@ class RealExtractionArtifactBuilder:
         safe_external = _slugify(external_id.rsplit("/", 1)[-1])
         return directory / f"{slug}-{safe_external}{suffix}"
 
-    def _enrich_openalex_work(self, doi: Optional[str], pmid: Optional[str]) -> Dict[str, Any]:
-        result = self.europe_pmc_client.fetch_by_doi_or_pmid(doi=doi, pmid=pmid)
-        if not result:
+    def _enrich_openalex_work(self, title: str, doi: Optional[str], pmid: Optional[str]) -> Dict[str, Any]:
+        europe_pmc_result = self.europe_pmc_client.fetch_by_doi_or_pmid(doi=doi, pmid=pmid)
+        semantic_scholar_result = self._find_semantic_scholar_match(title=title, doi=doi, pmid=pmid)
+        enrichment = {
+            "source": "openalex_enrichment",
+        }
+        if europe_pmc_result:
+            enrichment.update(
+                _compact_dict(
+                    {
+                        "doi": europe_pmc_result.get("doi"),
+                        "pmid": europe_pmc_result.get("pmid"),
+                        "pmcid": europe_pmc_result.get("pmcid"),
+                        "abstract_text": europe_pmc_result.get("abstractText"),
+                        "journal": europe_pmc_result.get("journalTitle"),
+                        "pub_type": europe_pmc_result.get("pubType"),
+                        "is_open_access": europe_pmc_result.get("isOpenAccess"),
+                    }
+                )
+            )
+        if semantic_scholar_result:
+            enrichment["semantic_scholar_id"] = semantic_scholar_result.get("paperId")
+            enrichment["semantic_scholar"] = _compact_dict(
+                {
+                    "paperId": semantic_scholar_result.get("paperId"),
+                    "title": semantic_scholar_result.get("title"),
+                    "year": semantic_scholar_result.get("year"),
+                    "citationCount": semantic_scholar_result.get("citationCount"),
+                    "externalIds": semantic_scholar_result.get("externalIds"),
+                }
+            )
+        return _compact_dict(enrichment)
+
+    def _find_semantic_scholar_match(
+        self,
+        *,
+        title: str,
+        doi: Optional[str],
+        pmid: Optional[str],
+    ) -> Dict[str, Any]:
+        try:
+            payload = self.semantic_scholar_client.search_papers(
+                query=title,
+                limit=5,
+                offset=0,
+                fields="paperId,title,year,citationCount,externalIds",
+            )
+        except Exception:
             return {}
-        return _compact_dict(
-            {
-                "source": "europe_pmc",
-                "doi": result.get("doi"),
-                "pmid": result.get("pmid"),
-                "pmcid": result.get("pmcid"),
-                "abstract_text": result.get("abstractText"),
-                "journal": result.get("journalTitle"),
-                "pub_type": result.get("pubType"),
-                "is_open_access": result.get("isOpenAccess"),
-            }
-        )
+        for result in payload.get("data", []):
+            external_ids = result.get("externalIds") or {}
+            result_doi = self._normalize_doi(external_ids.get("DOI"))
+            result_pmid = str(external_ids.get("PubMed") or "").strip() or None
+            if doi and result_doi and result_doi.casefold() == doi.casefold():
+                return result
+            if pmid and result_pmid == pmid:
+                return result
+        for result in payload.get("data", []):
+            if (result.get("title") or "").strip().casefold() == title.strip().casefold():
+                return result
+        return {}
+
+    @staticmethod
+    def _license_status(enrichment: Dict[str, Any]) -> Optional[str]:
+        if enrichment.get("is_open_access") is True:
+            return "open_access"
+        if enrichment.get("is_open_access") is False:
+            return "closed_or_unknown"
+        return None

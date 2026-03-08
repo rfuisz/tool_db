@@ -11,6 +11,7 @@ import {
 } from "react";
 import type { SourceDocument, CitationRole } from "@/lib/types";
 import { CITATION_ROLE_LABELS } from "@/lib/vocabularies";
+import { renderInlineTitle } from "@/lib/render-inline-title";
 
 interface PaperModalPayload {
   document: SourceDocument;
@@ -80,7 +81,6 @@ function PaperCard({
 
   const doiUrl = doc.doi ? `https://doi.org/${doc.doi}` : null;
   const pmidUrl = doc.pmid ? `https://pubmed.ncbi.nlm.nih.gov/${doc.pmid}/` : null;
-  const isExternal = doiUrl || pmidUrl || doc.journal_or_source?.startsWith("http");
   const externalUrl = doiUrl ?? pmidUrl ?? (doc.journal_or_source?.startsWith("http") ? doc.journal_or_source : null);
 
   return (
@@ -94,7 +94,7 @@ function PaperCard({
             </p>
           )}
           <h3 className="font-body text-lg font-semibold leading-snug text-ink">
-            {doc.title}
+            {renderInlineTitle(doc.title)}
           </h3>
         </div>
         <button

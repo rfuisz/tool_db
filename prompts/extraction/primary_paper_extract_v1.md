@@ -8,10 +8,12 @@ Convert one literature source into a `primary_paper_extract_v1` packet.
 - Keep claims, contexts, metrics, and validation observations separate.
 - Extract workflow-stage observations when the source explicitly describes a multi-stage funnel, such as in silico filtering, library generation, broad screening, selection, counter-screening, secondary characterization, or confirmatory validation.
 - Treat workflow stages as source-backed process observations, not as guessed canonical workflow templates.
+- If the source explicitly names a workflow, campaign, or archetypal funnel as a distinct thing, emit a `workflow_template` entity candidate and point related stage observations at it using `workflow_local_id`.
 - Capture why the funnel narrows when the source says so: what each stage enriches for, what it guards against, and what downstream property the authors are trying to preserve.
 - Use empty arrays rather than invented content when the source text is insufficient.
 - Put any unresolved merge, subject, or context uncertainty into `unresolved_ambiguities`.
 - Use only evidence present in the job payload, especially `title`, `abstract_text`, and any explicitly provided metadata.
+- Preserve the provided `source_document` metadata exactly when it is already present in the job payload, including IDs, `abstract_text`, license flags, and raw payload references.
 - Do not infer toolkit items, validation observations, or replication booleans from topic labels alone.
 - Do not invent stage counts, gating criteria, or counterselection logic if the source only implies that screening happened.
 - Leave `replication_signals` as `{}` unless a field is directly supported by the provided evidence.
@@ -38,6 +40,7 @@ Validate against `schemas/extraction/primary_paper_extract.v1.schema.json`.
   - `workflow_stage_observations: []`
   - `replication_signals: {}`
   - `unresolved_ambiguities`: one or more ambiguity objects that explain the evidence boundary
+- Metadata-only packets are valid extraction outputs, but they remain review-only until there is source-backed entity, claim, validation, or workflow evidence.
 - If a toolkit item is explicitly named in the title or abstract, emit an `entity_candidate` using the schema fields from `common.v1.schema.json`.
 - If a claim is explicit in the title or abstract, emit a `claim` with `subject_local_ids` pointing at the local IDs of the relevant extracted entities.
 - If the source explicitly describes a staged screening or selection funnel, emit one `workflow_stage_observation` per stage in the reported order, using only stage kinds and fields directly supported by the source text.

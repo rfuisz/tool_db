@@ -13,6 +13,8 @@ primary_output_modality: signaling
 external_ids: {}
 synonyms:
   - CRY2-CIB1
+  - CRY2-CIB dimerizer
+  - CRY2-CIB dimerizers
 components:
   - CRY2
   - CIB1

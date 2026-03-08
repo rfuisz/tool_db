@@ -1,27 +1,33 @@
 import Link from "next/link";
-import { ITEMS, WORKFLOWS, getAllFamilies, getAllMechanisms, getAllTechniques } from "@/lib/data";
-import { ITEM_TYPE_LABELS, MECHANISM_LABELS, TECHNIQUE_LABELS } from "@/lib/vocabularies";
+import { getItems, getWorkflows } from "@/lib/backend-data";
+import { getAllFamilies, getAllMechanisms, getAllTechniques } from "@/lib/data";
+import {
+  ITEM_TYPE_LABELS,
+  MECHANISM_LABELS,
+  TECHNIQUE_LABELS,
+} from "@/lib/vocabularies";
 import type { ItemType } from "@/lib/types";
 
-export default function Home() {
-  const typeCounts = ITEMS.reduce<Record<string, number>>((acc, item) => {
+export default async function Home() {
+  const [items, workflows] = await Promise.all([getItems(), getWorkflows()]);
+  const typeCounts = items.reduce<Record<string, number>>((acc, item) => {
     acc[item.item_type] = (acc[item.item_type] || 0) + 1;
     return acc;
   }, {});
 
-  const withReplication = ITEMS.filter(
-    (i) => i.replication_summary && !i.replication_summary.orphan_tool_flag
+  const withReplication = items.filter(
+    (i) => i.replication_summary && !i.replication_summary.orphan_tool_flag,
   );
   const avgEvidence = withReplication.length
     ? withReplication.reduce(
         (s, i) => s + (i.replication_summary?.evidence_strength_score ?? 0),
-        0
+        0,
       ) / withReplication.length
     : null;
 
-  const families = getAllFamilies();
-  const mechanisms = getAllMechanisms();
-  const techniques = getAllTechniques();
+  const families = getAllFamilies(items);
+  const mechanisms = getAllMechanisms(items);
+  const techniques = getAllTechniques(items);
 
   return (
     <div>
@@ -30,25 +36,39 @@ export default function Home() {
         <h1 className="mb-4">BioControl Toolkit DB</h1>
         <p className="max-w-xl text-lg leading-relaxed text-ink-secondary">
           An evidence-first engineering knowledge system for biological control
-          surfaces, engineering methods, assay methods, and design&#x2013;build&#x2013;test&#x2013;learn
-          workflows. Every claim is traceable to source-backed evidence.
+          surfaces, engineering methods, assay methods, and
+          design&#x2013;build&#x2013;test&#x2013;learn workflows. Every claim is
+          traceable to source-backed evidence.
         </p>
 
         {/* Stats as a quiet data line */}
         <div className="mt-8 flex flex-wrap gap-x-8 gap-y-2 font-data text-sm tracking-wide text-ink-muted">
-          <span><strong className="text-ink">{ITEMS.length}</strong> items</span>
-          <span><strong className="text-ink">{families.length}</strong> families</span>
-          <span><strong className="text-ink">{WORKFLOWS.length}</strong> workflows</span>
+          <span>
+            <strong className="text-ink">{items.length}</strong> items
+          </span>
+          <span>
+            <strong className="text-ink">{families.length}</strong> families
+          </span>
+          <span>
+            <strong className="text-ink">{workflows.length}</strong> workflows
+          </span>
           {avgEvidence !== null && (
-            <span><strong className="text-ink">{Math.round(avgEvidence * 100)}</strong> avg evidence score</span>
+            <span>
+              <strong className="text-ink">
+                {Math.round(avgEvidence * 100)}
+              </strong>{" "}
+              avg evidence score
+            </span>
           )}
-          {ITEMS.some((i) => i.status === "seed") && (
-            <span className="text-caution">seed data &mdash; curation in progress</span>
+          {items.some((i) => i.status === "seed") && (
+            <span className="text-caution">
+              seed data &mdash; curation in progress
+            </span>
           )}
         </div>
       </header>
 
-      <hr className="accent mb-16" />
+      <hr className="mb-16" />
 
       {/* The Collection */}
       <section className="mb-16">
@@ -72,7 +92,10 @@ export default function Home() {
             ))}
         </div>
         <p className="mt-6">
-          <Link href="/items" className="small-caps text-accent hover:text-accent-hover">
+          <Link
+            href="/items"
+            className="small-caps text-accent hover:text-accent-hover"
+          >
             Browse full collection &rarr;
           </Link>
         </p>
@@ -85,7 +108,7 @@ export default function Home() {
         <p className="small-caps mb-6">Explore by Mechanism</p>
         <div className="flex flex-wrap gap-x-6 gap-y-2">
           {mechanisms.map((m) => {
-            const count = ITEMS.filter((i) => i.mechanisms.includes(m)).length;
+            const count = items.filter((i) => i.mechanisms.includes(m)).length;
             return (
               <Link
                 key={m}
@@ -107,7 +130,7 @@ export default function Home() {
         <p className="small-caps mb-6">Explore by Technique</p>
         <div className="flex flex-wrap gap-x-6 gap-y-2">
           {techniques.map((t) => {
-            const count = ITEMS.filter((i) => i.techniques.includes(t)).length;
+            const count = items.filter((i) => i.techniques.includes(t)).length;
             return (
               <Link
                 key={t}
@@ -129,7 +152,7 @@ export default function Home() {
         <p className="small-caps mb-6">Explore by Family</p>
         <div className="flex flex-wrap gap-x-6 gap-y-2">
           {families.map((f) => {
-            const count = ITEMS.filter((i) => i.family === f).length;
+            const count = items.filter((i) => i.family === f).length;
             return (
               <Link
                 key={f}
@@ -152,13 +175,16 @@ export default function Home() {
       <section className="mb-8">
         <p className="small-caps mb-6">DBTL Workflow Templates</p>
         <div className="space-y-8">
-          {WORKFLOWS.map((w) => {
+          {workflows.map((w) => {
             const totalDays = Math.round(
-              w.steps.reduce((s, st) => s + (st.duration_typical_hours ?? 0), 0) / 24
+              w.steps.reduce(
+                (s, st) => s + (st.duration_typical_hours ?? 0),
+                0,
+              ) / 24,
             );
             const totalCost = w.steps.reduce(
               (s, st) => s + (st.direct_cost_usd_typical ?? 0),
-              0
+              0,
             );
             return (
               <Link
@@ -173,7 +199,8 @@ export default function Home() {
                   {w.objective}
                 </p>
                 <span className="font-data text-sm text-ink-muted">
-                  {w.steps.length} steps &middot; ~{totalDays}d &middot; ${totalCost.toLocaleString()}
+                  {w.steps.length} steps &middot; ~{totalDays}d &middot; $
+                  {totalCost.toLocaleString()}
                 </span>
               </Link>
             );

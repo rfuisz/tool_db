@@ -24,6 +24,7 @@ Quick start:
 1. Copy `.env.example` to `.env` and set `DATABASE_URL`.
 2. Start Postgres with `docker compose -f docker-compose.local.yml up -d`.
 3. Run migrations with `.venv/bin/python -m apps.worker.main run-migrations`.
+4. Populate the local database with checked-in literature and Gap Map packets using `.venv/bin/python -m apps.worker.main populate-local-db`.
 
 Recommended local `DATABASE_URL`:
 
@@ -31,13 +32,34 @@ Recommended local `DATABASE_URL`:
 postgresql://tooldb:tooldb@localhost:5432/tooldb
 ```
 
+## Hosted Render Sync
+
+The repo now includes a root `render.yaml` blueprint that provisions:
+
+- a managed Render Postgres database
+- a private Python API/data service
+- the Next.js web app
+
+The hosted sync model is git-driven. On each Render deploy, the API service runs:
+
+```bash
+python -m apps.worker.main populate-local-db
+```
+
+That reruns migrations, reloads the checked-in seed bundle, and ingests the checked-in extraction artifacts into hosted Postgres before traffic shifts.
+
+Practical implication:
+
+- if the change exists in tracked repo artifacts and you push it, Render will pick it up
+- if the change exists only in your local Postgres, Render cannot see it until you export or check in the corresponding repo state
+
 ## Core Modeling Rule
 
 The primary unit of truth is `claim + context + evidence`.
 
 Human-readable summaries such as "has mouse validation" or "used therapeutically" are derived views built from source-backed observations, not hand-entered booleans.
 
-## Phase 0 Scope
+## Current Scope
 
 This initialization focuses on:
 
@@ -46,7 +68,7 @@ This initialization focuses on:
 - repo and agent legibility
 - seed dossier structure
 
-It does not yet include production ingestion jobs, a live API, or a public web viewer.
+It does not yet include production ingestion jobs, a live API, or a public web viewer, but it now includes a conservative local ingestion path for checked-in literature extractions and client-source packet artifacts.
 
 ## Initial Layout
 
@@ -66,10 +88,10 @@ tests/fixtures/
 
 ## Next Build Steps
 
-1. Turn `schemas/canonical/schema_v1.sql` into versioned migrations.
-2. Add real source clients for OpenAlex, Semantic Scholar, ClinicalTrials.gov, and Gap Map.
-3. Validate extraction packets against the JSON Schemas during ingestion.
-4. Replace seed dossier placeholders with curator-backed evidence packs.
+1. Improve the review-to-promotion path for new literature item candidates that do not safely resolve to existing canonicals.
+2. Add fuller typed staging and downstream canonical mapping for trial and OptoBase source artifacts.
+3. Expand source-backed validation and replication coverage from checked-in packets to larger curated batches.
+4. Replace remaining seed dossier placeholders with curator-backed evidence packs.
 
 ## Subagent Routing
 

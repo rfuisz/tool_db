@@ -1,0 +1,47 @@
+databases:
+  - name: tool-db-postgres
+    databaseName: tooldb
+    user: tooldb
+    plan: starter
+
+services:
+  - type: pserv
+    name: tool-db-api
+    runtime: python
+    plan: starter
+    buildCommand: python -m pip install --upgrade pip && python -m pip install .
+    preDeployCommand: python -m apps.worker.main populate-local-db
+    startCommand: python -m apps.api.main
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: PORT
+        value: 8000
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tool-db-postgres
+          property: connectionString
+
+  - type: web
+    name: tool-db-web
+    runtime: node
+    plan: starter
+    buildCommand: cd apps/web && npm install && npm run build
+    startCommand: cd apps/web && node .next/standalone/server.js
+    envVars:
+      - key: NODE_VERSION
+        value: 22.14.0
+      - key: TOOL_DB_API_PROTOCOL
+        value: http
+      - key: TOOL_DB_API_HOST
+        fromService:
+          type: pserv
+          name: tool-db-api
+          property: host
+      - key: TOOL_DB_API_PORT
+        fromService:
+          type: pserv
+          name: tool-db-api
+          property: port

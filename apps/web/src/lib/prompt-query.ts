@@ -24,6 +24,7 @@ interface LlmPromptQueryResponse {
 
 function getQueryApiKey(): string {
   return (
+    process.env.TOOL_DB_QUERY_UPSTREAM_API_KEY ??
     process.env.TOOL_DB_QUERY_LLM_API_KEY ??
     process.env.LLM_API_KEY ??
     process.env.OPENAI_API_KEY ??
@@ -33,6 +34,7 @@ function getQueryApiKey(): string {
 
 function getQueryBaseUrl(): string {
   return (
+    process.env.TOOL_DB_QUERY_UPSTREAM_BASE_URL ??
     process.env.TOOL_DB_QUERY_LLM_BASE_URL ??
     process.env.LLM_BASE_URL ??
     process.env.OPENAI_BASE_URL ??
@@ -42,6 +44,7 @@ function getQueryBaseUrl(): string {
 
 function getQueryModel(): string {
   return (
+    process.env.TOOL_DB_QUERY_UPSTREAM_MODEL ??
     process.env.TOOL_DB_QUERY_LLM_MODEL ??
     process.env.LLM_MODEL ??
     process.env.OPENAI_MODEL ??
@@ -65,23 +68,39 @@ function normalizeBoolean(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
 }
 
-function normalizeFilters(raw: LlmPromptQueryResponse): PromptQueryInterpretation {
+function normalizeFilters(
+  raw: LlmPromptQueryResponse,
+): PromptQueryInterpretation {
   return {
     item_filters: {
-      q: typeof raw.item_filters?.q === "string" ? raw.item_filters.q.trim() : undefined,
+      q:
+        typeof raw.item_filters?.q === "string"
+          ? raw.item_filters.q.trim()
+          : undefined,
       type: normalizeStringArray(raw.item_filters?.type),
       mechanism: normalizeStringArray(raw.item_filters?.mechanism),
       technique: normalizeStringArray(raw.item_filters?.technique),
       family: normalizeStringArray(raw.item_filters?.family),
       maturity_stage: normalizeStringArray(raw.item_filters?.maturity_stage),
       status: normalizeStringArray(raw.item_filters?.status),
-      has_independent_replication: normalizeBoolean(raw.item_filters?.has_independent_replication),
-      has_mouse_in_vivo_validation: normalizeBoolean(raw.item_filters?.has_mouse_in_vivo_validation),
-      has_therapeutic_use: normalizeBoolean(raw.item_filters?.has_therapeutic_use),
+      has_independent_replication: normalizeBoolean(
+        raw.item_filters?.has_independent_replication,
+      ),
+      has_mouse_in_vivo_validation: normalizeBoolean(
+        raw.item_filters?.has_mouse_in_vivo_validation,
+      ),
+      has_therapeutic_use: normalizeBoolean(
+        raw.item_filters?.has_therapeutic_use,
+      ),
     },
     workflow_filters: {
-      q: typeof raw.workflow_filters?.q === "string" ? raw.workflow_filters.q.trim() : undefined,
-      workflow_family: normalizeStringArray(raw.workflow_filters?.workflow_family),
+      q:
+        typeof raw.workflow_filters?.q === "string"
+          ? raw.workflow_filters.q.trim()
+          : undefined,
+      workflow_family: normalizeStringArray(
+        raw.workflow_filters?.workflow_family,
+      ),
     },
     include_items: raw.include_items !== false,
     include_workflows: raw.include_workflows !== false,
@@ -121,7 +140,9 @@ function extractJsonObject(rawContent: string): string {
   return match[0];
 }
 
-export async function interpretPromptQuery(prompt: string): Promise<PromptQueryInterpretation> {
+export async function interpretPromptQuery(
+  prompt: string,
+): Promise<PromptQueryInterpretation> {
   const normalizedPrompt = prompt.trim();
   if (!normalizedPrompt) {
     return fallbackInterpretation(prompt);
@@ -176,7 +197,9 @@ export async function interpretPromptQuery(prompt: string): Promise<PromptQueryI
       throw new Error("Prompt parser returned no content");
     }
 
-    const parsed = JSON.parse(extractJsonObject(content)) as LlmPromptQueryResponse;
+    const parsed = JSON.parse(
+      extractJsonObject(content),
+    ) as LlmPromptQueryResponse;
     return normalizeFilters(parsed);
   } catch {
     return fallbackInterpretation(normalizedPrompt);

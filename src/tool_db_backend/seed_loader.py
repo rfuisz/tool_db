@@ -19,6 +19,7 @@ class SeedLoader:
         conn, should_close = self._get_connection()
         inserted_item_count = 0
         inserted_workflow_count = 0
+        inserted_stage_count = 0
         inserted_step_count = 0
 
         try:
@@ -28,8 +29,9 @@ class SeedLoader:
                         inserted_item_count += int(self._load_item(cursor, item_entry))
 
                     for workflow_entry in bundle.get("workflows", []):
-                        workflow_inserted, step_count = self._load_workflow(cursor, workflow_entry)
+                        workflow_inserted, stage_count, step_count = self._load_workflow(cursor, workflow_entry)
                         inserted_workflow_count += int(workflow_inserted)
+                        inserted_stage_count += stage_count
                         inserted_step_count += step_count
         finally:
             if should_close:
@@ -40,6 +42,7 @@ class SeedLoader:
             "inserted_item_count": inserted_item_count,
             "loaded_workflow_count": len(bundle.get("workflows", [])),
             "inserted_workflow_count": inserted_workflow_count,
+            "inserted_workflow_stage_count": inserted_stage_count,
             "inserted_workflow_step_count": inserted_step_count,
         }
 
@@ -114,7 +117,7 @@ class SeedLoader:
         )
         return inserted
 
-    def _load_workflow(self, cursor: Any, workflow_entry: Dict[str, Any]) -> Tuple[bool, int]:
+    def _load_workflow(self, cursor: Any, workflow_entry: Dict[str, Any]) -> Tuple[bool, int, int]:
         structured = workflow_entry["structured"]
         cursor.execute(
             """
@@ -155,22 +158,63 @@ class SeedLoader:
             "delete from workflow_step_template where workflow_template_id = %s",
             (workflow_template_id,),
         )
+        cursor.execute(
+            "delete from workflow_stage_template where workflow_template_id = %s",
+            (workflow_template_id,),
+        )
+
+        stage_ids_by_name: Dict[str, Any] = {}
+        for stage in structured.get("stage_templates", []):
+            cursor.execute(
+                """
+                insert into workflow_stage_template (
+                  workflow_template_id, stage_name, stage_kind, stage_order, search_modality,
+                  input_candidate_count_typical, output_candidate_count_typical, candidate_unit,
+                  selection_basis, counterselection_basis, enriches_for_axes, guards_against_axes,
+                  preserves_downstream_property_axes, advance_criteria, bottleneck_risk,
+                  higher_fidelity_than_previous, notes
+                )
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                returning id
+                """,
+                (
+                    workflow_template_id,
+                    stage["stage_name"],
+                    stage["stage_kind"],
+                    stage["stage_order"],
+                    stage.get("search_modality"),
+                    stage.get("input_candidate_count_typical"),
+                    stage.get("output_candidate_count_typical"),
+                    stage.get("candidate_unit"),
+                    stage.get("selection_basis"),
+                    stage.get("counterselection_basis"),
+                    stage.get("enriches_for_axes", []),
+                    stage.get("guards_against_axes", []),
+                    stage.get("preserves_downstream_property_axes", []),
+                    stage.get("advance_criteria"),
+                    stage.get("bottleneck_risk"),
+                    stage.get("higher_fidelity_than_previous"),
+                    stage.get("notes"),
+                ),
+            )
+            stage_ids_by_name[stage["stage_name"]] = cursor.fetchone()[0]
 
         step_ids = []
         for step in structured.get("step_templates", []):
             cursor.execute(
                 """
                 insert into workflow_step_template (
-                  workflow_template_id, step_name, step_type, duration_p10_hours,
+                  workflow_template_id, workflow_stage_template_id, step_name, step_type, duration_p10_hours,
                   duration_typical_hours, duration_p90_hours, queue_time_typical_hours,
                   hands_on_hours, direct_cost_usd_typical, outsourced, parallelizable,
                   failure_probability, output_artifact, input_artifact, notes
                 )
-                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 returning id
                 """,
                 (
                     workflow_template_id,
+                    stage_ids_by_name.get(step.get("stage_name")),
                     step["step_name"],
                     step["step_type"],
                     step.get("duration_p10_hours"),
@@ -215,7 +259,7 @@ class SeedLoader:
                 ),
             )
 
-        return inserted, len(step_ids)
+        return inserted, len(stage_ids_by_name), len(step_ids)
 
     @staticmethod
     def _insert_distinct_rows(

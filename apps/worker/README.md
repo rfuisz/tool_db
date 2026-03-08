@@ -133,7 +133,21 @@ This currently creates:
 
 - deterministic `database_entry_extract_v1` packets for a slice of Gap Map gaps
 - `primary_paper_extract_v1` metadata scaffolds for a slice of OpenAlex works
+- structured Semantic Scholar summary artifacts for fetched search hits
+- structured OptoBase search-summary artifacts for fetched HTML result pages
 - LLM extraction job files that a future GPT-5.4 caller can execute
+
+Build a deterministic trial packet from a raw ClinicalTrials.gov payload wrapper:
+
+```bash
+.venv/bin/python -m apps.worker.main build-clinicaltrials-packet tmp/clinicaltrials-actt.json tmp/clinicaltrials-actt.trial_extract_v1.json
+```
+
+Parse a raw OptoBase search wrapper into a structured staging artifact:
+
+```bash
+.venv/bin/python -m apps.worker.main parse-optobase-search data/raw/optobase/search_html/aslov2.json tmp/aslov2.optobase_summary.json
+```
 
 Run one LLM extraction job:
 
@@ -171,3 +185,23 @@ Run a small batch of LLM extraction jobs:
 ```bash
 .venv/bin/python -m apps.worker.main run-extraction-batch data/pipeline-artifacts/real-extraction-seed/openalex/jobs --limit 3
 ```
+
+Ingest a directory of checked-in packet files:
+
+```bash
+.venv/bin/python -m apps.worker.main ingest-packet-batch data/extractions --apply --review-output-dir data/review-queue/batch
+```
+
+Populate local Postgres from the checked-in literature extraction packets plus Gap Map packet artifacts:
+
+```bash
+.venv/bin/python -m apps.worker.main populate-local-db --review-output-dir data/review-queue/populate-local-db --manifest-path data/pipeline-artifacts/populate-local-db/report.json
+```
+
+This command:
+
+- applies any pending migrations
+- loads the seed bundle into canonical `toolkit_item` and `workflow_template` tables
+- ingests `data/extractions/*.json`
+- ingests `data/pipeline-artifacts/real-extraction-seed/gap_map/*.database_entry_extract_v1.json`
+- writes normalized packets, load plans, execution reports, and review-queue artifacts under `data/pipeline-artifacts/populate-local-db/`

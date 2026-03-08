@@ -2,7 +2,17 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from tool_db_backend.config import Settings, get_settings
-from tool_db_backend.models import HealthResponse, ItemDetail, ItemSummary, SourceRegistryEntry, VocabularyPayload, WorkflowDetail, WorkflowSummary
+from tool_db_backend.models import (
+    FirstPassItemDetail,
+    FirstPassItemSummary,
+    HealthResponse,
+    ItemDetail,
+    ItemSummary,
+    SourceRegistryEntry,
+    VocabularyPayload,
+    WorkflowDetail,
+    WorkflowSummary,
+)
 from tool_db_backend.repository import KnowledgeRepository
 
 
@@ -47,6 +57,17 @@ def create_app() -> FastAPI:
             return repo.get_item(slug)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=f"Unknown item slug: {slug}") from exc
+
+    @app.get("/api/v1/first-pass-items", response_model=list[FirstPassItemSummary])
+    def list_first_pass_items(repo: KnowledgeRepository = Depends(get_repository)) -> list[FirstPassItemSummary]:
+        return repo.list_first_pass_items()
+
+    @app.get("/api/v1/first-pass-items/{slug}", response_model=FirstPassItemDetail)
+    def get_first_pass_item(slug: str, repo: KnowledgeRepository = Depends(get_repository)) -> FirstPassItemDetail:
+        try:
+            return repo.get_first_pass_item(slug)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"Unknown first-pass item slug: {slug}") from exc
 
     @app.get("/api/v1/workflows", response_model=list[WorkflowSummary])
     def list_workflows(repo: KnowledgeRepository = Depends(get_repository)) -> list[WorkflowSummary]:

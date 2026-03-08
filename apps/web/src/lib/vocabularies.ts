@@ -1,4 +1,13 @@
-import type { ItemType, BiologicalSystemLevel, CitationRole, MaturityStage, WorkflowFamily, Modality } from "./types";
+import type {
+  ItemType,
+  BiologicalSystemLevel,
+  CitationRole,
+  MaturityStage,
+  WorkflowFamily,
+  WorkflowSearchModality,
+  WorkflowStageKind,
+  Modality,
+} from "./types";
 
 export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   protein_domain: "Protein Domain",
@@ -12,14 +21,14 @@ export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
 };
 
 export const ITEM_TYPE_COLORS: Record<ItemType, string> = {
-  protein_domain:          "bg-blue-50 text-blue-800",
-  multi_component_switch:  "bg-violet-50 text-violet-800",
-  rna_element:             "bg-emerald-50 text-emerald-800",
-  construct_pattern:       "bg-amber-50 text-amber-800",
-  engineering_method:      "bg-rose-50 text-rose-800",
-  assay_method:            "bg-cyan-50 text-cyan-800",
-  computation_method:      "bg-orange-50 text-orange-800",
-  delivery_harness:        "bg-teal-50 text-teal-800",
+  protein_domain: "bg-blue-50 text-blue-800",
+  multi_component_switch: "bg-violet-50 text-violet-800",
+  rna_element: "bg-emerald-50 text-emerald-800",
+  construct_pattern: "bg-amber-50 text-amber-800",
+  engineering_method: "bg-rose-50 text-rose-800",
+  assay_method: "bg-cyan-50 text-cyan-800",
+  computation_method: "bg-orange-50 text-orange-800",
+  delivery_harness: "bg-teal-50 text-teal-800",
 };
 
 export const BIO_SYSTEM_LABELS: Record<BiologicalSystemLevel, string> = {
@@ -66,10 +75,10 @@ export const MATURITY_LABELS: Record<MaturityStage, string> = {
 };
 
 export const MATURITY_COLORS: Record<MaturityStage, string> = {
-  research:    "bg-surface-alt text-ink-secondary",
+  research: "bg-surface-alt text-ink-secondary",
   preclinical: "bg-brand-light text-brand",
-  clinical:    "bg-indigo-50 text-indigo-800",
-  deployed:    "bg-valid-light text-valid",
+  clinical: "bg-indigo-50 text-indigo-800",
+  deployed: "bg-valid-light text-valid",
 };
 
 export const WORKFLOW_FAMILY_LABELS: Record<WorkflowFamily, string> = {
@@ -78,6 +87,38 @@ export const WORKFLOW_FAMILY_LABELS: Record<WorkflowFamily, string> = {
   library_selection: "Library Selection",
   in_vivo_pilot: "In Vivo Pilot",
   custom: "Custom",
+};
+
+export const WORKFLOW_STAGE_KIND_LABELS: Record<WorkflowStageKind, string> = {
+  in_silico_filter: "In Silico Filter",
+  library_design: "Library Design",
+  library_build: "Library Build",
+  broad_screen: "Broad Screen",
+  selection: "Selection",
+  counter_screen: "Counter-Screen",
+  recovery: "Recovery",
+  sequencing_readout: "Sequencing Readout",
+  hit_picking: "Hit Picking",
+  functional_characterization: "Functional Characterization",
+  secondary_characterization: "Secondary Characterization",
+  confirmatory_validation: "Confirmatory Validation",
+  in_vivo_validation: "In Vivo Validation",
+  decision_gate: "Decision Gate",
+};
+
+export const WORKFLOW_SEARCH_MODALITY_LABELS: Record<
+  WorkflowSearchModality,
+  string
+> = {
+  in_silico: "In Silico",
+  display: "Display",
+  pooled_library: "Pooled Library",
+  cell_free: "Cell-Free",
+  cell_based: "Cell-Based",
+  biochemical: "Biochemical",
+  sequencing: "Sequencing",
+  structural: "Structural",
+  animal: "Animal",
 };
 
 export const MODALITY_LABELS: Record<Modality, string> = {
@@ -95,6 +136,7 @@ export const MODALITY_LABELS: Record<Modality, string> = {
   localization: "Localization",
   degradation: "Degradation",
   signaling: "Signaling",
+  recombination: "Recombination",
   editing: "Editing",
   selection: "Selection",
   assay_readout: "Assay Readout",

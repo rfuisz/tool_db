@@ -28,7 +28,15 @@
         "semantic_scholar_id": { "type": "string" },
         "nct_id": { "type": "string" },
         "publication_year": { "type": "integer" },
-        "journal_or_source": { "type": "string" }
+        "journal_or_source": { "type": "string" },
+        "abstract_text": { "type": "string" },
+        "fulltext_license_status": { "type": "string" },
+        "is_retracted": { "type": "boolean" },
+        "retraction_metadata": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "raw_payload_ref": { "type": "string" }
       }
     },
     "source_locator": {
@@ -150,7 +158,20 @@
           "items": { "$ref": "#/$defs/metric" },
           "default": []
         },
-        "citation_role_suggestion": { "type": "string" },
+        "citation_role_suggestion": {
+          "type": "string",
+          "enum": [
+            "foundational",
+            "best_review",
+            "independent_validation",
+            "benchmark",
+            "protocol",
+            "therapeutic",
+            "negative_result",
+            "structural",
+            "database_reference"
+          ]
+        },
         "source_locator": { "$ref": "#/$defs/source_locator" },
         "unresolved_ambiguities": {
           "type": "array",
@@ -199,10 +220,13 @@
         "strain_or_model": { "type": "string" },
         "cell_type": { "type": "string" },
         "tissue": { "type": "string" },
+        "subcellular_target": { "type": "string" },
         "delivery_mode": { "type": "string" },
         "cargo_or_effector": { "type": "string" },
         "construct_name": { "type": "string" },
         "assay_description": { "type": "string" },
+        "independent_lab_cluster_id": { "type": "string" },
+        "institution_cluster_id": { "type": "string" },
         "metrics": {
           "type": "array",
           "items": { "$ref": "#/$defs/metric" },

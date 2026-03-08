@@ -18,7 +18,7 @@ class ClinicalTrialsClient:
 
     def fetch_study(self, nct_id: str) -> Dict[str, Any]:
         normalized_id = nct_id.strip().upper()
-        response = self._client.get(f"/studies/{normalized_id}", params={"format": "json"})
+        response = self._client.get(f"/studies/{normalized_id}")
         response.raise_for_status()
         return response.json()
 

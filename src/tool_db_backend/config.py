@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     openalex_mailto: str = ""
     semantic_scholar_base_url: str = "https://api.semanticscholar.org/graph/v1"
     semantic_scholar_api_key: str = ""
-    clinicaltrials_base_url: str = "https://clinicaltrials.gov/api/query"
+    clinicaltrials_base_url: str = "https://clinicaltrials.gov/api/v2"
     gap_map_base_url: str = "https://www.gap-map.org"
     optobase_base_url: str = "https://optobase.org"
     api_cors_origins: List[str] = Field(

@@ -1,55 +1,18 @@
-import type { ToolkitItem, WorkflowTemplate } from "./types";
+import type { ToolkitItem } from "./types";
 
-import {
-  ITEMS as EXPANDED_ITEMS,
-  WORKFLOWS as EXPANDED_WORKFLOWS,
-} from "./mock-data-expanded";
-import { WORKFLOW_EXPLAINERS } from "./workflow-explainers";
-
-// ── Exported data ────────────────────────────────────────────
-
-export const ITEMS: ToolkitItem[] = EXPANDED_ITEMS;
-
-export const WORKFLOWS: WorkflowTemplate[] = EXPANDED_WORKFLOWS.map((workflow) => ({
-  ...workflow,
-  ...WORKFLOW_EXPLAINERS[workflow.slug],
-}));
-
-// ── Query helpers ────────────────────────────────────────────
-
-export function getItemBySlug(slug: string): ToolkitItem | undefined {
-  return ITEMS.find((i) => i.slug === slug);
-}
-
-export function getItemsByType(itemType: string): ToolkitItem[] {
-  return ITEMS.filter((i) => i.item_type === itemType);
-}
-
-export function getItemsByMechanism(mechanism: string): ToolkitItem[] {
-  return ITEMS.filter((i) => i.mechanisms.includes(mechanism));
-}
-
-export function getItemsByTechnique(technique: string): ToolkitItem[] {
-  return ITEMS.filter((i) => i.techniques.includes(technique));
-}
-
-export function getItemsByFamily(family: string): ToolkitItem[] {
-  return ITEMS.filter((i) => i.family === family);
-}
-
-export function getAllFamilies(): string[] {
+export function getAllFamilies(items: ToolkitItem[]): string[] {
   const families = new Set(
-    ITEMS.map((i) => i.family).filter(Boolean) as string[],
+    items.map((item) => item.family).filter(Boolean) as string[],
   );
   return Array.from(families).sort();
 }
 
-export function getAllMechanisms(): string[] {
-  const mechanisms = new Set(ITEMS.flatMap((i) => i.mechanisms));
+export function getAllMechanisms(items: ToolkitItem[]): string[] {
+  const mechanisms = new Set(items.flatMap((item) => item.mechanisms));
   return Array.from(mechanisms).sort();
 }
 
-export function getAllTechniques(): string[] {
-  const techniques = new Set(ITEMS.flatMap((i) => i.techniques));
+export function getAllTechniques(items: ToolkitItem[]): string[] {
+  const techniques = new Set(items.flatMap((item) => item.techniques));
   return Array.from(techniques).sort();
 }

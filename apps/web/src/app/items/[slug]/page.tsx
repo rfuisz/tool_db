@@ -1,17 +1,26 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ITEMS } from "@/lib/data";
+import { getItemBySlug } from "@/lib/backend-data";
 import { ScoreBreakdown } from "@/components/score-bar";
 import { ValidationMatrix } from "@/components/validation-dots";
 import { CitationList } from "@/components/citation-list";
-import { TypeBadge, MaturityBadge, StatusBadge, ModalityLabel, MechanismTag, TechniqueTag } from "@/components/detail-tooltips";
+import {
+  TypeBadge,
+  MaturityBadge,
+  StatusBadge,
+  ModalityLabel,
+  MechanismTag,
+  TechniqueTag,
+} from "@/components/detail-tooltips";
 import { ObservationRow } from "@/components/observation-row";
 
-export function generateStaticParams() {
-  return ITEMS.map((item) => ({ slug: item.slug }));
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <section className="mb-12">
       <p className="small-caps mb-4">{title}</p>
@@ -20,14 +29,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-
 export default async function ItemDetailPage({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const item = ITEMS.find((i) => i.slug === slug);
+  const item = await getItemBySlug(slug);
   if (!item) notFound();
 
   const rep = item.replication_summary;
@@ -36,7 +44,9 @@ export default async function ItemDetailPage({
     <div>
       {/* Breadcrumb */}
       <p className="mb-8 font-ui text-sm text-ink-muted">
-        <Link href="/items" className="hover:text-accent">Collection</Link>
+        <Link href="/items" className="hover:text-accent">
+          Collection
+        </Link>
         <span className="mx-2 text-ink-faint">/</span>
         <span className="text-ink-secondary">{item.canonical_name}</span>
       </p>
@@ -49,7 +59,10 @@ export default async function ItemDetailPage({
           {item.family && (
             <>
               <span className="text-ink-faint">&middot;</span>
-              <Link href={`/items?family=${item.family}`} className="transition-colors hover:text-accent">
+              <Link
+                href={`/items?family=${item.family}`}
+                className="transition-colors hover:text-accent"
+              >
                 {item.family}
               </Link>
             </>
@@ -103,15 +116,23 @@ export default async function ItemDetailPage({
               <div>
                 <p className="mb-1 text-xs text-ink-muted">Target processes</p>
                 {item.target_processes.map((p) => (
-                  <span key={p} className="mr-2 text-ink-secondary">{p}</span>
+                  <span key={p} className="mr-2 text-ink-secondary">
+                    {p}
+                  </span>
                 ))}
               </div>
               <div>
                 {item.primary_input_modality && (
-                  <ModalityLabel modality={item.primary_input_modality} direction="Input" />
+                  <ModalityLabel
+                    modality={item.primary_input_modality}
+                    direction="Input"
+                  />
                 )}
                 {item.primary_output_modality && (
-                  <ModalityLabel modality={item.primary_output_modality} direction="Output" />
+                  <ModalityLabel
+                    modality={item.primary_output_modality}
+                    direction="Output"
+                  />
                 )}
               </div>
             </div>
@@ -150,11 +171,20 @@ export default async function ItemDetailPage({
           {item.status === "seed" && (
             <Section title="Curation Status">
               <div className="rounded border border-caution-light bg-caution-light/30 px-5 py-4 font-ui text-sm text-caution">
-                <p className="mb-2 font-semibold">Seed dossier &mdash; not yet curator-complete</p>
+                <p className="mb-2 font-semibold">
+                  Seed dossier &mdash; not yet curator-complete
+                </p>
                 <ul className="list-inside list-disc space-y-1 text-ink-secondary">
-                  <li>Validation rollups and replication scores are pending ingestion</li>
-                  <li>Citation list may be incomplete or contain placeholders</li>
-                  <li>Observation table will populate once evidence is curated</li>
+                  <li>
+                    Validation rollups and replication scores are pending
+                    ingestion
+                  </li>
+                  <li>
+                    Citation list may be incomplete or contain placeholders
+                  </li>
+                  <li>
+                    Observation table will populate once evidence is curated
+                  </li>
                 </ul>
               </div>
             </Section>
@@ -173,7 +203,10 @@ export default async function ItemDetailPage({
                     { label: "Evidence", value: rep.evidence_strength_score },
                     { label: "Replication", value: rep.replication_score },
                     { label: "Practicality", value: rep.practicality_score },
-                    { label: "Translatability", value: rep.translatability_score },
+                    {
+                      label: "Translatability",
+                      value: rep.translatability_score,
+                    },
                   ]}
                 />
                 <p className="mt-3 font-data text-[10px] text-ink-faint">
@@ -187,18 +220,22 @@ export default async function ItemDetailPage({
               <div>
                 <p className="small-caps mb-4">Replication</p>
                 <dl className="space-y-2 font-ui text-sm">
-                  {([
-                    ["Papers", rep.primary_paper_count],
-                    ["Independent", rep.independent_primary_paper_count],
-                    ["Author clusters", rep.distinct_last_author_clusters],
-                    ["Institutions", rep.distinct_institutions],
-                    ["Bio contexts", rep.distinct_biological_contexts],
-                    ["Years", rep.years_since_first_report ?? "\u2014"],
-                    ["Applications", rep.downstream_application_count],
-                  ] as [string, string | number][]).map(([label, value]) => (
+                  {(
+                    [
+                      ["Papers", rep.primary_paper_count],
+                      ["Independent", rep.independent_primary_paper_count],
+                      ["Author clusters", rep.distinct_last_author_clusters],
+                      ["Institutions", rep.distinct_institutions],
+                      ["Bio contexts", rep.distinct_biological_contexts],
+                      ["Years", rep.years_since_first_report ?? "\u2014"],
+                      ["Applications", rep.downstream_application_count],
+                    ] as [string, string | number][]
+                  ).map(([label, value]) => (
                     <div key={label} className="flex justify-between">
                       <dt className="text-ink-muted">{label}</dt>
-                      <dd className="font-data tabular-nums text-ink">{String(value)}</dd>
+                      <dd className="font-data tabular-nums text-ink">
+                        {String(value)}
+                      </dd>
                     </div>
                   ))}
                   {rep.orphan_tool_flag && (
@@ -231,8 +268,8 @@ export default async function ItemDetailPage({
             <div>
               <p className="small-caps mb-4">Scores</p>
               <p className="font-ui text-sm italic text-ink-muted">
-                Scores not yet computed. Replication and evidence metrics
-                will appear once citation-graph ingestion is complete.
+                Scores not yet computed. Replication and evidence metrics will
+                appear once citation-graph ingestion is complete.
               </p>
             </div>
           )}

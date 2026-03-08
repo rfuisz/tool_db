@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getItemBySlug } from "@/lib/data";
+import { getItemBySlug } from "@/lib/backend-data";
 
 interface RouteContext {
   params: Promise<{ slug: string }>;
@@ -8,10 +8,13 @@ interface RouteContext {
 
 export async function GET(_request: Request, context: RouteContext) {
   const { slug } = await context.params;
-  const item = getItemBySlug(slug);
+  const item = await getItemBySlug(slug);
 
   if (!item) {
-    return NextResponse.json({ error: `Item not found for slug "${slug}".` }, { status: 404 });
+    return NextResponse.json(
+      { error: `Item not found for slug "${slug}".` },
+      { status: 404 },
+    );
   }
 
   return NextResponse.json(item);

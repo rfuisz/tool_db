@@ -47,6 +47,7 @@ class WorkflowSummary(BaseModel):
 class WorkflowDetail(WorkflowSummary):
     recommended_for: List[str] = Field(default_factory=list)
     default_parallelization_assumption: Optional[str] = None
+    stage_templates: List[Dict[str, Any]] = Field(default_factory=list)
     step_templates: List[Dict[str, Any]] = Field(default_factory=list)
     assumption_notes: List[str] = Field(default_factory=list)
     index_markdown: str
@@ -65,3 +66,47 @@ class SourceRegistryEntry(BaseModel):
     role: str
     status: str
     base_url: str
+
+
+class FirstPassSourceDocument(BaseModel):
+    id: str
+    title: str
+    source_type: str
+    publication_year: Optional[int] = None
+    journal_or_source: Optional[str] = None
+    doi: Optional[str] = None
+    pmid: Optional[str] = None
+
+
+class FirstPassEvidenceSnippet(BaseModel):
+    text: str
+    source_document: FirstPassSourceDocument
+
+
+class FirstPassClaim(BaseModel):
+    id: str
+    claim_type: str
+    claim_text_normalized: str
+    polarity: str
+    source_locator: Dict[str, Any] = Field(default_factory=dict)
+    metrics: List[Dict[str, Any]] = Field(default_factory=list)
+    source_document: FirstPassSourceDocument
+
+
+class FirstPassItemSummary(BaseModel):
+    slug: str
+    canonical_name: str
+    item_type: Optional[str] = None
+    matched_slug: Optional[str] = None
+    source_document_count: int
+    claim_count: int
+    aliases: List[str] = Field(default_factory=list)
+    evidence_preview: Optional[str] = None
+    evidence_previews: List[str] = Field(default_factory=list)
+    claim_previews: List[str] = Field(default_factory=list)
+
+
+class FirstPassItemDetail(FirstPassItemSummary):
+    evidence_snippets: List[FirstPassEvidenceSnippet] = Field(default_factory=list)
+    source_documents: List[FirstPassSourceDocument] = Field(default_factory=list)
+    claims: List[FirstPassClaim] = Field(default_factory=list)

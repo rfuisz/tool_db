@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { parseItemSearchFilters } from "@/lib/api-route-utils";
+import { getItems } from "@/lib/backend-data";
 import { searchItems } from "@/lib/api-search";
 
 export async function GET(request: NextRequest) {
   const filters = parseItemSearchFilters(request.nextUrl.searchParams);
-  const result = searchItems(filters);
+  const items = await getItems();
+  const result = searchItems(items, filters);
 
   return NextResponse.json({
     filters,

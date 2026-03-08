@@ -60,6 +60,16 @@ class FakeCursor:
         elif normalized.startswith("insert into item_citation"):
             self.db.insert_item_citation(params)
             self._last_row = None
+        elif normalized.startswith("select id from workflow_template where slug = %s"):
+            self._last_row = self.db.find_workflow_template_id(params[0])
+        elif normalized.startswith("insert into workflow_stage_template"):
+            self._last_row = (self.db.upsert_workflow_stage(params),)
+        elif normalized.startswith("delete from workflow_assumption"):
+            self.db.delete_workflow_assumption(params)
+            self._last_row = None
+        elif normalized.startswith("insert into workflow_assumption"):
+            self.db.insert_workflow_assumption(params)
+            self._last_row = None
         else:
             raise AssertionError(f"Unhandled query in fake cursor: {query}")
 
@@ -82,13 +92,18 @@ class FakeDatabase:
     def __init__(self):
         self.source_documents = []
         self.items = {}
+        self.workflow_templates = {}
+        self.workflow_stages = {}
         self.synonyms = []
         self.claims = []
         self.claim_metrics = []
         self.claim_subject_links = []
         self.item_citations = []
+        self.workflow_assumptions = []
         self._next_source_document_id = 1
         self._next_item_id = 1
+        self._next_workflow_template_id = 1
+        self._next_workflow_stage_id = 1
         self._next_claim_id = 1
 
     def seed_item(self, slug):
@@ -96,6 +111,12 @@ class FakeDatabase:
         self._next_item_id += 1
         self.items[slug] = {"id": item_id, "slug": slug}
         return item_id
+
+    def seed_workflow_template(self, slug):
+        workflow_id = f"workflow-{self._next_workflow_template_id}"
+        self._next_workflow_template_id += 1
+        self.workflow_templates[slug] = {"id": workflow_id, "slug": slug}
+        return workflow_id
 
     def find_source_document_by(self, key, value):
         for row in self.source_documents:
@@ -130,6 +151,10 @@ class FakeDatabase:
 
     def find_item_id(self, slug):
         row = self.items.get(slug)
+        return (row["id"],) if row else None
+
+    def find_workflow_template_id(self, slug):
+        row = self.workflow_templates.get(slug)
         return (row["id"],) if row else None
 
     def upsert_item(self, params):
@@ -172,6 +197,42 @@ class FakeDatabase:
         if row not in self.item_citations:
             self.item_citations.append(row)
 
+    def upsert_workflow_stage(self, params):
+        key = (params[0], params[3])
+        existing = self.workflow_stages.get(key)
+        if existing:
+            existing["params"] = params
+            return existing["id"]
+        stage_id = f"workflow-stage-{self._next_workflow_stage_id}"
+        self._next_workflow_stage_id += 1
+        self.workflow_stages[key] = {"id": stage_id, "params": params}
+        return stage_id
+
+    def delete_workflow_assumption(self, params):
+        stage_id, source_document_id, assumption_kind = params
+        self.workflow_assumptions = [
+            row
+            for row in self.workflow_assumptions
+            if not (
+                row["workflow_stage_template_id"] == stage_id
+                and row["source_document_id"] == source_document_id
+                and row["assumption_kind"] == assumption_kind
+            )
+        ]
+
+    def insert_workflow_assumption(self, params):
+        self.workflow_assumptions.append(
+            {
+                "workflow_template_id": params[0],
+                "workflow_stage_template_id": params[1],
+                "assumption_kind": params[2],
+                "assumption_name": params[3],
+                "value_text": params[4],
+                "rationale": params[5],
+                "source_document_id": params[6],
+            }
+        )
+
 
 def test_execute_load_plan_applies_existing_item_claims() -> None:
     settings = get_settings()
@@ -182,15 +243,19 @@ def test_execute_load_plan_applies_existing_item_claims() -> None:
     fake_db = FakeDatabase()
     fake_db.seed_item("aslov2")
     fake_db.seed_item("cry2-cib1")
+    fake_db.seed_workflow_template("fast-no-cloning-screen")
     executor = PostgresLoadPlanExecutor(settings, connection=FakeConnection(fake_db))
 
     result = executor.execute_load_plan(load_plan, apply=True)
 
     assert result["mode"] == "applied"
     assert result["inserted_claim_count"] == 2
+    assert result["upserted_workflow_stage_count"] == 2
     assert len(fake_db.claims) == 2
     assert len(fake_db.claim_subject_links) == 2
     assert len(fake_db.item_citations) == 2
+    assert len(fake_db.workflow_stages) == 2
+    assert len(fake_db.workflow_assumptions) == 2
 
 
 def test_execute_load_plan_routes_new_candidate_to_review_queue() -> None:
@@ -222,6 +287,15 @@ def test_execute_load_plan_routes_new_candidate_to_review_queue() -> None:
                     "citation_role_suggestion": "best_review",
                 }
             ],
+            "workflows": [
+                {
+                    "action": "manual_workflow_candidate_review_required",
+                    "local_id": "workflow_new",
+                    "proposed_slug": "new-workflow",
+                    "canonical_name": "New Workflow",
+                    "stages": [],
+                }
+            ],
         },
     }
     executor = PostgresLoadPlanExecutor(settings, connection=FakeConnection(FakeDatabase()))
@@ -229,7 +303,7 @@ def test_execute_load_plan_routes_new_candidate_to_review_queue() -> None:
     result = executor.execute_load_plan(load_plan, apply=False)
 
     assert result["mode"] == "dry_run"
-    assert result["summary"]["review_task_count"] == 2
+    assert result["summary"]["review_task_count"] == 3
 
 
 def test_execute_load_plan_dry_run_writes_review_queue(tmp_path: Path) -> None:
@@ -254,6 +328,13 @@ def test_execute_load_plan_dry_run_writes_review_queue(tmp_path: Path) -> None:
                     "subject_targets": [],
                 }
             ],
+            "workflows": [
+                {
+                    "action": "manual_workflow_stage_review_required",
+                    "reason": "No workflow candidate was extracted.",
+                    "stages": [{"local_id": "stage_1", "stage_name": "broad screen"}],
+                }
+            ],
         },
     }
     executor = PostgresLoadPlanExecutor(settings, connection=FakeConnection(FakeDatabase()))
@@ -262,7 +343,7 @@ def test_execute_load_plan_dry_run_writes_review_queue(tmp_path: Path) -> None:
     result = executor.execute_load_plan(load_plan, apply=False, review_output_path=review_path)
 
     assert result["mode"] == "dry_run"
-    assert result["summary"]["review_task_count"] == 2
+    assert result["summary"]["review_task_count"] == 3
     payload = json.loads(review_path.read_text())
     assert payload["review_queue_type"] == "curation_review_queue_v1"
-    assert len(payload["tasks"]) == 2
+    assert len(payload["tasks"]) == 3

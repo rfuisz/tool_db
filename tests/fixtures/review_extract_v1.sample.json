@@ -22,6 +22,12 @@
       "item_type": "multi_component_switch",
       "canonical_name": "CRY2/CIB1",
       "aliases": ["CRY2-CIB1"]
+    },
+    {
+      "local_id": "workflow_fast_no_cloning_screen",
+      "candidate_type": "workflow_template",
+      "canonical_name": "Fast no-cloning screen",
+      "aliases": ["fast screen"]
     }
   ],
   "claims": [
@@ -42,6 +48,42 @@
       "subject_local_ids": ["item_cry2_cib1"],
       "citation_role_suggestion": "best_review",
       "unresolved_ambiguities": []
+    }
+  ],
+  "workflow_stage_observations": [
+    {
+      "local_id": "stage_broad_screen",
+      "workflow_local_id": "workflow_fast_no_cloning_screen",
+      "stage_name": "broad first-pass screen",
+      "stage_kind": "broad_screen",
+      "stage_order": 1,
+      "search_modality": "cell_free",
+      "input_candidate_count": 24,
+      "output_candidate_count": 6,
+      "candidate_unit": "variants",
+      "selection_basis": "advance designs with measurable light-responsive signal in a rapid assay",
+      "enriches_for_axes": ["fast first-pass activity"],
+      "guards_against_axes": ["host-specific confounding"],
+      "advance_criteria": "clear separation between baseline and stimulated conditions",
+      "source_locator": {
+        "section_label": "workflow overview",
+        "quoted_text": "A rapid first-pass screen narrows candidates before slower validation."
+      }
+    },
+    {
+      "local_id": "stage_confirmatory_validation",
+      "workflow_local_id": "workflow_fast_no_cloning_screen",
+      "stage_name": "confirmatory follow-up assay",
+      "stage_kind": "confirmatory_validation",
+      "stage_order": 2,
+      "search_modality": "cell_based",
+      "input_candidate_count": 6,
+      "output_candidate_count": 2,
+      "candidate_unit": "variants",
+      "selection_basis": "retain candidates that reproduce the signal in the relevant host context",
+      "preserves_downstream_property_axes": ["host-context performance"],
+      "higher_fidelity_than_previous": true,
+      "advance_criteria": "reproducible activity in a more relevant host assay"
     }
   ],
   "recommended_seed_item_local_ids": ["item_aslov2", "item_cry2_cib1"],

@@ -1,5 +1,6 @@
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import List, Optional
@@ -16,6 +17,7 @@ from tool_db_backend.clients.openalex import OpenAlexClient
 from tool_db_backend.clients.optobase import OptoBaseClient
 from tool_db_backend.clients.semantic_scholar import SemanticScholarClient
 from tool_db_backend.db_migrations import MigrationRunner
+from tool_db_backend.first_pass_loader import FirstPassExtractionLoader
 from tool_db_backend.llm_extractor import LLMExtractionError, LLMExtractionRunner
 from tool_db_backend.load_plan import LoadPlanBuilder
 from tool_db_backend.normalization import PacketNormalizer
@@ -27,6 +29,7 @@ from tool_db_backend.seed_export import SeedExporter
 from tool_db_backend.seed_loader import SeedLoader
 from tool_db_backend.schema_validation import PACKET_TO_SCHEMA, PacketValidationError, validate_packet
 from tool_db_backend.source_smoke_test import RealDataSmokeTester
+from tool_db_backend.source_staging import ClinicalTrialArtifactBuilder, OptoBaseSearchParser
 
 
 def validate_packet_file(packet_kind: str, packet_path: str) -> int:
@@ -150,6 +153,150 @@ def fetch_optobase_search(query: str = "", output_path: Optional[str] = None) ->
     return 0
 
 
+def build_clinicaltrials_packet(raw_path: str, output_path: str) -> int:
+    builder = ClinicalTrialArtifactBuilder(get_settings())
+    path = builder.build_packet_from_raw_file(Path(raw_path), Path(output_path))
+    print(f"wrote: {path}")
+    return 0
+
+
+def parse_optobase_search_artifact(raw_path: str, output_path: str) -> int:
+    parser = OptoBaseSearchParser()
+    path = parser.write_summary_from_raw_file(Path(raw_path), Path(output_path))
+    print(f"wrote: {path}")
+    return 0
+
+
+def _infer_packet_kind(packet_path: Path) -> str:
+    payload = json.loads(packet_path.read_text())
+    packet_kind = payload.get("packet_type")
+    if packet_kind not in PACKET_TO_SCHEMA:
+        raise ValueError(f"Unsupported or missing packet_type in {packet_path}: {packet_kind}")
+    return packet_kind
+
+
+def ingest_packet_batch(
+    packet_dir: str,
+    apply: bool = False,
+    glob_pattern: str = "*.json",
+    limit: Optional[int] = None,
+    artifact_root: Optional[str] = None,
+    review_output_dir: Optional[str] = None,
+    manifest_path: Optional[str] = None,
+) -> int:
+    settings = get_settings()
+    pipeline = PacketIngestPipeline(settings)
+    packet_paths = sorted(Path(packet_dir).glob(glob_pattern))
+    if limit is not None:
+        packet_paths = packet_paths[:limit]
+
+    completed = []
+    failures = []
+    for packet_path in packet_paths:
+        try:
+            packet_kind = _infer_packet_kind(packet_path)
+            per_packet_artifact_dir = (
+                Path(artifact_root) / packet_path.stem if artifact_root else settings.pipeline_artifact_root / packet_path.stem
+            )
+            per_packet_review_output = (
+                Path(review_output_dir) / f"{packet_path.stem}.review.json"
+                if review_output_dir
+                else None
+            )
+            result = pipeline.ingest_packet_file(
+                packet_kind=packet_kind,
+                packet_path=packet_path,
+                apply=apply,
+                artifact_dir=per_packet_artifact_dir,
+                review_output_path=per_packet_review_output,
+            )
+            completed.append(result)
+        except (ValueError, PacketValidationError, RuntimeError) as exc:
+            failures.append({"packet_path": str(packet_path), "error": str(exc)})
+
+    report = {
+        "packet_dir": str(Path(packet_dir)),
+        "glob_pattern": glob_pattern,
+        "selected_packet_count": len(packet_paths),
+        "completed_packets": completed,
+        "failed_packets": failures,
+    }
+    if manifest_path:
+        path = Path(manifest_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(report, indent=2) + "\n")
+        report["manifest_path"] = str(path)
+    print(json.dumps(report, indent=2))
+    return 0 if not failures else 1
+
+
+def populate_local_db(
+    literature_dir: str = "data/extractions",
+    gap_dir: str = "data/pipeline-artifacts/real-extraction-seed/gap_map",
+    review_output_dir: Optional[str] = None,
+    manifest_path: Optional[str] = None,
+) -> int:
+    settings = get_settings()
+    migration_runner = MigrationRunner(settings)
+    seed_loader = SeedLoader(settings)
+    first_pass_loader = FirstPassExtractionLoader(settings)
+
+    applied_migrations = migration_runner.apply_all()
+    seed_result = seed_loader.load_bundle_file(Path("db/seeds/knowledge_seed_bundle.v1.json"))
+
+    literature_status = ingest_packet_batch(
+        packet_dir=literature_dir,
+        apply=True,
+        artifact_root=str(settings.pipeline_artifact_root / "populate-local-db" / "literature"),
+        review_output_dir=review_output_dir,
+    )
+    gap_status = ingest_packet_batch(
+        packet_dir=gap_dir,
+        apply=True,
+        glob_pattern="*.database_entry_extract_v1.json",
+        artifact_root=str(settings.pipeline_artifact_root / "populate-local-db" / "gap_map"),
+        review_output_dir=review_output_dir,
+    )
+    first_pass_report = first_pass_loader.load_packet_batch(
+        packet_dir=Path(literature_dir),
+        glob_pattern="*.json",
+        manifest_path=settings.pipeline_artifact_root / "populate-local-db" / "first-pass-report.json",
+    )
+
+    report = {
+        "applied_migrations": applied_migrations,
+        "seed_result": seed_result,
+        "literature_status": literature_status,
+        "gap_map_status": gap_status,
+        "first_pass_selected_packet_count": first_pass_report["selected_packet_count"],
+        "first_pass_failed_packet_count": len(first_pass_report["failed_packets"]),
+    }
+    if manifest_path:
+        path = Path(manifest_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(report, indent=2) + "\n")
+        report["manifest_path"] = str(path)
+    print(json.dumps(report, indent=2))
+    return 0 if literature_status == 0 and gap_status == 0 and not first_pass_report["failed_packets"] else 1
+
+
+def load_first_pass_extractions(
+    packet_dir: str,
+    glob_pattern: str = "*.json",
+    limit: Optional[int] = None,
+    manifest_path: Optional[str] = None,
+) -> int:
+    loader = FirstPassExtractionLoader(get_settings())
+    report = loader.load_packet_batch(
+        packet_dir=Path(packet_dir),
+        glob_pattern=glob_pattern,
+        limit=limit,
+        manifest_path=Path(manifest_path) if manifest_path else None,
+    )
+    print(json.dumps(report, indent=2))
+    return 0 if not report["failed_packets"] else 1
+
+
 def normalize_packet_file(packet_kind: str, packet_path: str, output_path: str) -> int:
     normalizer = PacketNormalizer(get_settings())
     path = normalizer.write_normalized_packet(packet_kind, Path(packet_path), Path(output_path))
@@ -256,13 +403,77 @@ def run_extraction_job(job_path: str, output_path: Optional[str] = None) -> int:
     return 0
 
 
-def run_extraction_batch(job_dir: str, limit: int = 3) -> int:
+def _normalize_match_terms(values: Optional[List[str]]) -> List[str]:
+    return [value.strip().lower() for value in (values or []) if value.strip()]
+
+
+def _job_matches_terms(job_path: Path, include_terms: List[str], exclude_terms: List[str]) -> bool:
+    haystacks = [job_path.stem.lower()]
+    try:
+        payload = json.loads(job_path.read_text())
+        source_document = payload.get("source_document", {})
+        input_context = payload.get("input_context", {})
+        haystacks.extend(
+            [
+                str(source_document.get("title", "")).lower(),
+                str(input_context.get("title", "")).lower(),
+                str(input_context.get("abstract_text", "")).lower(),
+            ]
+        )
+    except (json.JSONDecodeError, OSError):
+        pass
+
+    searchable = "\n".join(haystacks)
+    if include_terms and not any(term in searchable for term in include_terms):
+        return False
+    if exclude_terms and any(term in searchable for term in exclude_terms):
+        return False
+    return True
+
+
+def _existing_extraction_outputs(settings, job_path: Path) -> List[Path]:
+    pattern = re.escape(job_path.stem).replace("\\*", "*")
+    return sorted(settings.extraction_root.glob(f"{job_path.stem}.*.json"))
+
+
+def run_extraction_batch(
+    job_dir: str,
+    limit: int = 3,
+    include_terms: Optional[List[str]] = None,
+    exclude_terms: Optional[List[str]] = None,
+    skip_existing: bool = True,
+    manifest_path: Optional[str] = None,
+) -> int:
+    settings = get_settings()
     runner = LLMExtractionRunner(get_settings())
     results = []
     failures = []
-    job_paths = sorted(Path(job_dir).glob("*.json"))[:limit]
+    skipped_existing = []
+    skipped_filtered_out = []
+    include_terms_normalized = _normalize_match_terms(include_terms)
+    exclude_terms_normalized = _normalize_match_terms(exclude_terms)
+    all_job_paths = sorted(Path(job_dir).glob("*.json"))
+    selected_job_paths: List[Path] = []
+
+    for job_path in all_job_paths:
+        if not _job_matches_terms(job_path, include_terms_normalized, exclude_terms_normalized):
+            skipped_filtered_out.append(str(job_path))
+            continue
+        existing_outputs = _existing_extraction_outputs(settings, job_path)
+        if skip_existing and existing_outputs:
+            skipped_existing.append(
+                {
+                    "job_path": str(job_path),
+                    "existing_outputs": [str(path) for path in existing_outputs],
+                }
+            )
+            continue
+        selected_job_paths.append(job_path)
+        if len(selected_job_paths) >= limit:
+            break
+
     try:
-        for job_path in job_paths:
+        for job_path in selected_job_paths:
             try:
                 results.append(runner.run_job_file(job_path))
             except LLMExtractionError as exc:
@@ -270,7 +481,23 @@ def run_extraction_batch(job_dir: str, limit: int = 3) -> int:
     finally:
         runner.close()
 
-    print(json.dumps({"completed_jobs": results, "failed_jobs": failures}, indent=2))
+    report = {
+        "job_dir": str(Path(job_dir)),
+        "selected_job_count": len(selected_job_paths),
+        "completed_jobs": results,
+        "failed_jobs": failures,
+        "skipped_existing": skipped_existing,
+        "skipped_filtered_out_count": len(skipped_filtered_out),
+        "include_terms": include_terms_normalized,
+        "exclude_terms": exclude_terms_normalized,
+    }
+    if manifest_path:
+        path = Path(manifest_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(report, indent=2) + "\n")
+        report["manifest_path"] = str(path)
+
+    print(json.dumps(report, indent=2))
     return 0 if not failures else 1
 
 
@@ -333,6 +560,20 @@ def main(argv: Optional[List[str]] = None) -> int:
     optobase_parser.add_argument("--query", default="")
     optobase_parser.add_argument("--output-path")
 
+    clinicaltrials_packet_parser = subparsers.add_parser(
+        "build-clinicaltrials-packet",
+        help="Build a deterministic trial_extract_v1 packet from a raw ClinicalTrials.gov payload wrapper.",
+    )
+    clinicaltrials_packet_parser.add_argument("raw_path")
+    clinicaltrials_packet_parser.add_argument("output_path")
+
+    optobase_parse_parser = subparsers.add_parser(
+        "parse-optobase-search",
+        help="Parse a raw OptoBase HTML payload wrapper into a structured summary artifact.",
+    )
+    optobase_parse_parser.add_argument("raw_path")
+    optobase_parse_parser.add_argument("output_path")
+
     normalize_parser = subparsers.add_parser(
         "normalize-packet",
         help="Normalize a validated extraction packet into merge-ready JSON.",
@@ -371,6 +612,36 @@ def main(argv: Optional[List[str]] = None) -> int:
     ingest_parser.add_argument("--artifact-dir")
     ingest_parser.add_argument("--review-output-path")
 
+    ingest_batch_parser = subparsers.add_parser(
+        "ingest-packet-batch",
+        help="Run the packet ingest pipeline over a directory of packet JSON files.",
+    )
+    ingest_batch_parser.add_argument("packet_dir")
+    ingest_batch_parser.add_argument("--apply", action="store_true")
+    ingest_batch_parser.add_argument("--glob-pattern", default="*.json")
+    ingest_batch_parser.add_argument("--limit", type=int)
+    ingest_batch_parser.add_argument("--artifact-root")
+    ingest_batch_parser.add_argument("--review-output-dir")
+    ingest_batch_parser.add_argument("--manifest-path")
+
+    populate_parser = subparsers.add_parser(
+        "populate-local-db",
+        help="Run migrations, load seed knowledge, and ingest checked-in literature and gap-map packets.",
+    )
+    populate_parser.add_argument("--literature-dir", default="data/extractions")
+    populate_parser.add_argument("--gap-dir", default="data/pipeline-artifacts/real-extraction-seed/gap_map")
+    populate_parser.add_argument("--review-output-dir")
+    populate_parser.add_argument("--manifest-path")
+
+    first_pass_parser = subparsers.add_parser(
+        "load-first-pass-extractions",
+        help="Load extracted packets into permissive first-pass review tables for bulk inspection.",
+    )
+    first_pass_parser.add_argument("packet_dir")
+    first_pass_parser.add_argument("--glob-pattern", default="*.json")
+    first_pass_parser.add_argument("--limit", type=int)
+    first_pass_parser.add_argument("--manifest-path")
+
     smoke_test_parser = subparsers.add_parser(
         "smoke-test-real-data",
         help="Fetch a modest batch of real literature and gap/problem data.",
@@ -399,6 +670,26 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     extraction_batch_parser.add_argument("job_dir")
     extraction_batch_parser.add_argument("--limit", type=int, default=3)
+    extraction_batch_parser.add_argument(
+        "--include-term",
+        action="append",
+        default=[],
+        help="Case-insensitive term that must appear in the job title, abstract, or filename.",
+    )
+    extraction_batch_parser.add_argument(
+        "--exclude-term",
+        action="append",
+        default=[],
+        help="Case-insensitive term that excludes a job when found in the title, abstract, or filename.",
+    )
+    extraction_batch_parser.add_argument(
+        "--no-skip-existing",
+        action="store_false",
+        dest="skip_existing",
+        help="Re-run jobs even if extraction outputs already exist.",
+    )
+    extraction_batch_parser.set_defaults(skip_existing=True)
+    extraction_batch_parser.add_argument("--manifest-path")
 
     parsed = parser.parse_args(args)
 
@@ -418,6 +709,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         return fetch_gapmap_dataset(parsed.dataset_name, parsed.output_path)
     if parsed.command == "fetch-optobase-search":
         return fetch_optobase_search(parsed.query, parsed.output_path)
+    if parsed.command == "build-clinicaltrials-packet":
+        return build_clinicaltrials_packet(parsed.raw_path, parsed.output_path)
+    if parsed.command == "parse-optobase-search":
+        return parse_optobase_search_artifact(parsed.raw_path, parsed.output_path)
     if parsed.command == "normalize-packet":
         return normalize_packet_file(parsed.packet_kind, parsed.packet_path, parsed.output_path)
     if parsed.command == "build-load-plan":
@@ -434,6 +729,30 @@ def main(argv: Optional[List[str]] = None) -> int:
             parsed.artifact_dir,
             parsed.review_output_path,
         )
+    if parsed.command == "ingest-packet-batch":
+        return ingest_packet_batch(
+            parsed.packet_dir,
+            parsed.apply,
+            parsed.glob_pattern,
+            parsed.limit,
+            parsed.artifact_root,
+            parsed.review_output_dir,
+            parsed.manifest_path,
+        )
+    if parsed.command == "populate-local-db":
+        return populate_local_db(
+            parsed.literature_dir,
+            parsed.gap_dir,
+            parsed.review_output_dir,
+            parsed.manifest_path,
+        )
+    if parsed.command == "load-first-pass-extractions":
+        return load_first_pass_extractions(
+            parsed.packet_dir,
+            parsed.glob_pattern,
+            parsed.limit,
+            parsed.manifest_path,
+        )
     if parsed.command == "smoke-test-real-data":
         return smoke_test_real_data(parsed.artifact_dir)
     if parsed.command == "build-real-extraction-artifacts":
@@ -446,7 +765,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     if parsed.command == "run-extraction-job":
         return run_extraction_job(parsed.job_path, parsed.output_path)
     if parsed.command == "run-extraction-batch":
-        return run_extraction_batch(parsed.job_dir, parsed.limit)
+        return run_extraction_batch(
+            parsed.job_dir,
+            parsed.limit,
+            parsed.include_term,
+            parsed.exclude_term,
+            parsed.skip_existing,
+            parsed.manifest_path,
+        )
 
     parser.print_help()
     return 2

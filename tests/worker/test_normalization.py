@@ -15,7 +15,15 @@ def test_review_packet_normalization_maps_candidates_and_claims() -> None:
     assert normalized["normalized_packet_type"] == "review_extract_normalized_v1"
     assert normalized["canonical_item_candidates"]["item_aslov2"]["candidate_key"] == "item/aslov2"
     assert normalized["canonical_item_candidates"]["item_cry2_cib1"]["candidate_key"] == "item/cry2-cib1"
+    assert (
+        normalized["canonical_workflow_candidates"]["workflow_fast_no_cloning_screen"]["candidate_key"]
+        == "workflow/fast-no-cloning-screen"
+    )
     assert normalized["claims"][0]["subject_candidate_keys"] == ["item/aslov2"]
+    assert (
+        normalized["workflow_stage_observations"][0]["workflow_candidate_key"]
+        == "workflow/fast-no-cloning-screen"
+    )
     assert normalized["recommended_seed_item_keys"] == ["item/aslov2", "item/cry2-cib1"]
 
 

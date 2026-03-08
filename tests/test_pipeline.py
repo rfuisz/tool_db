@@ -75,6 +75,7 @@ def test_packet_pipeline_skips_metadata_only_primary_paper(tmp_path: Path) -> No
   "entity_candidates": [],
   "claims": [],
   "validation_observations": [],
+  "workflow_stage_observations": [],
   "replication_signals": {},
   "unresolved_ambiguities": []
 }

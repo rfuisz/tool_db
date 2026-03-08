@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import sys
 
 import uvicorn
@@ -12,7 +13,12 @@ from tool_db_backend.api import app
 
 
 def run() -> None:
-    uvicorn.run("apps.api.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(
+        "apps.api.main:app",
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", "8000")),
+        reload=os.environ.get("APP_ENV", "development") == "development",
+    )
 
 
 if __name__ == "__main__":

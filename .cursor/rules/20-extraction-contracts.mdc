@@ -1,0 +1,13 @@
+---
+description: Contracts for typed extraction packets and normalization boundaries
+globs: schemas/extraction/**/*
+alwaysApply: false
+---
+
+# Extraction Contracts
+
+- Extract into typed intermediate JSON packets, never straight into canonical entities.
+- Keep packet fields source-backed and normalization-friendly.
+- Models should suggest candidates, claims, contexts, metrics, and ambiguities.
+- Canonical ID assignment, synonym resolution, unit normalization, and merges are deterministic post-processing steps.
+- Add new packet fields only when they serve downstream normalization or curation.

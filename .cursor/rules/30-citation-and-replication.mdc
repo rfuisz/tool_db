@@ -1,0 +1,13 @@
+---
+description: Evidence ranking, replication, and practicality guidance for item dossiers
+globs: knowledge/items/**/*
+alwaysApply: false
+---
+
+# Citation And Replication
+
+- Every item dossier should expose ranked citations.
+- Preserve contradictory evidence instead of collapsing it away.
+- Distinguish replication from practicality; they are related but not the same score.
+- Penalize orphan tools, repeated caveats, retractions, and same-lab-only follow-up.
+- When evidence is still being seeded, mark the gap explicitly.

@@ -1,0 +1,64 @@
+{
+  "load_plan_type": "canonical_load_plan_v1",
+  "generated_at": "2026-03-08T21:35:16+00:00",
+  "source_document": {
+    "source_type": "review",
+    "title": "Seed review for light-responsive control tools",
+    "publication_year": 2026,
+    "journal_or_source": "internal fixture"
+  },
+  "item_resolutions": {
+    "item_aslov2": {
+      "resolution_status": "matched_existing",
+      "matched_slug": "aslov2",
+      "matched_by": "slug"
+    },
+    "item_cry2_cib1": {
+      "resolution_status": "matched_existing",
+      "matched_slug": "cry2-cib1",
+      "matched_by": "slug"
+    }
+  },
+  "actions": {
+    "toolkit_items": [
+      {
+        "action": "attach_evidence_to_existing_item",
+        "local_id": "item_aslov2",
+        "target_slug": "aslov2"
+      },
+      {
+        "action": "attach_evidence_to_existing_item",
+        "local_id": "item_cry2_cib1",
+        "target_slug": "cry2-cib1"
+      }
+    ],
+    "claims": [
+      {
+        "action": "insert_extracted_claim",
+        "claim_local_id": "claim_1",
+        "claim_type": "mechanism_summary",
+        "polarity": "supports",
+        "subject_targets": [
+          {
+            "target_kind": "existing_item",
+            "target_slug": "aslov2"
+          }
+        ],
+        "citation_role_suggestion": "best_review"
+      },
+      {
+        "action": "insert_extracted_claim",
+        "claim_local_id": "claim_2",
+        "claim_type": "mechanism_summary",
+        "polarity": "supports",
+        "subject_targets": [
+          {
+            "target_kind": "existing_item",
+            "target_slug": "cry2-cib1"
+          }
+        ],
+        "citation_role_suggestion": "best_review"
+      }
+    ]
+  }
+}

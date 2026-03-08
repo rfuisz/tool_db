@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tool-db.local/schemas/extraction/review_extract.v1.schema.json",
+  "title": "Review extraction packet v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "packet_type",
+    "schema_version",
+    "source_document",
+    "entity_candidates",
+    "claims",
+    "unresolved_ambiguities"
+  ],
+  "properties": {
+    "packet_type": { "const": "review_extract_v1" },
+    "schema_version": { "const": "v1" },
+    "source_document": {
+      "$ref": "common.v1.schema.json#/$defs/source_document_ref"
+    },
+    "review_scope": { "type": "string" },
+    "entity_candidates": {
+      "type": "array",
+      "items": { "$ref": "common.v1.schema.json#/$defs/entity_candidate" }
+    },
+    "claims": {
+      "type": "array",
+      "items": { "$ref": "common.v1.schema.json#/$defs/claim" }
+    },
+    "recommended_seed_item_local_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "unresolved_ambiguities": {
+      "type": "array",
+      "items": { "$ref": "common.v1.schema.json#/$defs/ambiguity" }
+    }
+  }
+}

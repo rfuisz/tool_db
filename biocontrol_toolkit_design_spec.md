@@ -256,7 +256,8 @@ This is the main flex point that will let the system grow without weekly schema 
 
 - `item_synonym`
 - `item_component`
-- `item_mechanism`
+- `item_mechanism` — biophysical mechanisms of molecular tools (photocleavage, heterodimerization, etc.)
+- `item_technique` — engineering methodology categories (computational design, selection/enrichment, etc.)
 - `item_target_process`
 - `item_related_item`
 - `item_problem_link`
@@ -734,24 +735,27 @@ Because most of the difficult work is evidence provenance, normalization, and ro
 The viewer should expose several top-level navigation modes:
 
 1. **Explore by mechanism**  
-   heterodimerization, oligomerization, conformational uncaging, membrane recruitment, photocleavage, DNA binding, RNA binding, degradation, translation control, etc.
+   Biophysical mechanisms of molecular tools: heterodimerization, oligomerization, conformational uncaging, membrane recruitment, photocleavage, DNA binding, RNA binding, degradation, translation control, etc.
 
-2. **Explore by component family**  
-   LOV, BLUF, cryptochromes, phytochromes, fluorescent proteins, chemogenetic receptors, RNA elements, display platforms, computational design tools, etc.
+2. **Explore by technique**  
+   Engineering methodology categories: computational design, selection / enrichment, directed evolution, sequence verification, functional assay, structural characterization, delivery optimization, etc.
 
-3. **Explore by validation context**  
+3. **Explore by component family**  
+   LOV, BLUF, cryptochromes, phytochromes, fluorescent proteins, chemogenetic receptors, RNA elements, display platforms, etc.
+
+4. **Explore by validation context**  
    cell-free, bacteria, mammalian, in vivo mouse, human, therapeutic
 
-4. **Explore by workflow speed / cost**  
+5. **Explore by workflow speed / cost**  
    fastest-to-first-test, cheapest-to-screen, hardest-to-debug, best for libraries
 
-5. **Explore by Gap Map problem**  
+6. **Explore by Gap Map problem**  
    show candidate tools ranked by applicability and confidence
 
 Each item page should show:
 
 - summary
-- mechanism
+- mechanism and/or technique
 - components
 - validation matrix
 - replication / practicality meter
@@ -834,7 +838,7 @@ last_reviewed: 2026-03-08
 Stable markdown sections:
 
 - Summary
-- Mechanism
+- Mechanism (for molecular tools) and/or Technique (for engineering methods)
 - Inputs
 - Outputs
 - Components

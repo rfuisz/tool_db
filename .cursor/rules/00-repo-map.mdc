@@ -1,0 +1,19 @@
+---
+description: Repo-wide map and invariants for the evidence-first knowledge system
+alwaysApply: true
+---
+
+# Repo Map
+
+- Treat `claim + context + evidence` as the primary unit of truth.
+- Canonical schemas live in `schemas/canonical/`.
+- Typed extraction packet contracts live in `schemas/extraction/`.
+- Human and agent dossiers live under `knowledge/`.
+- Architecture decisions belong in `docs/adr/`.
+
+# Operating Defaults
+
+- Prefer derived rollups over hand-maintained summary booleans.
+- Keep scoring explainable and versioned.
+- If evidence is missing, leave a clear `TODO` instead of inventing a fact.
+- Mechanisms are biophysical (how molecular tools work); techniques are engineering methodologies (what category of method). See ADR 0002.

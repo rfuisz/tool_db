@@ -1,0 +1,13 @@
+---
+description: Safety rules for canonical schema changes
+globs: schemas/canonical/**/*
+alwaysApply: false
+---
+
+# Schema Safety
+
+- Do not let extraction output write directly into canonical tables.
+- Keep normalized core fields explicit; use JSONB only for raw shadows and true long-tail data.
+- Preserve provenance fields whenever adding evidence-bearing tables.
+- When adding a summary field, prefer deriving it from observations or claims.
+- Any schema change should be mirrored by docs and, later, a migration.

@@ -1,0 +1,55 @@
+{
+  "packet_type": "review_extract_v1",
+  "schema_version": "v1",
+  "source_document": {
+    "source_type": "review",
+    "title": "Seed review for light-responsive control tools",
+    "publication_year": 2026,
+    "journal_or_source": "internal fixture"
+  },
+  "review_scope": "Illustrative packet showing how review extraction should be staged before normalization.",
+  "entity_candidates": [
+    {
+      "local_id": "item_aslov2",
+      "candidate_type": "toolkit_item",
+      "item_type": "protein_domain",
+      "canonical_name": "AsLOV2",
+      "aliases": ["Avena sativa LOV2"]
+    },
+    {
+      "local_id": "item_cry2_cib1",
+      "candidate_type": "toolkit_item",
+      "item_type": "multi_component_switch",
+      "canonical_name": "CRY2/CIB1",
+      "aliases": ["CRY2-CIB1"]
+    }
+  ],
+  "claims": [
+    {
+      "local_id": "claim_1",
+      "claim_type": "mechanism_summary",
+      "claim_text_normalized": "AsLOV2 is used as a light-responsive conformational actuator in engineered constructs.",
+      "polarity": "supports",
+      "subject_local_ids": ["item_aslov2"],
+      "citation_role_suggestion": "best_review",
+      "unresolved_ambiguities": []
+    },
+    {
+      "local_id": "claim_2",
+      "claim_type": "mechanism_summary",
+      "claim_text_normalized": "CRY2/CIB1 functions as a light-inducible interaction switch.",
+      "polarity": "supports",
+      "subject_local_ids": ["item_cry2_cib1"],
+      "citation_role_suggestion": "best_review",
+      "unresolved_ambiguities": []
+    }
+  ],
+  "recommended_seed_item_local_ids": ["item_aslov2", "item_cry2_cib1"],
+  "unresolved_ambiguities": [
+    {
+      "issue": "Foundational citations are not populated in this fixture.",
+      "detail": "Use live ingestion to backfill source-backed citations.",
+      "severity": "low"
+    }
+  ]
+}

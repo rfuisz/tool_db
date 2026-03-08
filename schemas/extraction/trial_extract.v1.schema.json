@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tool-db.local/schemas/extraction/trial_extract.v1.schema.json",
+  "title": "Trial extraction packet v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "packet_type",
+    "schema_version",
+    "source_document",
+    "entity_candidates",
+    "claims",
+    "trial_summary",
+    "unresolved_ambiguities"
+  ],
+  "properties": {
+    "packet_type": { "const": "trial_extract_v1" },
+    "schema_version": { "const": "v1" },
+    "source_document": {
+      "$ref": "common.v1.schema.json#/$defs/source_document_ref"
+    },
+    "entity_candidates": {
+      "type": "array",
+      "items": { "$ref": "common.v1.schema.json#/$defs/entity_candidate" }
+    },
+    "claims": {
+      "type": "array",
+      "items": { "$ref": "common.v1.schema.json#/$defs/claim" }
+    },
+    "trial_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "phase": { "type": "string" },
+        "recruitment_status": { "type": "string" },
+        "condition_or_focus": { "type": "string" },
+        "intervention_summary": { "type": "string" },
+        "study_type": { "type": "string" },
+        "enrollment": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "validation_observations": {
+      "type": "array",
+      "items": {
+        "$ref": "common.v1.schema.json#/$defs/validation_observation"
+      },
+      "default": []
+    },
+    "unresolved_ambiguities": {
+      "type": "array",
+      "items": { "$ref": "common.v1.schema.json#/$defs/ambiguity" }
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tool-db.local/schemas/extraction/database_entry_extract.v1.schema.json",
+  "title": "Database entry extraction packet v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "packet_type",
+    "schema_version",
+    "source_document",
+    "database_name",
+    "entry_url",
+    "entity_candidates",
+    "claims",
+    "unresolved_ambiguities"
+  ],
+  "properties": {
+    "packet_type": { "const": "database_entry_extract_v1" },
+    "schema_version": { "const": "v1" },
+    "source_document": {
+      "$ref": "common.v1.schema.json#/$defs/source_document_ref"
+    },
+    "database_name": { "type": "string", "minLength": 1 },
+    "entry_url": { "type": "string", "format": "uri" },
+    "entity_candidates": {
+      "type": "array",
+      "items": { "$ref": "common.v1.schema.json#/$defs/entity_candidate" }
+    },
+    "claims": {
+      "type": "array",
+      "items": { "$ref": "common.v1.schema.json#/$defs/claim" }
+    },
+    "database_fields": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "unresolved_ambiguities": {
+      "type": "array",
+      "items": { "$ref": "common.v1.schema.json#/$defs/ambiguity" }
+    }
+  }
+}

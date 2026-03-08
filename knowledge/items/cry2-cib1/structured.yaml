@@ -1,0 +1,42 @@
+id: item_cry2_cib1
+slug: cry2-cib1
+canonical_name: CRY2/CIB1
+item_type: multi_component_switch
+status: seed
+maturity_stage: research
+family: cryptochrome
+summary: >
+  Seed dossier for a light-inducible multi-component interaction switch used in
+  recruitment and signaling-control constructs.
+primary_input_modality: light
+primary_output_modality: signaling
+external_ids: {}
+synonyms:
+  - CRY2-CIB1
+components:
+  - CRY2
+  - CIB1
+mechanisms:
+  - heterodimerization
+techniques: []
+target_processes:
+  - signaling
+  - localization
+source_status:
+  citation_backfill_required: true
+  validation_backfill_required: true
+  replication_backfill_required: true
+citation_candidates:
+  - citation_role: database_reference
+    label: OptoBase
+    status: seed_reference
+    url: https://optobase.org/
+  - citation_role: foundational
+    label: TODO add founding primary paper
+    status: needs_curation
+validation_observations_seed: []
+workflow_recommendations:
+  - workflow_slug: fast-no-cloning-screen
+    rationale: useful for quick switch-feasibility checks
+  - workflow_slug: standard-construct-loop
+    rationale: needed when fusion geometry and host context drive performance

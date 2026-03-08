@@ -1,0 +1,10 @@
+{
+  "mode": "dry_run",
+  "summary": {
+    "toolkit_item_actions": 2,
+    "claim_actions": 2,
+    "review_task_count": 0,
+    "will_apply_database_changes": true
+  },
+  "review_queue_path": null
+}

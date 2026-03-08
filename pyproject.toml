@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tool-db-backend"
+version = "0.1.0"
+description = "Backend foundation for the BioControl Toolkit DB."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "fastapi",
+  "httpx",
+  "jsonschema",
+  "pydantic",
+  "pydantic-settings",
+  "psycopg[binary]",
+  "PyYAML",
+  "uvicorn"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest"
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tool_db_backend"]
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "src"
+]
+testpaths = [
+  "tests"
+]

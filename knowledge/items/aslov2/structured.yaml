@@ -1,0 +1,39 @@
+id: item_aslov2
+slug: aslov2
+canonical_name: AsLOV2
+item_type: protein_domain
+status: seed
+maturity_stage: research
+family: LOV
+summary: >
+  Seed dossier for a light-responsive LOV-domain actuator used in engineered
+  fusion constructs.
+primary_input_modality: light
+primary_output_modality: conformational_change
+external_ids: {}
+synonyms:
+  - Avena sativa LOV2
+mechanisms:
+  - conformational_uncaging
+techniques: []
+target_processes:
+  - localization
+  - signaling
+source_status:
+  citation_backfill_required: true
+  validation_backfill_required: true
+  replication_backfill_required: true
+citation_candidates:
+  - citation_role: database_reference
+    label: OptoBase
+    status: seed_reference
+    url: https://optobase.org/
+  - citation_role: foundational
+    label: TODO add founding primary paper
+    status: needs_curation
+validation_observations_seed: []
+workflow_recommendations:
+  - workflow_slug: fast-no-cloning-screen
+    rationale: good first-pass fit for known designs and small candidate sets
+  - workflow_slug: standard-construct-loop
+    rationale: needed when construct architecture and host context matter

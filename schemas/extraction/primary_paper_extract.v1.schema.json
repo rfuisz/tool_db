@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tool-db.local/schemas/extraction/primary_paper_extract.v1.schema.json",
+  "title": "Primary paper extraction packet v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "packet_type",
+    "schema_version",
+    "source_document",
+    "entity_candidates",
+    "claims",
+    "validation_observations",
+    "replication_signals",
+    "unresolved_ambiguities"
+  ],
+  "properties": {
+    "packet_type": { "const": "primary_paper_extract_v1" },
+    "schema_version": { "const": "v1" },
+    "source_document": {
+      "$ref": "common.v1.schema.json#/$defs/source_document_ref"
+    },
+    "entity_candidates": {
+      "type": "array",
+      "items": { "$ref": "common.v1.schema.json#/$defs/entity_candidate" }
+    },
+    "claims": {
+      "type": "array",
+      "items": { "$ref": "common.v1.schema.json#/$defs/claim" }
+    },
+    "validation_observations": {
+      "type": "array",
+      "items": {
+        "$ref": "common.v1.schema.json#/$defs/validation_observation"
+      }
+    },
+    "replication_signals": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "is_foundational_paper": { "type": "boolean" },
+        "is_independent_follow_up": { "type": "boolean" },
+        "last_author_cluster_hint": { "type": "string" },
+        "institution_cluster_hint": { "type": "string" },
+        "negative_or_mixed_follow_up": { "type": "boolean" },
+        "practicality_penalties": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        }
+      }
+    },
+    "unresolved_ambiguities": {
+      "type": "array",
+      "items": { "$ref": "common.v1.schema.json#/$defs/ambiguity" }
+    }
+  }
+}

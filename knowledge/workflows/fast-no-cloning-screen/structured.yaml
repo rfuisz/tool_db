@@ -1,0 +1,46 @@
+id: workflow_fast_no_cloning_screen
+slug: fast-no-cloning-screen
+name: Fast no-cloning screen
+workflow_family: fast_screen
+objective: Fast first-pass feasibility test for a known sequence or small design set
+throughput_class: low
+recommended_for:
+  - quick feasibility screens
+  - host-toxicity-risky candidates
+  - early triage before larger build campaigns
+default_parallelization_assumption: >
+  Candidate design can happen while ordering decisions are being finalized, but
+  DNA acquisition remains the dominant serial dependency.
+step_templates:
+  - step_name: design candidate
+    step_type: design
+    duration_typical_hours: 4
+    queue_time_typical_hours: 0
+    hands_on_hours: 4
+    direct_cost_usd_typical: 0
+    parallelizable: true
+  - step_name: order DNA fragment
+    step_type: dna_acquisition
+    duration_typical_hours: 72
+    queue_time_typical_hours: 0
+    hands_on_hours: 0.5
+    direct_cost_usd_typical: 100
+    outsourced: true
+    parallelizable: false
+  - step_name: fast expression or assay
+    step_type: assay
+    duration_typical_hours: 3
+    queue_time_typical_hours: 0.5
+    hands_on_hours: 2
+    direct_cost_usd_typical: 50
+    parallelizable: true
+  - step_name: analyze and decide
+    step_type: decision
+    duration_typical_hours: 2
+    queue_time_typical_hours: 0
+    hands_on_hours: 2
+    direct_cost_usd_typical: 0
+    parallelizable: false
+assumption_notes:
+  - Timing values are phase-0 seed assumptions and should be replaced with sourced workflow assumptions.
+  - DNA acquisition is the dominant clock time in this archetype.

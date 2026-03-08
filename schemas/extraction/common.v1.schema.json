@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tool-db.local/schemas/extraction/common.v1.schema.json",
+  "title": "Common extraction schema definitions",
+  "type": "object",
+  "$defs": {
+    "source_document_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_type", "title"],
+      "properties": {
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "review",
+            "primary_paper",
+            "trial_record",
+            "database_entry",
+            "protocol",
+            "benchmark",
+            "preprint"
+          ]
+        },
+        "title": { "type": "string", "minLength": 1 },
+        "doi": { "type": "string" },
+        "pmid": { "type": "string" },
+        "openalex_id": { "type": "string" },
+        "semantic_scholar_id": { "type": "string" },
+        "nct_id": { "type": "string" },
+        "publication_year": { "type": "integer" },
+        "journal_or_source": { "type": "string" }
+      }
+    },
+    "source_locator": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "chunk_index": { "type": "integer", "minimum": 0 },
+        "section_label": { "type": "string" },
+        "page_or_locator": { "type": "string" },
+        "quoted_text": { "type": "string" }
+      }
+    },
+    "metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric_name"],
+      "properties": {
+        "metric_name": { "type": "string", "minLength": 1 },
+        "operator": { "type": "string" },
+        "value_num": { "type": "number" },
+        "value_text": { "type": "string" },
+        "unit": { "type": "string" },
+        "condition_text": { "type": "string" }
+      },
+      "anyOf": [
+        { "required": ["value_num"] },
+        { "required": ["value_text"] }
+      ]
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "biological_system_level": {
+          "type": "string",
+          "enum": [
+            "cell_free",
+            "bacteria",
+            "yeast",
+            "mammalian_cell_line",
+            "primary_cells",
+            "organoid",
+            "mouse",
+            "large_animal",
+            "human_clinical"
+          ]
+        },
+        "species": { "type": "string" },
+        "strain_or_model": { "type": "string" },
+        "cell_type": { "type": "string" },
+        "tissue": { "type": "string" },
+        "subcellular_target": { "type": "string" },
+        "delivery_mode": { "type": "string" },
+        "cargo_or_effector": { "type": "string" },
+        "assay_type": { "type": "string" },
+        "success_outcome": {
+          "type": "string",
+          "enum": ["success", "mixed", "failed"]
+        }
+      }
+    },
+    "entity_candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["local_id", "candidate_type", "canonical_name"],
+      "properties": {
+        "local_id": { "type": "string", "minLength": 1 },
+        "candidate_type": {
+          "type": "string",
+          "enum": [
+            "toolkit_item",
+            "source_document",
+            "workflow_template",
+            "gap_item",
+            "institution",
+            "author_cluster"
+          ]
+        },
+        "item_type": { "type": "string" },
+        "canonical_name": { "type": "string", "minLength": 1 },
+        "aliases": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "evidence_text": { "type": "string" },
+        "external_ids": {
+          "type": "object",
+          "additionalProperties": { "type": ["string", "number", "boolean"] }
+        }
+      }
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "local_id",
+        "claim_type",
+        "claim_text_normalized",
+        "polarity",
+        "subject_local_ids"
+      ],
+      "properties": {
+        "local_id": { "type": "string", "minLength": 1 },
+        "claim_type": { "type": "string", "minLength": 1 },
+        "claim_text_normalized": { "type": "string", "minLength": 1 },
+        "polarity": {
+          "type": "string",
+          "enum": ["supports", "contradicts", "mixed", "neutral"]
+        },
+        "subject_local_ids": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "context": { "$ref": "#/$defs/context" },
+        "metrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/metric" },
+          "default": []
+        },
+        "citation_role_suggestion": { "type": "string" },
+        "source_locator": { "$ref": "#/$defs/source_locator" },
+        "unresolved_ambiguities": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        }
+      }
+    },
+    "validation_observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item_local_id",
+        "observation_type",
+        "biological_system_level",
+        "success_outcome"
+      ],
+      "properties": {
+        "item_local_id": { "type": "string", "minLength": 1 },
+        "observation_type": {
+          "type": "string",
+          "enum": [
+            "mechanistic_demo",
+            "application_demo",
+            "benchmark",
+            "therapeutic_use",
+            "manufacturing_use",
+            "failed_attempt"
+          ]
+        },
+        "biological_system_level": {
+          "type": "string",
+          "enum": [
+            "cell_free",
+            "bacteria",
+            "yeast",
+            "mammalian_cell_line",
+            "primary_cells",
+            "organoid",
+            "mouse",
+            "large_animal",
+            "human_clinical"
+          ]
+        },
+        "species": { "type": "string" },
+        "strain_or_model": { "type": "string" },
+        "cell_type": { "type": "string" },
+        "tissue": { "type": "string" },
+        "delivery_mode": { "type": "string" },
+        "cargo_or_effector": { "type": "string" },
+        "construct_name": { "type": "string" },
+        "assay_description": { "type": "string" },
+        "metrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/metric" },
+          "default": []
+        },
+        "notes": { "type": "string" }
+      }
+    },
+    "ambiguity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["issue"],
+      "properties": {
+        "issue": { "type": "string", "minLength": 1 },
+        "detail": { "type": "string" },
+        "severity": {
+          "type": "string",
+          "enum": ["low", "medium", "high"],
+          "default": "medium"
+        }
+      }
+    }
+  }
+}

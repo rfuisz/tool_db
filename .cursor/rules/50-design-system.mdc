@@ -1,0 +1,52 @@
+---
+description: Design system and styling rules for the web frontend
+globs:
+  - "apps/web/**"
+---
+
+# Design System Rules
+
+## Color Tokens
+
+Use semantic color tokens instead of raw Tailwind palette classes.
+
+- `text-ink`, `text-ink-secondary`, `text-ink-muted` — NOT `text-slate-*` or `text-gray-*`
+- `bg-surface`, `bg-surface-alt`, `bg-parchment` — NOT `bg-white`, `bg-slate-*`, `bg-gray-*`
+- `border-edge`, `border-edge-strong` — NOT `border-slate-*`, `border-gray-*`
+- `text-brand`, `bg-brand-light` for links and brand accents
+- `text-accent`, `bg-accent-light` for warm copper accent
+- `text-valid`, `bg-valid-light` for success / validation
+- `text-caution`, `bg-caution-light` for warnings
+- `text-danger`, `bg-danger-light` for errors / retractions
+
+Exception: item-type badges and tag colors use Tailwind's built-in palette at the -50/-800 range (blue, violet, emerald, amber, rose, cyan, orange, teal).
+
+## Typography
+
+Four font stacks, assigned by role:
+
+- `font-display` (Playfair Display) — page titles, h1-h4
+- `font-body` (Source Serif 4) — body text, summaries, prose
+- `font-ui` (Inter) — nav, badges, labels, form controls, metadata
+- `font-data` (JetBrains Mono) — metrics, scores, tabular numbers
+
+CSS rules in globals.css auto-assign: body→body, h1-h4→display, nav/button/input→ui. Use Tailwind font utilities to override when an element's context differs from its HTML semantics.
+
+Do NOT use `font-sans` or `font-serif` — use the semantic names above.
+
+## Spacing
+
+- Page container: `max-w-7xl px-6 pt-22 pb-20`
+- Section gap: `mb-10` or `mb-12`
+- Card padding: `p-5` or `p-6`
+- Card borders: `border border-edge` with `hover:border-edge-strong`
+
+## Verification
+
+Run `node --test tests/design-system.test.mjs` after any styling change. The test suite enforces token usage, font class patterns, and spacing.
+
+## Sources of Truth
+
+- Token definitions: `src/lib/design-tokens.ts`
+- CSS application: `src/app/globals.css`
+- Full documentation: `docs/design-system.md`

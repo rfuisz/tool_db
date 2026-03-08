@@ -1,0 +1,47 @@
+[
+  {
+    "source_key": "optobase",
+    "display_name": "OptoBase",
+    "source_kind": "database_entry",
+    "sync_mode": "seed_then_refresh",
+    "role": "curated optogenetics seed catalog",
+    "status": "planned",
+    "base_url": "https://optobase.org/"
+  },
+  {
+    "source_key": "openalex",
+    "display_name": "OpenAlex",
+    "source_kind": "database_entry",
+    "sync_mode": "periodic_api_sync",
+    "role": "work metadata and citation graph",
+    "status": "planned",
+    "base_url": "https://api.openalex.org/"
+  },
+  {
+    "source_key": "semantic_scholar",
+    "display_name": "Semantic Scholar",
+    "source_kind": "database_entry",
+    "sync_mode": "periodic_api_sync",
+    "role": "paper graph and recommendation expansion",
+    "status": "planned",
+    "base_url": "https://api.semanticscholar.org/"
+  },
+  {
+    "source_key": "clinicaltrials_gov",
+    "display_name": "ClinicalTrials.gov",
+    "source_kind": "trial_record",
+    "sync_mode": "periodic_api_sync",
+    "role": "human-use and therapeutic evidence",
+    "status": "planned",
+    "base_url": "https://clinicaltrials.gov/api/query/"
+  },
+  {
+    "source_key": "gap_map",
+    "display_name": "Gap Map",
+    "source_kind": "database_entry",
+    "sync_mode": "periodic_json_sync",
+    "role": "problem catalog for explainable item-gap links",
+    "status": "planned",
+    "base_url": "https://gap-map.org/"
+  }
+]

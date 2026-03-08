@@ -1,0 +1,13 @@
+---
+description: Rules for explainable gap-to-tool linking
+globs: knowledge/gaps/**/*
+alwaysApply: false
+---
+
+# Gap Map Linking
+
+- Treat Gap Map as the problem catalog, not the tool ontology.
+- Compute tool-to-gap links on this side of the system.
+- Public rankings must expose score breakdowns and assumptions.
+- Record what missing evidence blocks confidence.
+- Avoid black-box applicability scores.

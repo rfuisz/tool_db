@@ -1,0 +1,191 @@
+{
+  "version": "v1",
+  "generated_at": "2026-03-08T21:31:21+00:00",
+  "items": [
+    {
+      "slug": "aslov2",
+      "structured": {
+        "id": "item_aslov2",
+        "slug": "aslov2",
+        "canonical_name": "AsLOV2",
+        "item_type": "protein_domain",
+        "status": "seed",
+        "maturity_stage": "research",
+        "family": "LOV",
+        "summary": "Seed dossier for a light-responsive LOV-domain actuator used in engineered fusion constructs.\n",
+        "primary_input_modality": "light",
+        "primary_output_modality": "conformational_change",
+        "external_ids": {},
+        "synonyms": [
+          "Avena sativa LOV2"
+        ],
+        "mechanisms": [
+          "conformational_uncaging"
+        ],
+        "target_processes": [
+          "localization",
+          "signaling"
+        ],
+        "source_status": {
+          "citation_backfill_required": true,
+          "validation_backfill_required": true,
+          "replication_backfill_required": true
+        },
+        "citation_candidates": [
+          {
+            "citation_role": "database_reference",
+            "label": "OptoBase",
+            "status": "seed_reference",
+            "url": "https://optobase.org/"
+          },
+          {
+            "citation_role": "foundational",
+            "label": "TODO add founding primary paper",
+            "status": "needs_curation"
+          }
+        ],
+        "validation_observations_seed": [],
+        "workflow_recommendations": [
+          {
+            "workflow_slug": "fast-no-cloning-screen",
+            "rationale": "good first-pass fit for known designs and small candidate sets"
+          },
+          {
+            "workflow_slug": "standard-construct-loop",
+            "rationale": "needed when construct architecture and host context matter"
+          }
+        ]
+      },
+      "index_markdown": "---\nid: item_aslov2\ncanonical_name: AsLOV2\nitem_type: protein_domain\nstatus: seed\nprimary_input_modality: light\nprimary_output_modality: conformational_change\nfamilies:\n  - LOV\nsynonyms:\n  - Avena sativa LOV2\nlast_reviewed: 2026-03-08\n---\n\n# AsLOV2\n\n## Summary\n\nSeed dossier for a widely used light-responsive LOV-domain actuator. This page defines the expected dossier structure; citation and validation details still need source-backed curation.\n\n## Mechanism\n\nBlue-light-responsive conformational switching domain commonly used as a gating or uncaging element in engineered constructs.\n\n## Inputs\n\n- light\n\n## Outputs\n\n- conformational change\n- conditional exposure or masking in fused architectures\n\n## Components\n\n- single protein domain\n- often used as part of a larger fusion construct\n\n## Validation Contexts\n\nPending ingestion of source-backed observations. Do not infer rollup booleans from this seed page alone.\n\n## Replication Notes\n\nReplication and orphan-tool assessment are intentionally deferred until citation-graph ingestion is available.\n\n## Practical Limitations\n\nPending literature-backed capture of leak, dynamic-range, kinetics, payload, and deployment caveats.\n\n## Ranked Citations\n\n1. `TODO`: add foundational primary paper\n2. `TODO`: add best review\n3. `TODO`: add independent validation examples\n\n## Open Questions\n\n- Which construct architectures are most reusable across host contexts?\n- Which practicality penalties recur across independent implementations?\n",
+      "evidence_markdown": "# AsLOV2 Evidence\n\n## Current State\n\nThis dossier is initialized but not yet curator-complete.\n\n## Seed Evidence Boundaries\n\n- Family and high-level mechanism are seeded from the project design spec.\n- Ranked citations are placeholders until source ingestion is wired up.\n- No validation rollups should be derived from this file yet.\n\n## Immediate Curation Targets\n\n1. Add the founding primary paper.\n2. Add one high-quality review or curated database reference.\n3. Add at least one independent follow-up paper with explicit context.\n",
+      "replication_markdown": "# AsLOV2 Replication\n\n## Status\n\nReplication metrics are not computed yet for this seed dossier.\n\n## Planned Inputs\n\n- primary-paper count\n- independent-primary-paper count\n- institution diversity\n- context diversity\n- contradiction count\n- practicality penalty capture\n\n## Notes\n\nTreat any current impression of reuse as anecdotal until the citation graph and validation tables are populated.\n",
+      "workflow_fit_markdown": "# AsLOV2 Workflow Fit\n\n## Likely Fit\n\n- `fast-no-cloning-screen`: useful when evaluating a known fusion design or a small candidate set\n- `standard-construct-loop`: useful when tuning architecture, linker choice, localization, or host-specific performance\n\n## Why This Is Separate\n\nWorkflow fit should be scored from step-level assumptions and downstream evidence, not from vibes about whether a tool feels \"easy.\"\n\n## Missing Evidence\n\n- construct-specific failure rates\n- typical sequencing strategy by construct complexity\n- assay-dependent time-to-first-signal\n"
+    },
+    {
+      "slug": "cry2-cib1",
+      "structured": {
+        "id": "item_cry2_cib1",
+        "slug": "cry2-cib1",
+        "canonical_name": "CRY2/CIB1",
+        "item_type": "multi_component_switch",
+        "status": "seed",
+        "maturity_stage": "research",
+        "family": "cryptochrome",
+        "summary": "Seed dossier for a light-inducible multi-component interaction switch used in recruitment and signaling-control constructs.\n",
+        "primary_input_modality": "light",
+        "primary_output_modality": "signaling",
+        "external_ids": {},
+        "synonyms": [
+          "CRY2-CIB1"
+        ],
+        "components": [
+          "CRY2",
+          "CIB1"
+        ],
+        "mechanisms": [
+          "heterodimerization"
+        ],
+        "target_processes": [
+          "signaling",
+          "localization"
+        ],
+        "source_status": {
+          "citation_backfill_required": true,
+          "validation_backfill_required": true,
+          "replication_backfill_required": true
+        },
+        "citation_candidates": [
+          {
+            "citation_role": "database_reference",
+            "label": "OptoBase",
+            "status": "seed_reference",
+            "url": "https://optobase.org/"
+          },
+          {
+            "citation_role": "foundational",
+            "label": "TODO add founding primary paper",
+            "status": "needs_curation"
+          }
+        ],
+        "validation_observations_seed": [],
+        "workflow_recommendations": [
+          {
+            "workflow_slug": "fast-no-cloning-screen",
+            "rationale": "useful for quick switch-feasibility checks"
+          },
+          {
+            "workflow_slug": "standard-construct-loop",
+            "rationale": "needed when fusion geometry and host context drive performance"
+          }
+        ]
+      },
+      "index_markdown": "---\nid: item_cry2_cib1\ncanonical_name: CRY2/CIB1\nitem_type: multi_component_switch\nstatus: seed\nprimary_input_modality: light\nprimary_output_modality: signaling\nfamilies:\n  - cryptochrome\nsynonyms:\n  - CRY2-CIB1\nlast_reviewed: 2026-03-08\n---\n\n# CRY2/CIB1\n\n## Summary\n\nSeed dossier for a light-inducible multi-component switch. This entry exists to demonstrate the evidence-first dossier format before literature-backed curation is complete.\n\n## Mechanism\n\nLight-triggered interaction switch used for inducible recruitment or complex formation.\n\n## Inputs\n\n- light\n\n## Outputs\n\n- inducible interaction\n- conditional recruitment\n\n## Components\n\n- CRY2\n- CIB1\n\n## Validation Contexts\n\nSource-backed observations still need to be ingested before any rollups are exposed.\n\n## Replication Notes\n\nReplication scoring is pending citation-graph and validation ingestion.\n\n## Practical Limitations\n\nPending evidence-backed capture of leak, reversibility, kinetics, and context-specific caveats.\n\n## Ranked Citations\n\n1. `TODO`: add foundational paper\n2. `TODO`: add independent validation\n3. `TODO`: add benchmark or protocol citation\n\n## Open Questions\n\n- Which construct topologies are most robust across contexts?\n- What practicality penalties show up repeatedly in downstream use?\n",
+      "evidence_markdown": "# CRY2/CIB1 Evidence\n\n## Current State\n\nThis is a seeded dossier structure, not a curator-finished evidence pack.\n\n## Seed Evidence Boundaries\n\n- High-level mechanism is seeded from project planning context.\n- Concrete validation claims, metrics, and ranked citations remain to be ingested.\n\n## Immediate Curation Targets\n\n1. Add the founding paper.\n2. Add at least one protocol or benchmark citation.\n3. Add independent context-specific follow-up evidence.\n",
+      "replication_markdown": "# CRY2/CIB1 Replication\n\n## Status\n\nReplication metrics are intentionally unset until evidence ingestion is live.\n\n## Planned Inputs\n\n- downstream primary-paper reuse\n- same-lab fraction\n- institution diversity\n- contradiction count\n- practicality penalties\n\n## Notes\n\nKeep replication and practicality as separate outputs even if both later score strongly.\n",
+      "workflow_fit_markdown": "# CRY2/CIB1 Workflow Fit\n\n## Likely Fit\n\n- `fast-no-cloning-screen`: useful for quick interaction-switch feasibility checks\n- `standard-construct-loop`: useful when localization, stoichiometry, or effector fusion details need iteration\n\n## Missing Evidence\n\n- context-specific failure modes\n- construct-size penalties\n- sequencing and assay choices that dominate turnaround time\n"
+    }
+  ],
+  "workflows": [
+    {
+      "slug": "fast-no-cloning-screen",
+      "structured": {
+        "id": "workflow_fast_no_cloning_screen",
+        "slug": "fast-no-cloning-screen",
+        "name": "Fast no-cloning screen",
+        "workflow_family": "fast_screen",
+        "objective": "Fast first-pass feasibility test for a known sequence or small design set",
+        "throughput_class": "low",
+        "recommended_for": [
+          "quick feasibility screens",
+          "host-toxicity-risky candidates",
+          "early triage before larger build campaigns"
+        ],
+        "default_parallelization_assumption": "Candidate design can happen while ordering decisions are being finalized, but DNA acquisition remains the dominant serial dependency.\n",
+        "step_templates": [
+          {
+            "step_name": "design candidate",
+            "step_type": "design",
+            "duration_typical_hours": 4,
+            "queue_time_typical_hours": 0,
+            "hands_on_hours": 4,
+            "direct_cost_usd_typical": 0,
+            "parallelizable": true
+          },
+          {
+            "step_name": "order DNA fragment",
+            "step_type": "dna_acquisition",
+            "duration_typical_hours": 72,
+            "queue_time_typical_hours": 0,
+            "hands_on_hours": 0.5,
+            "direct_cost_usd_typical": 100,
+            "outsourced": true,
+            "parallelizable": false
+          },
+          {
+            "step_name": "fast expression or assay",
+            "step_type": "assay",
+            "duration_typical_hours": 3,
+            "queue_time_typical_hours": 0.5,
+            "hands_on_hours": 2,
+            "direct_cost_usd_typical": 50,
+            "parallelizable": true
+          },
+          {
+            "step_name": "analyze and decide",
+            "step_type": "decision",
+            "duration_typical_hours": 2,
+            "queue_time_typical_hours": 0,
+            "hands_on_hours": 2,
+            "direct_cost_usd_typical": 0,
+            "parallelizable": false
+          }
+        ],
+        "assumption_notes": [
+          "Timing values are phase-0 seed assumptions and should be replaced with sourced workflow assumptions.",
+          "DNA acquisition is the dominant clock time in this archetype."
+        ]
+      },
+      "index_markdown": "---\nid: workflow_fast_no_cloning_screen\nslug: fast-no-cloning-screen\nworkflow_family: fast_screen\nthroughput_class: low\nlast_reviewed: 2026-03-08\n---\n\n# Fast No-Cloning Screen\n\n## Objective\n\nGet a fast yes or no signal on a known sequence or small design set with minimal build overhead.\n\n## Recommended For\n\n- quick feasibility screens\n- contexts where host toxicity may confound slower cell-based loops\n- early triage before committing to a larger construct campaign\n\n## Canonical Step Pattern\n\n1. design candidate\n2. order DNA or fragment\n3. express or assay in a fast screen format\n4. analyze and decide\n\n## Timing Notes\n\nThe spec assumes same-day assay after DNA arrival is plausible for the screening step itself; total loop time is still dominated by DNA acquisition lead time.\n\n## Why This Matters\n\nThis workflow should stay explicit in the database so \"fast to first test\" can be computed from steps rather than guessed from item reputation.\n"
+    }
+  ]
+}

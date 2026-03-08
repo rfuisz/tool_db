@@ -1,0 +1,14 @@
+.env
+clients copy/
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+apps/web/node_modules/
+apps/web/.next/
+data/raw/
+data/review-queue/
+data/pipeline-artifacts/
+.DS_Store
+# Byte-compiled / optimized / DLL files
+__pycache__/

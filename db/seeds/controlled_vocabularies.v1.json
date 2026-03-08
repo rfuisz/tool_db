@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "v1",
+  "item_types": [
+    "protein_domain",
+    "multi_component_switch",
+    "rna_element",
+    "construct_pattern",
+    "engineering_method",
+    "assay_method",
+    "computation_method",
+    "delivery_harness"
+  ],
+  "item_statuses": [
+    "seed",
+    "normalized",
+    "curated",
+    "deprecated"
+  ],
+  "maturity_stages": [
+    "research",
+    "preclinical",
+    "clinical",
+    "deployed"
+  ],
+  "source_types": [
+    "review",
+    "primary_paper",
+    "trial_record",
+    "database_entry",
+    "protocol",
+    "benchmark",
+    "preprint"
+  ],
+  "claim_polarities": [
+    "supports",
+    "contradicts",
+    "mixed",
+    "neutral"
+  ],
+  "citation_roles": [
+    "foundational",
+    "best_review",
+    "independent_validation",
+    "benchmark",
+    "protocol",
+    "therapeutic",
+    "negative_result",
+    "structural",
+    "database_reference"
+  ],
+  "biological_system_levels": [
+    "cell_free",
+    "bacteria",
+    "yeast",
+    "mammalian_cell_line",
+    "primary_cells",
+    "organoid",
+    "mouse",
+    "large_animal",
+    "human_clinical"
+  ],
+  "observation_types": [
+    "mechanistic_demo",
+    "application_demo",
+    "benchmark",
+    "therapeutic_use",
+    "manufacturing_use",
+    "failed_attempt"
+  ],
+  "success_outcomes": [
+    "success",
+    "mixed",
+    "failed"
+  ],
+  "workflow_families": [
+    "fast_screen",
+    "standard_construct",
+    "library_selection",
+    "in_vivo_pilot",
+    "custom"
+  ],
+  "workflow_step_types": [
+    "design",
+    "dna_acquisition",
+    "assembly",
+    "transformation",
+    "colony_screen",
+    "sequence_verification",
+    "transfection",
+    "expression",
+    "selection_round",
+    "assay",
+    "analysis",
+    "decision",
+    "packaging",
+    "delivery"
+  ],
+  "common_metric_names": [
+    "fold_induction",
+    "repression_efficiency",
+    "dark_state_leak",
+    "on_kinetics_minutes",
+    "off_kinetics_minutes",
+    "affinity_kd",
+    "viability_percent",
+    "toxicity_signal",
+    "editing_efficiency_percent",
+    "localization_precision",
+    "signal_to_noise",
+    "tissue_penetration_compatibility"
+  ],
+  "mechanism_families": [
+    "heterodimerization",
+    "oligomerization",
+    "conformational_uncaging",
+    "membrane_recruitment",
+    "photocleavage",
+    "dna_binding",
+    "rna_binding",
+    "degradation",
+    "translation_control"
+  ],
+  "technique_families": [
+    "computational_design",
+    "selection_enrichment",
+    "directed_evolution",
+    "sequence_verification",
+    "functional_assay",
+    "structural_characterization",
+    "delivery_optimization"
+  ],
+  "target_processes": [
+    "transcription",
+    "translation",
+    "localization",
+    "degradation",
+    "signaling",
+    "editing",
+    "selection",
+    "manufacturing",
+    "diagnostic"
+  ],
+  "problem_link_breakdown_keys": [
+    "mechanistic_match_score",
+    "context_match_score",
+    "throughput_match_score",
+    "time_to_first_test_score",
+    "cost_to_first_test_score",
+    "replication_confidence_modifier",
+    "practicality_modifier",
+    "translatability_modifier",
+    "overall_gap_applicability_score"
+  ]
+}

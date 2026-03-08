@@ -16,11 +16,13 @@ from tool_db_backend.clients.openalex import OpenAlexClient
 from tool_db_backend.clients.optobase import OptoBaseClient
 from tool_db_backend.clients.semantic_scholar import SemanticScholarClient
 from tool_db_backend.db_migrations import MigrationRunner
+from tool_db_backend.llm_extractor import LLMExtractionError, LLMExtractionRunner
 from tool_db_backend.load_plan import LoadPlanBuilder
 from tool_db_backend.normalization import PacketNormalizer
 from tool_db_backend.pipeline import PacketIngestPipeline
 from tool_db_backend.postgres_loader import PostgresLoadPlanExecutor
 from tool_db_backend.raw_store import RawPayloadStore
+from tool_db_backend.real_extraction_artifacts import RealExtractionArtifactBuilder
 from tool_db_backend.seed_export import SeedExporter
 from tool_db_backend.schema_validation import PACKET_TO_SCHEMA, PacketValidationError, validate_packet
 from tool_db_backend.source_smoke_test import RealDataSmokeTester
@@ -212,6 +214,54 @@ def smoke_test_real_data(artifact_dir: Optional[str] = None) -> int:
     return 0
 
 
+def build_real_extraction_artifacts(
+    manifest_path: str,
+    output_dir: str,
+    gap_limit: int = 80,
+    openalex_limit: int = 40,
+) -> int:
+    builder = RealExtractionArtifactBuilder(get_settings())
+    result = builder.build_from_smoke_test_manifest(
+        manifest_path=Path(manifest_path),
+        output_dir=Path(output_dir),
+        gap_limit=gap_limit,
+        openalex_limit=openalex_limit,
+    )
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+def run_extraction_job(job_path: str, output_path: Optional[str] = None) -> int:
+    runner = LLMExtractionRunner(get_settings())
+    try:
+        result = runner.run_job_file(Path(job_path), Path(output_path) if output_path else None)
+    except LLMExtractionError as exc:
+        print(json.dumps({"error": str(exc)}, indent=2))
+        return 1
+    finally:
+        runner.close()
+
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+def run_extraction_batch(job_dir: str, limit: int = 3) -> int:
+    runner = LLMExtractionRunner(get_settings())
+    results = []
+    try:
+        job_paths = sorted(Path(job_dir).glob("*.json"))[:limit]
+        for job_path in job_paths:
+            results.append(runner.run_job_file(job_path))
+    except LLMExtractionError as exc:
+        print(json.dumps({"error": str(exc), "completed_jobs": results}, indent=2))
+        return 1
+    finally:
+        runner.close()
+
+    print(json.dumps({"completed_jobs": results}, indent=2))
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     args = argv or sys.argv[1:]
     if len(args) == 2 and args[0] in PACKET_TO_SCHEMA:
@@ -305,6 +355,29 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     smoke_test_parser.add_argument("--artifact-dir")
 
+    extraction_artifacts_parser = subparsers.add_parser(
+        "build-real-extraction-artifacts",
+        help="Turn fetched real data into typed extraction packets and LLM job artifacts.",
+    )
+    extraction_artifacts_parser.add_argument("manifest_path")
+    extraction_artifacts_parser.add_argument("output_dir")
+    extraction_artifacts_parser.add_argument("--gap-limit", type=int, default=80)
+    extraction_artifacts_parser.add_argument("--openalex-limit", type=int, default=40)
+
+    extraction_job_parser = subparsers.add_parser(
+        "run-extraction-job",
+        help="Run one LLM extraction job and validate the output packet.",
+    )
+    extraction_job_parser.add_argument("job_path")
+    extraction_job_parser.add_argument("--output-path")
+
+    extraction_batch_parser = subparsers.add_parser(
+        "run-extraction-batch",
+        help="Run a small batch of LLM extraction jobs.",
+    )
+    extraction_batch_parser.add_argument("job_dir")
+    extraction_batch_parser.add_argument("--limit", type=int, default=3)
+
     parsed = parser.parse_args(args)
 
     if parsed.command == "validate-packet":
@@ -339,6 +412,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
     if parsed.command == "smoke-test-real-data":
         return smoke_test_real_data(parsed.artifact_dir)
+    if parsed.command == "build-real-extraction-artifacts":
+        return build_real_extraction_artifacts(
+            parsed.manifest_path,
+            parsed.output_dir,
+            parsed.gap_limit,
+            parsed.openalex_limit,
+        )
+    if parsed.command == "run-extraction-job":
+        return run_extraction_job(parsed.job_path, parsed.output_path)
+    if parsed.command == "run-extraction-batch":
+        return run_extraction_batch(parsed.job_dir, parsed.limit)
 
     parser.print_help()
     return 2

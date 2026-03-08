@@ -9,6 +9,7 @@ apps/web/.next/
 data/raw/
 data/review-queue/
 data/pipeline-artifacts/
+data/extractions/
 .DS_Store
 # Byte-compiled / optimized / DLL files
 __pycache__/

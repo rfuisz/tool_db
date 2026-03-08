@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ITEMS, WORKFLOWS, getAllFamilies, getAllMechanisms, getAllTechniques } from "@/lib/mock-data";
+import { ITEMS, WORKFLOWS, getAllFamilies, getAllMechanisms, getAllTechniques } from "@/lib/data";
 import { ITEM_TYPE_LABELS, MECHANISM_LABELS, TECHNIQUE_LABELS } from "@/lib/vocabularies";
 import type { ItemType } from "@/lib/types";
 
@@ -12,11 +12,12 @@ export default function Home() {
   const withReplication = ITEMS.filter(
     (i) => i.replication_summary && !i.replication_summary.orphan_tool_flag
   );
-  const avgEvidence =
-    withReplication.reduce(
-      (s, i) => s + (i.replication_summary?.evidence_strength_score ?? 0),
-      0
-    ) / (withReplication.length || 1);
+  const avgEvidence = withReplication.length
+    ? withReplication.reduce(
+        (s, i) => s + (i.replication_summary?.evidence_strength_score ?? 0),
+        0
+      ) / withReplication.length
+    : null;
 
   const families = getAllFamilies();
   const mechanisms = getAllMechanisms();
@@ -38,7 +39,12 @@ export default function Home() {
           <span><strong className="text-ink">{ITEMS.length}</strong> items</span>
           <span><strong className="text-ink">{families.length}</strong> families</span>
           <span><strong className="text-ink">{WORKFLOWS.length}</strong> workflows</span>
-          <span><strong className="text-ink">{Math.round(avgEvidence * 100)}</strong> avg evidence score</span>
+          {avgEvidence !== null && (
+            <span><strong className="text-ink">{Math.round(avgEvidence * 100)}</strong> avg evidence score</span>
+          )}
+          {ITEMS.some((i) => i.status === "seed") && (
+            <span className="text-caution">seed data &mdash; curation in progress</span>
+          )}
         </div>
       </header>
 

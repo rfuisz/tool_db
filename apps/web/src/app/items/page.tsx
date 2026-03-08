@@ -2,7 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
-import { ITEMS } from "@/lib/mock-data";
+import { ITEMS } from "@/lib/data";
 import { ITEM_TYPE_LABELS, MECHANISM_LABELS, TECHNIQUE_LABELS } from "@/lib/vocabularies";
 import type { ItemType } from "@/lib/types";
 import { ItemCard } from "@/components/item-card";

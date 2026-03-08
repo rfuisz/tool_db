@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import List
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     app_name: str = "BioControl Toolkit API"
     app_env: str = "development"
     database_url: str = ""
+    llm_api_key: str = Field(default="", validation_alias=AliasChoices("OPENAI_API_KEY", "LLM_API_KEY"))
+    llm_base_url: str = Field(
+        default="https://api.openai.com/v1",
+        validation_alias=AliasChoices("OPENAI_BASE_URL", "LLM_BASE_URL"),
+    )
+    llm_model: str = Field(default="gpt-5.4", validation_alias=AliasChoices("OPENAI_MODEL", "LLM_MODEL"))
     openalex_base_url: str = "https://api.openalex.org"
     openalex_mailto: str = ""
     semantic_scholar_base_url: str = "https://api.semanticscholar.org/graph/v1"
@@ -54,6 +60,10 @@ class Settings(BaseSettings):
     @property
     def pipeline_artifact_root(self) -> Path:
         return self.repo_root / "data" / "pipeline-artifacts"
+
+    @property
+    def extraction_root(self) -> Path:
+        return self.repo_root / "data" / "extractions"
 
 
 @lru_cache(maxsize=1)

@@ -102,3 +102,26 @@ Pull a modest real-data smoke-test batch:
 ```
 
 This fetches a small batch from literature/problem sources and writes a manifest plus raw payload snapshots so you can sanity-check entry counts and payload shape before heavier ingestion work.
+
+Build typed extraction artifacts from fetched real data:
+
+```bash
+.venv/bin/python -m apps.worker.main build-real-extraction-artifacts data/pipeline-artifacts/real-data-smoke-test/manifest.json data/pipeline-artifacts/real-extraction-seed
+```
+
+This currently creates:
+- deterministic `database_entry_extract_v1` packets for a slice of Gap Map gaps
+- `primary_paper_extract_v1` metadata scaffolds for a slice of OpenAlex works
+- LLM extraction job files that a future GPT-5.4 caller can execute
+
+Run one LLM extraction job:
+
+```bash
+.venv/bin/python -m apps.worker.main run-extraction-job data/pipeline-artifacts/real-extraction-seed/openalex/jobs/optogenetics.llm_extraction_job_v1.json
+```
+
+Run a small batch of LLM extraction jobs:
+
+```bash
+.venv/bin/python -m apps.worker.main run-extraction-batch data/pipeline-artifacts/real-extraction-seed/openalex/jobs --limit 3
+```

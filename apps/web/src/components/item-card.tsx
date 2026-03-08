@@ -41,11 +41,13 @@ export function ItemCard({ item }: { item: ToolkitItem }) {
 
       {/* Scores + validation */}
       <div className="flex flex-wrap items-end justify-between gap-4">
-        {item.validation_rollup && (
+        {item.validation_rollup ? (
           <ValidationDots rollup={item.validation_rollup} />
-        )}
+        ) : item.status === "seed" ? (
+          <span className="font-ui text-xs italic text-caution">seed &mdash; awaiting curation</span>
+        ) : null}
 
-        {item.replication_summary && (
+        {item.replication_summary ? (
           <div className="flex gap-4 font-data text-xs tabular-nums text-ink-muted">
             {item.replication_summary.evidence_strength_score !== null && (
               <span>Ev <strong className="text-ink">{Math.round(item.replication_summary.evidence_strength_score * 100)}</strong></span>
@@ -57,7 +59,7 @@ export function ItemCard({ item }: { item: ToolkitItem }) {
               <span>Pr <strong className="text-ink">{Math.round(item.replication_summary.practicality_score * 100)}</strong></span>
             )}
           </div>
-        )}
+        ) : null}
       </div>
     </Link>
   );

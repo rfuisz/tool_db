@@ -1,4 +1,4 @@
-import { WORKFLOWS } from "@/lib/mock-data";
+import { WORKFLOWS } from "@/lib/data";
 import { WORKFLOW_FAMILY_LABELS } from "@/lib/vocabularies";
 import { WorkflowTimeline } from "@/components/workflow-timeline";
 

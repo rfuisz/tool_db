@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ITEMS } from "@/lib/mock-data";
+import { ITEMS } from "@/lib/data";
 import {
   ITEM_TYPE_LABELS,
   MATURITY_LABELS,
@@ -204,76 +204,104 @@ export default async function ItemDetailPage({
 
           {/* Citations */}
           <Section title="Ranked Citations">
-            <CitationList citations={item.citations} />
+            {item.citations.length > 0 ? (
+              <CitationList citations={item.citations} />
+            ) : (
+              <p className="font-ui text-sm italic text-ink-muted">
+                No citations yet. This item needs source-backed curation.
+              </p>
+            )}
           </Section>
+
+          {/* Curation status */}
+          {item.status === "seed" && (
+            <Section title="Curation Status">
+              <div className="rounded border border-caution-light bg-caution-light/30 px-5 py-4 font-ui text-sm text-caution">
+                <p className="mb-2 font-semibold">Seed dossier &mdash; not yet curator-complete</p>
+                <ul className="list-inside list-disc space-y-1 text-ink-secondary">
+                  <li>Validation rollups and replication scores are pending ingestion</li>
+                  <li>Citation list may be incomplete or contain placeholders</li>
+                  <li>Observation table will populate once evidence is curated</li>
+                </ul>
+              </div>
+            </Section>
+          )}
         </div>
 
         {/* Sidebar */}
         <aside className="space-y-8">
-          {/* Scores */}
-          {rep && (
+          {rep ? (
+            <>
+              {/* Scores */}
+              <div>
+                <p className="small-caps mb-4">Scores</p>
+                <ScoreBreakdown
+                  scores={[
+                    { label: "Evidence", value: rep.evidence_strength_score },
+                    { label: "Replication", value: rep.replication_score },
+                    { label: "Practicality", value: rep.practicality_score },
+                    { label: "Translatability", value: rep.translatability_score },
+                  ]}
+                />
+                <p className="mt-3 font-data text-[10px] text-ink-faint">
+                  v{rep.score_version}
+                </p>
+              </div>
+
+              <hr />
+
+              {/* Replication Stats */}
+              <div>
+                <p className="small-caps mb-4">Replication</p>
+                <dl className="space-y-2 font-ui text-sm">
+                  {([
+                    ["Papers", rep.primary_paper_count],
+                    ["Independent", rep.independent_primary_paper_count],
+                    ["Author clusters", rep.distinct_last_author_clusters],
+                    ["Institutions", rep.distinct_institutions],
+                    ["Bio contexts", rep.distinct_biological_contexts],
+                    ["Years", rep.years_since_first_report ?? "\u2014"],
+                    ["Applications", rep.downstream_application_count],
+                  ] as [string, string | number][]).map(([label, value]) => (
+                    <div key={label} className="flex justify-between">
+                      <dt className="text-ink-muted">{label}</dt>
+                      <dd className="font-data tabular-nums text-ink">{String(value)}</dd>
+                    </div>
+                  ))}
+                  {rep.orphan_tool_flag && (
+                    <p className="mt-2 text-sm text-danger">
+                      Orphan tool &mdash; limited independent reuse
+                    </p>
+                  )}
+                </dl>
+              </div>
+
+              {/* Practicality Penalties */}
+              {rep.practicality_penalties.length > 0 && (
+                <>
+                  <hr />
+                  <div>
+                    <p className="small-caps mb-3 text-caution">Penalties</p>
+                    <ul className="space-y-2">
+                      {rep.practicality_penalties.map((p, i) => (
+                        <li key={i} className="flex gap-2 text-sm text-caution">
+                          <span className="shrink-0">&bull;</span>
+                          <span className="font-body">{p}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </>
+              )}
+            </>
+          ) : (
             <div>
               <p className="small-caps mb-4">Scores</p>
-              <ScoreBreakdown
-                scores={[
-                  { label: "Evidence", value: rep.evidence_strength_score },
-                  { label: "Replication", value: rep.replication_score },
-                  { label: "Practicality", value: rep.practicality_score },
-                  { label: "Translatability", value: rep.translatability_score },
-                ]}
-              />
-              <p className="mt-3 font-data text-[10px] text-ink-faint">
-                v{rep.score_version}
+              <p className="font-ui text-sm italic text-ink-muted">
+                Scores not yet computed. Replication and evidence metrics
+                will appear once citation-graph ingestion is complete.
               </p>
             </div>
-          )}
-
-          {rep && <hr />}
-
-          {/* Replication Stats */}
-          {rep && (
-            <div>
-              <p className="small-caps mb-4">Replication</p>
-              <dl className="space-y-2 font-ui text-sm">
-                {([
-                  ["Papers", rep.primary_paper_count],
-                  ["Independent", rep.independent_primary_paper_count],
-                  ["Author clusters", rep.distinct_last_author_clusters],
-                  ["Institutions", rep.distinct_institutions],
-                  ["Bio contexts", rep.distinct_biological_contexts],
-                  ["Years", rep.years_since_first_report ?? "\u2014"],
-                  ["Applications", rep.downstream_application_count],
-                ] as [string, string | number][]).map(([label, value]) => (
-                  <div key={label} className="flex justify-between">
-                    <dt className="text-ink-muted">{label}</dt>
-                    <dd className="font-data tabular-nums text-ink">{String(value)}</dd>
-                  </div>
-                ))}
-                {rep.orphan_tool_flag && (
-                  <p className="mt-2 text-sm text-danger">
-                    Orphan tool — limited independent reuse
-                  </p>
-                )}
-              </dl>
-            </div>
-          )}
-
-          {/* Practicality Penalties */}
-          {rep && rep.practicality_penalties.length > 0 && (
-            <>
-              <hr />
-              <div>
-                <p className="small-caps mb-3 text-caution">Penalties</p>
-                <ul className="space-y-2">
-                  {rep.practicality_penalties.map((p, i) => (
-                    <li key={i} className="flex gap-2 text-sm text-caution">
-                      <span className="shrink-0">&bull;</span>
-                      <span className="font-body">{p}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </>
           )}
         </aside>
       </div>

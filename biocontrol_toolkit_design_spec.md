@@ -878,6 +878,21 @@ Suggested rules:
 - `30-citation-and-replication.mdc`
 - `40-gap-map-linking.mdc`
 
+### `.cursorignore`
+
+Use `.cursorignore` as a soft barrier for evaluation assets that should not be
+indexed by default during agent-led development.
+
+Recommended default:
+
+- hide `tests/` from Cursor-style agent search so agents do not passively train
+  to the suite
+- provide an explicit reveal step such as
+  `python scripts/agent_test_visibility.py show`
+- provide a matching restore step such as
+  `python scripts/agent_test_visibility.py hide`
+- keep runtime behavior unchanged for humans and CI
+
 ### `.cursor/agents/`
 
 Specialized subagents such as:

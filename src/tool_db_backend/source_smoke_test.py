@@ -109,14 +109,20 @@ class RealDataSmokeTester:
 
     def _fetch_openalex(self) -> Dict[str, Any]:
         queries = [
-            "optogenetic",
+            "\"optogenetic tools\"",
             "\"optogenetic switch\"",
+            "AsLOV2 OR LOV2",
+            "CRY2 CIB1",
+            "PhyB PIF",
+            "\"optogenetic protein clustering\"",
+            "\"light-controlled gene expression\"",
+            "\"photoactivatable CRISPR\"",
         ]
         seen_ids = set()
         counts: Dict[str, int] = {}
         raw_paths: Dict[str, str] = {}
         for query in queries:
-            payload = self.openalex_client.search_works(query=query, per_page=50, page=1)
+            payload = self.openalex_client.search_works(query=query, per_page=25, page=1)
             results = payload.get("results", [])
             counts[query] = len(results)
             for result in results:

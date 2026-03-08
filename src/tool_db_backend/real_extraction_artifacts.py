@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from tool_db_backend.clients.europe_pmc import EuropePMCClient
 from tool_db_backend.config import Settings
 from tool_db_backend.schema_validation import validate_packet
 
@@ -10,6 +11,10 @@ from tool_db_backend.schema_validation import validate_packet
 def _slugify(value: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
     return slug or "entry"
+
+
+def _compact_dict(values: Dict[str, Any]) -> Dict[str, Any]:
+    return {key: value for key, value in values.items() if value is not None}
 
 
 def _reconstruct_openalex_abstract(inverted_index: Optional[Dict[str, List[int]]]) -> str:
@@ -24,8 +29,12 @@ def _reconstruct_openalex_abstract(inverted_index: Optional[Dict[str, List[int]]
 
 
 class RealExtractionArtifactBuilder:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, europe_pmc_client: Optional[EuropePMCClient] = None) -> None:
         self.settings = settings
+        self.europe_pmc_client = europe_pmc_client or EuropePMCClient(settings)
+
+    def close(self) -> None:
+        self.europe_pmc_client.close()
 
     def build_from_smoke_test_manifest(
         self,
@@ -69,6 +78,7 @@ class RealExtractionArtifactBuilder:
         raw_wrapper = json.loads(raw_path.read_text())
         entries = raw_wrapper["payload"][:limit]
         output_dir.mkdir(parents=True, exist_ok=True)
+        self._clear_json_outputs(output_dir)
         written_paths = []
         for entry in entries:
             local_id = f"gap_{entry['id']}"
@@ -132,6 +142,8 @@ class RealExtractionArtifactBuilder:
         jobs_dir = output_dir / "jobs"
         packets_dir.mkdir(parents=True, exist_ok=True)
         jobs_dir.mkdir(parents=True, exist_ok=True)
+        self._clear_json_outputs(packets_dir)
+        self._clear_json_outputs(jobs_dir)
 
         seen_ids = set()
         packet_paths: List[Path] = []
@@ -148,58 +160,103 @@ class RealExtractionArtifactBuilder:
                     break
 
                 openalex_id = work_id
+                doi = self._normalize_doi(work.get("doi"))
+                pmid = self._extract_pmid(work.get("ids", {}))
                 abstract_text = _reconstruct_openalex_abstract(work.get("abstract_inverted_index"))
+                enrichment = self._enrich_openalex_work(doi=doi, pmid=pmid)
+                if len(abstract_text.strip()) < 80 and enrichment.get("abstract_text"):
+                    abstract_text = enrichment["abstract_text"]
                 slug = _slugify(work.get("display_name") or work.get("title") or openalex_id)
-                packet = {
-                    "packet_type": "primary_paper_extract_v1",
-                    "schema_version": "v1",
-                    "source_document": {
-                        "source_type": "primary_paper",
-                        "title": work.get("display_name") or work.get("title") or openalex_id,
-                        "doi": work.get("doi"),
-                        "openalex_id": openalex_id,
-                        "pmid": self._extract_pmid(work.get("ids", {})),
-                        "publication_year": work.get("publication_year"),
-                        "journal_or_source": self._extract_source_name(work),
-                    },
-                    "entity_candidates": [],
-                    "claims": [],
-                    "validation_observations": [],
-                    "replication_signals": {},
-                    "unresolved_ambiguities": [
-                        {
-                            "issue": "Metadata scaffold only; title and abstract still need claim extraction.",
-                            "detail": "Prepared from OpenAlex search results for later LLM extraction.",
-                            "severity": "medium",
-                        }
-                    ],
-                }
-                validate_packet("primary_paper_extract_v1", packet, self.settings)
-                packet_path = packets_dir / f"{slug}.primary_paper_extract_v1.json"
+                work_type = (work.get("type") or "").strip().lower()
+                is_review = work_type == "review"
+                source_type = "review" if is_review else "primary_paper"
+                source_document = _compact_dict({
+                    "source_type": source_type,
+                    "title": work.get("display_name") or work.get("title") or openalex_id,
+                    "doi": doi,
+                    "openalex_id": openalex_id,
+                    "pmid": pmid,
+                    "publication_year": work.get("publication_year"),
+                    "journal_or_source": self._extract_source_name(work),
+                })
+                if is_review:
+                    packet = {
+                        "packet_type": "review_extract_v1",
+                        "schema_version": "v1",
+                        "source_document": source_document,
+                        "review_scope": "Metadata scaffold from OpenAlex review search result.",
+                        "entity_candidates": [],
+                        "claims": [],
+                        "recommended_seed_item_local_ids": [],
+                        "unresolved_ambiguities": [
+                            {
+                                "issue": "Metadata scaffold only; title and abstract still need review-level extraction.",
+                                "detail": "Prepared from OpenAlex search results for later LLM extraction.",
+                                "severity": "medium",
+                            }
+                        ],
+                    }
+                    packet_kind = "review_extract_v1"
+                    prompt_template = "prompts/extraction/review_extract_v1.md"
+                    schema_path = "schemas/extraction/review_extract.v1.schema.json"
+                else:
+                    packet = {
+                        "packet_type": "primary_paper_extract_v1",
+                        "schema_version": "v1",
+                        "source_document": source_document,
+                        "entity_candidates": [],
+                        "claims": [],
+                        "validation_observations": [],
+                        "replication_signals": {},
+                        "unresolved_ambiguities": [
+                            {
+                                "issue": "Metadata scaffold only; title and abstract still need claim extraction.",
+                                "detail": "Prepared from OpenAlex search results for later LLM extraction.",
+                                "severity": "medium",
+                            }
+                        ],
+                    }
+                    packet_kind = "primary_paper_extract_v1"
+                    prompt_template = "prompts/extraction/primary_paper_extract_v1.md"
+                    schema_path = "schemas/extraction/primary_paper_extract.v1.schema.json"
+
+                validate_packet(packet_kind, packet, self.settings)
+                packet_path = self._unique_output_path(
+                    packets_dir,
+                    slug=slug,
+                    suffix=f".{packet_kind}.json",
+                    external_id=openalex_id,
+                )
                 packet_path.write_text(json.dumps(packet, indent=2) + "\n")
                 packet_paths.append(packet_path)
 
                 job = {
                     "job_type": "llm_extraction_job_v1",
-                    "target_packet_type": "primary_paper_extract_v1",
-                    "prompt_template": "prompts/extraction/primary_paper_extract_v1.md",
-                    "schema_path": "schemas/extraction/primary_paper_extract.v1.schema.json",
-                    "source_document": packet["source_document"],
+                    "target_packet_type": packet_kind,
+                    "prompt_template": prompt_template,
+                    "schema_path": schema_path,
+                    "source_document": source_document,
                     "input_context": {
-                        "title": packet["source_document"]["title"],
+                        "title": source_document["title"],
                         "abstract_text": abstract_text,
                         "openalex_metadata": {
                             "type": work.get("type"),
                             "cited_by_count": work.get("cited_by_count"),
                             "concepts": work.get("concepts", []),
                         },
+                        "enrichment_metadata": enrichment,
                     },
                     "notes": [
-                        "LLM extraction should populate claims, validation observations, and replication signals.",
+                        "LLM extraction should populate packet content conservatively from available evidence.",
                         "Do not invent canonical item IDs or merges.",
                     ],
                 }
-                job_path = jobs_dir / f"{slug}.llm_extraction_job_v1.json"
+                job_path = self._unique_output_path(
+                    jobs_dir,
+                    slug=slug,
+                    suffix=".llm_extraction_job_v1.json",
+                    external_id=openalex_id,
+                )
                 job_path.write_text(json.dumps(job, indent=2) + "\n")
                 job_paths.append(job_path)
 
@@ -207,6 +264,16 @@ class RealExtractionArtifactBuilder:
                 break
 
         return {"packets": packet_paths, "jobs": job_paths}
+
+    @staticmethod
+    def _normalize_doi(doi: Optional[str]) -> Optional[str]:
+        if not doi:
+            return None
+        normalized = doi.strip()
+        for prefix in ("https://doi.org/", "http://doi.org/", "https://dx.doi.org/", "http://dx.doi.org/"):
+            if normalized.startswith(prefix):
+                return normalized[len(prefix) :]
+        return normalized
 
     @staticmethod
     def _extract_pmid(ids: Dict[str, Any]) -> Optional[str]:
@@ -220,3 +287,33 @@ class RealExtractionArtifactBuilder:
         primary_location = work.get("primary_location") or {}
         source = primary_location.get("source") or {}
         return source.get("display_name")
+
+    @staticmethod
+    def _clear_json_outputs(directory: Path) -> None:
+        for path in directory.glob("*.json"):
+            path.unlink()
+
+    @staticmethod
+    def _unique_output_path(directory: Path, slug: str, suffix: str, external_id: str) -> Path:
+        candidate = directory / f"{slug}{suffix}"
+        if not candidate.exists():
+            return candidate
+        safe_external = _slugify(external_id.rsplit("/", 1)[-1])
+        return directory / f"{slug}-{safe_external}{suffix}"
+
+    def _enrich_openalex_work(self, doi: Optional[str], pmid: Optional[str]) -> Dict[str, Any]:
+        result = self.europe_pmc_client.fetch_by_doi_or_pmid(doi=doi, pmid=pmid)
+        if not result:
+            return {}
+        return _compact_dict(
+            {
+                "source": "europe_pmc",
+                "doi": result.get("doi"),
+                "pmid": result.get("pmid"),
+                "pmcid": result.get("pmcid"),
+                "abstract_text": result.get("abstractText"),
+                "journal": result.get("journalTitle"),
+                "pub_type": result.get("pubType"),
+                "is_open_access": result.get("isOpenAccess"),
+            }
+        )

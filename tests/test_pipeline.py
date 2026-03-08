@@ -59,3 +59,40 @@ def test_packet_pipeline_passes_apply_flag() -> None:
 
     assert result["execution"]["mode"] == "applied"
     assert executor.calls[0]["apply"] is True
+
+
+def test_packet_pipeline_skips_metadata_only_primary_paper(tmp_path: Path) -> None:
+    packet_path = tmp_path / "packet.json"
+    packet_path.write_text(
+        """
+{
+  "packet_type": "primary_paper_extract_v1",
+  "schema_version": "v1",
+  "source_document": {
+    "source_type": "primary_paper",
+    "title": "Metadata only paper"
+  },
+  "entity_candidates": [],
+  "claims": [],
+  "validation_observations": [],
+  "replication_signals": {},
+  "unresolved_ambiguities": []
+}
+""".strip()
+    )
+    executor = FakeExecutor()
+    settings = get_settings()
+    pipeline = PacketIngestPipeline(settings, executor=executor)
+    review_output_path = tmp_path / "review-queue.json"
+
+    result = pipeline.ingest_packet_file(
+        packet_kind="primary_paper_extract_v1",
+        packet_path=packet_path,
+        apply=False,
+        review_output_path=review_output_path,
+    )
+
+    assert result["execution"]["mode"] == "skipped"
+    assert result["execution"]["reason"] == "packet_failed_extraction_gate"
+    assert len(executor.calls) == 0
+    assert review_output_path.exists()

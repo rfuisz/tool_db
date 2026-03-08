@@ -74,7 +74,7 @@ class LoadPlanBuilder:
             elif status == "new_candidate":
                 actions.append(
                     {
-                        "action": "create_item_candidate",
+                        "action": "manual_candidate_review_required",
                         "local_id": local_id,
                         "proposed_slug": resolution["proposed_slug"],
                         "canonical_name": candidate["canonical_name"],
@@ -102,6 +102,7 @@ class LoadPlanBuilder:
         actions = []
         for claim in claims:
             subject_targets = []
+            unresolved_subject_candidates = []
             for subject_key in claim.get("subject_candidate_keys", []):
                 local_id = candidate_key_to_local_id.get(subject_key)
                 resolution = resolutions.get(local_id) if local_id else None
@@ -115,10 +116,11 @@ class LoadPlanBuilder:
                         }
                     )
                 elif resolution["resolution_status"] == "new_candidate":
-                    subject_targets.append(
+                    unresolved_subject_candidates.append(
                         {
                             "target_kind": "item_candidate",
                             "proposed_slug": resolution["proposed_slug"],
+                            "local_id": local_id,
                         }
                     )
             actions.append(
@@ -129,6 +131,7 @@ class LoadPlanBuilder:
                     "claim_text_normalized": claim["claim_text_normalized"],
                     "polarity": claim["polarity"],
                     "subject_targets": subject_targets,
+                    "unresolved_subject_candidates": unresolved_subject_candidates,
                     "context": claim.get("context"),
                     "metrics": claim.get("metrics", []),
                     "citation_role_suggestion": claim.get("citation_role_suggestion"),

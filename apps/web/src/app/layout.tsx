@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { EB_Garamond, Jost, Inter, JetBrains_Mono } from "next/font/google";
 import { Nav } from "@/components/nav";
+import { PaperModalProvider } from "@/components/paper-modal";
 import "./globals.css";
 
 const ebGaramond = EB_Garamond({
@@ -44,8 +45,10 @@ export default function RootLayout({
       className={`${ebGaramond.variable} ${jost.variable} ${inter.variable} ${jetbrains.variable}`}
     >
       <body>
-        <Nav />
-        <main className="mx-auto max-w-5xl px-6 pt-24 pb-24">{children}</main>
+        <PaperModalProvider>
+          <Nav />
+          <main className="mx-auto max-w-5xl px-6 pt-24 pb-24">{children}</main>
+        </PaperModalProvider>
       </body>
     </html>
   );

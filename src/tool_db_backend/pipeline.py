@@ -3,18 +3,22 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from tool_db_backend.config import Settings
+from tool_db_backend.extraction_gate import ExtractionGate
 from tool_db_backend.load_plan import LoadPlanBuilder
 from tool_db_backend.normalization import PacketNormalizer
 from tool_db_backend.postgres_loader import PostgresLoadPlanExecutor
+from tool_db_backend.review_queue import ReviewQueueWriter
 from tool_db_backend.schema_validation import validate_packet
 
 
 class PacketIngestPipeline:
     def __init__(self, settings: Settings, executor: Optional[PostgresLoadPlanExecutor] = None) -> None:
         self.settings = settings
+        self.extraction_gate = ExtractionGate()
         self.normalizer = PacketNormalizer(settings)
         self.load_plan_builder = LoadPlanBuilder(settings)
         self.executor = executor or PostgresLoadPlanExecutor(settings)
+        self.review_writer = ReviewQueueWriter(settings)
 
     def ingest_packet_file(
         self,
@@ -26,6 +30,42 @@ class PacketIngestPipeline:
     ) -> Dict[str, Any]:
         payload = json.loads(packet_path.read_text())
         validate_packet(packet_kind, payload, self.settings)
+        gate_result = self.extraction_gate.assess(packet_kind, payload)
+        if not gate_result["is_ready"]:
+            review_queue_path = self.review_writer.write_tasks(
+                source_document=payload.get("source_document", {}),
+                tasks=[
+                    {
+                        "task_type": "extraction_packet_review",
+                        "packet_kind": packet_kind,
+                        "reason": issue,
+                    }
+                    for issue in gate_result["issues"]
+                ],
+                output_path=review_output_path,
+            )
+            execution = {
+                "mode": "skipped",
+                "reason": "packet_failed_extraction_gate",
+                "issues": gate_result["issues"],
+                "review_queue_path": str(review_queue_path),
+            }
+            artifact_paths = {}
+            if artifact_dir is not None:
+                artifact_paths = self._write_artifacts(
+                    artifact_dir=artifact_dir,
+                    packet_path=packet_path,
+                    packet_kind=packet_kind,
+                    normalized={},
+                    load_plan={},
+                    execution=execution,
+                )
+            return {
+                "packet_kind": packet_kind,
+                "packet_path": str(packet_path),
+                "execution": execution,
+                "artifact_paths": artifact_paths,
+            }
 
         normalized = self.normalizer.normalize_packet(packet_kind, payload)
         load_plan = self.load_plan_builder.build_from_normalized_payload(normalized)

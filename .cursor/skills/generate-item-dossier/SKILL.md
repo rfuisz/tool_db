@@ -10,9 +10,11 @@ description: Generates or updates a toolkit item dossier from schema-backed evid
 When working on an item dossier:
 
 1. Read the canonical item metadata and any existing dossier files.
-2. Keep claims, contexts, and citations traceable to source-backed evidence.
-3. Separate replication notes from practicality notes.
-4. Prefer explicit evidence gaps over guessed summaries.
+2. Route source extraction questions through `literature-curator` first.
+3. Route replication and practicality questions through `replication-auditor` when scoring or ranking matters.
+4. Keep claims, contexts, and citations traceable to source-backed evidence.
+5. Separate replication notes from practicality notes.
+6. Prefer explicit evidence gaps over guessed summaries.
 
 ## Required Outputs
 
@@ -26,3 +28,4 @@ When working on an item dossier:
 - Do not invent canonical IDs.
 - Do not collapse contradictory evidence into a single positive summary.
 - Do not label a public score without showing its breakdown inputs.
+- If dossier work exposes a schema or merge question, hand off to `schema-critic` or `entity-resolution-auditor` before editing canonical structures.

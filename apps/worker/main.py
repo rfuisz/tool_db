@@ -221,12 +221,15 @@ def build_real_extraction_artifacts(
     openalex_limit: int = 40,
 ) -> int:
     builder = RealExtractionArtifactBuilder(get_settings())
-    result = builder.build_from_smoke_test_manifest(
-        manifest_path=Path(manifest_path),
-        output_dir=Path(output_dir),
-        gap_limit=gap_limit,
-        openalex_limit=openalex_limit,
-    )
+    try:
+        result = builder.build_from_smoke_test_manifest(
+            manifest_path=Path(manifest_path),
+            output_dir=Path(output_dir),
+            gap_limit=gap_limit,
+            openalex_limit=openalex_limit,
+        )
+    finally:
+        builder.close()
     print(json.dumps(result, indent=2))
     return 0
 

@@ -1,5 +1,8 @@
+"use client";
+
 import type { ItemCitation } from "@/lib/types";
 import { CITATION_ROLE_LABELS } from "@/lib/vocabularies";
+import { PaperLink } from "./paper-link";
 
 export function CitationList({ citations }: { citations: ItemCitation[] }) {
   if (citations.length === 0) {
@@ -20,28 +23,33 @@ export function CitationList({ citations }: { citations: ItemCitation[] }) {
             {idx + 1}.
           </span>
           <div className="flex-1">
-            <p className="font-body text-[15px] font-medium leading-snug text-ink">
+            <PaperLink
+              document={cit.document}
+              citationRole={cit.citation_role}
+              whyThisMatters={cit.why_this_matters}
+              className="font-body text-[15px] font-medium leading-snug text-ink"
+            >
               {cit.document.title}
-            </p>
+            </PaperLink>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-ui text-xs">
               <span className="font-semibold text-accent">
                 {CITATION_ROLE_LABELS[cit.citation_role]}
               </span>
-              {cit.document.journal_or_source && (
+              {cit.document.journal_or_source && !cit.document.journal_or_source.startsWith("http") && (
                 <span className="italic text-ink-muted">{cit.document.journal_or_source}</span>
               )}
               {cit.document.publication_year && (
                 <span className="font-data text-ink-muted">{cit.document.publication_year}</span>
               )}
               {cit.document.doi && (
-                <a
-                  href={`https://doi.org/${cit.document.doi}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-brand hover:underline"
+                <PaperLink
+                  document={cit.document}
+                  citationRole={cit.citation_role}
+                  whyThisMatters={cit.why_this_matters}
+                  className="text-brand no-underline decoration-0 hover:underline"
                 >
                   DOI
-                </a>
+                </PaperLink>
               )}
               {cit.document.is_retracted && (
                 <span className="font-bold text-danger">RETRACTED</span>

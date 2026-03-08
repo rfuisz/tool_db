@@ -193,14 +193,14 @@ def test_execute_load_plan_applies_existing_item_claims() -> None:
     assert len(fake_db.item_citations) == 2
 
 
-def test_execute_load_plan_creates_new_candidate_item() -> None:
+def test_execute_load_plan_routes_new_candidate_to_review_queue() -> None:
     settings = get_settings()
     load_plan = {
         "source_document": {"source_type": "review", "title": "New source"},
         "actions": {
             "toolkit_items": [
                 {
-                    "action": "create_item_candidate",
+                    "action": "manual_candidate_review_required",
                     "local_id": "item_new_tool",
                     "proposed_slug": "new-tool",
                     "canonical_name": "New Tool",
@@ -216,7 +216,8 @@ def test_execute_load_plan_creates_new_candidate_item() -> None:
                     "claim_type": "mechanism_summary",
                     "claim_text_normalized": "New Tool is light-responsive.",
                     "polarity": "supports",
-                    "subject_targets": [{"target_kind": "item_candidate", "proposed_slug": "new-tool"}],
+                    "subject_targets": [],
+                    "unresolved_subject_candidates": [{"target_kind": "item_candidate", "proposed_slug": "new-tool"}],
                     "metrics": [],
                     "citation_role_suggestion": "best_review",
                 }
@@ -225,10 +226,10 @@ def test_execute_load_plan_creates_new_candidate_item() -> None:
     }
     executor = PostgresLoadPlanExecutor(settings, connection=FakeConnection(FakeDatabase()))
 
-    result = executor.execute_load_plan(load_plan, apply=True)
+    result = executor.execute_load_plan(load_plan, apply=False)
 
-    assert result["mode"] == "applied"
-    assert result["inserted_claim_count"] == 1
+    assert result["mode"] == "dry_run"
+    assert result["summary"]["review_task_count"] == 2
 
 
 def test_execute_load_plan_dry_run_writes_review_queue(tmp_path: Path) -> None:

@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     llm_retry_attempts: int = 3
     llm_retry_base_delay_seconds: float = 1.0
     llm_retry_max_delay_seconds: float = 8.0
+    europe_pmc_base_url: str = "https://www.ebi.ac.uk/europepmc/webservices/rest"
     openalex_base_url: str = "https://api.openalex.org"
     openalex_mailto: str = ""
     semantic_scholar_base_url: str = "https://api.semanticscholar.org/graph/v1"

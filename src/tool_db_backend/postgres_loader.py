@@ -169,7 +169,7 @@ class PostgresLoadPlanExecutor:
     ) -> None:
         for action in actions:
             kind = action["action"]
-            if kind == "manual_resolution_required":
+            if kind in {"manual_resolution_required", "manual_candidate_review_required"}:
                 continue
             if kind == "attach_evidence_to_existing_item":
                 target_slug = action["target_slug"]
@@ -181,30 +181,6 @@ class PostgresLoadPlanExecutor:
                     source_document_id,
                 )
                 continue
-            if kind == "create_item_candidate":
-                cursor.execute(
-                    """
-                    insert into toolkit_item (
-                      slug, canonical_name, item_type, status, maturity_stage, external_ids
-                    )
-                    values (%s, %s, %s, 'seed', 'research', %s::jsonb)
-                    on conflict (slug) do update
-                    set canonical_name = excluded.canonical_name,
-                        item_type = excluded.item_type,
-                        external_ids = excluded.external_ids,
-                        updated_at = now()
-                    returning id
-                    """,
-                    (
-                        action["proposed_slug"],
-                        action["canonical_name"],
-                        action["item_type"],
-                        json.dumps(action.get("external_ids", {})),
-                    ),
-                )
-                item_id = cursor.fetchone()[0]
-                slug_to_item_id[action["proposed_slug"]] = item_id
-                self._upsert_synonyms(cursor, item_id, action.get("aliases", []), source_document_id)
 
     def _execute_claim_actions(
         self,
@@ -319,6 +295,17 @@ class PostgresLoadPlanExecutor:
                         "candidate_matches": action.get("candidate_matches", []),
                     }
                 )
+            elif action["action"] == "manual_candidate_review_required":
+                tasks.append(
+                    {
+                        "task_type": "new_item_candidate_review",
+                        "local_id": action["local_id"],
+                        "proposed_slug": action.get("proposed_slug"),
+                        "canonical_name": action.get("canonical_name"),
+                        "item_type": action.get("item_type"),
+                        "aliases": action.get("aliases", []),
+                    }
+                )
         for action in load_plan.get("actions", {}).get("claims", []):
             if not action.get("subject_targets"):
                 tasks.append(
@@ -326,6 +313,7 @@ class PostgresLoadPlanExecutor:
                         "task_type": "claim_subject_review",
                         "claim_local_id": action["claim_local_id"],
                         "reason": "No resolvable subject targets available.",
+                        "unresolved_subject_candidates": action.get("unresolved_subject_candidates", []),
                     }
                 )
         return tasks

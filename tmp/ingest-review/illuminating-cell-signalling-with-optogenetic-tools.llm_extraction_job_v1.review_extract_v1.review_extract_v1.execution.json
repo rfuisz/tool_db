@@ -1,0 +1,8 @@
+{
+  "mode": "skipped",
+  "reason": "packet_failed_extraction_gate",
+  "issues": [
+    "Review packet is metadata-only with no extracted entities or claims."
+  ],
+  "review_queue_path": "/Users/Main/Documents/Code/GitHub/tool_db/data/review-queue/https___doi_org_10_1038_nrm3837.review.json"
+}

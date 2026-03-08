@@ -1,0 +1,13 @@
+---
+description: Backend ingestion, extraction, and loader guidance
+globs: src/tool_db_backend/**/*,apps/worker/**/*
+alwaysApply: false
+---
+
+# Backend Ingestion And Pipeline
+
+- Prefer `raw payload -> typed packet -> normalization -> load plan -> execute` over ad hoc shortcuts.
+- Do not let live LLM output write directly into canonical tables.
+- Route metadata-only or low-evidence packets into review queues instead of pretending they are ready.
+- Keep new candidate items in review unless they are already matched to a canonical item.
+- Use subagents for schema review, extraction review, and entity-resolution review when a change crosses boundaries.

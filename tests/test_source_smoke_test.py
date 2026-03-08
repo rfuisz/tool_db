@@ -19,7 +19,7 @@ class _FakeRawStore:
 
 class _FakeOpenAlexClient:
     def search_works(self, query, per_page=25, page=1, filter_expr=None):
-        if query == "optogenetic":
+        if query in {"\"optogenetic tools\"", "AsLOV2 OR LOV2", "CRY2 CIB1", "PhyB PIF"}:
             return {"results": [{"id": "W1"}, {"id": "W2"}]}
         return {"results": [{"id": "W2"}, {"id": "W3"}]}
 

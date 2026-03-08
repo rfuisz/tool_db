@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "generate:explanations": "node scripts/generate-explanations.mjs",
+    "prebuild": "node scripts/generate-explanations.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

@@ -211,6 +211,85 @@
         "notes": { "type": "string" }
       }
     },
+    "workflow_stage_observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "local_id",
+        "stage_name",
+        "stage_kind",
+        "stage_order"
+      ],
+      "properties": {
+        "local_id": { "type": "string", "minLength": 1 },
+        "workflow_local_id": { "type": "string" },
+        "stage_name": { "type": "string", "minLength": 1 },
+        "stage_kind": {
+          "type": "string",
+          "enum": [
+            "in_silico_filter",
+            "library_design",
+            "library_build",
+            "broad_screen",
+            "selection",
+            "counter_screen",
+            "recovery",
+            "sequencing_readout",
+            "hit_picking",
+            "functional_characterization",
+            "secondary_characterization",
+            "confirmatory_validation",
+            "in_vivo_validation",
+            "decision_gate"
+          ]
+        },
+        "stage_order": { "type": "integer", "minimum": 1 },
+        "search_modality": {
+          "type": "string",
+          "enum": [
+            "in_silico",
+            "display",
+            "pooled_library",
+            "cell_free",
+            "cell_based",
+            "biochemical",
+            "sequencing",
+            "structural",
+            "animal"
+          ]
+        },
+        "input_candidate_count": { "type": "integer", "minimum": 0 },
+        "output_candidate_count": { "type": "integer", "minimum": 0 },
+        "candidate_unit": { "type": "string" },
+        "selection_basis": { "type": "string" },
+        "counterselection_basis": { "type": "string" },
+        "enriches_for_axes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "guards_against_axes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "preserves_downstream_property_axes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "advance_criteria": { "type": "string" },
+        "bottleneck_risk": { "type": "string" },
+        "higher_fidelity_than_previous": { "type": "boolean" },
+        "context": { "$ref": "#/$defs/context" },
+        "source_locator": { "$ref": "#/$defs/source_locator" },
+        "unresolved_ambiguities": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        }
+      }
+    },
     "ambiguity": {
       "type": "object",
       "additionalProperties": false,

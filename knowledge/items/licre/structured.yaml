@@ -1,0 +1,42 @@
+id: item_licre
+slug: licre
+canonical_name: LiCre
+item_type: multi_component_switch
+status: curated
+maturity_stage: research
+family: recombinase
+summary: >
+  Single-chain light-inducible Cre recombinase built from an AsLOV2 sensor fused
+  to a destabilized Cre variant, with source-backed yeast and human-cell activity
+  claims in the founding paper.
+primary_input_modality: light
+primary_output_modality: recombination
+external_ids: {}
+synonyms:
+  - light-inducible Cre recombinase
+components:
+  - AsLOV2
+  - Cre recombinase variant
+mechanisms:
+  - conformational_uncaging
+techniques: []
+target_processes:
+  - editing
+source_status:
+  citation_backfill_required: true
+  validation_backfill_required: true
+  replication_backfill_required: true
+citation_candidates:
+  - citation_role: foundational
+    label: "A single-chain and fast-responding light-inducible Cre recombinase"
+    status: curated_reference
+    doi: 10.7554/eLife.61268
+  - citation_role: independent_validation
+    label: TODO add independent follow-up paper
+    status: needs_curation
+validation_observations_seed: []
+workflow_recommendations:
+  - workflow_slug: fast-no-cloning-screen
+    rationale: useful for quick yes-no activity checks in yeast or reporter-cell settings
+  - workflow_slug: standard-construct-loop
+    rationale: useful when response speed, dark activity, or host context need iteration

@@ -37,6 +37,12 @@ Export seed snapshots:
 .venv/bin/python -m apps.worker.main export-seeds db/seeds
 ```
 
+Load seed items and workflows into Postgres:
+
+```bash
+.venv/bin/python -m apps.worker.main load-seed-bundle
+```
+
 Fetch an OpenAlex work payload:
 
 ```bash

@@ -2,7 +2,7 @@
 
 import type { ValidationRollup } from "@/lib/types";
 import { Tooltip } from "./tooltip";
-import { BIO_SYSTEM_EXPLANATIONS } from "@/lib/explanations";
+import { VALIDATION_ROLLUP_DESCRIPTIONS } from "@/lib/explanations";
 
 const LEVELS: { key: keyof ValidationRollup; label: string; short: string }[] = [
   { key: "has_cell_free_validation", label: "Cell-free", short: "CF" },
@@ -19,7 +19,7 @@ export function ValidationDots({ rollup }: { rollup: ValidationRollup }) {
     <div className="flex gap-1 font-ui">
       {LEVELS.map(({ key, label, short }) => {
         const active = rollup[key];
-        const explanation = BIO_SYSTEM_EXPLANATIONS[label];
+        const explanation = VALIDATION_ROLLUP_DESCRIPTIONS[key];
         return (
           <Tooltip
             key={key}
@@ -54,7 +54,7 @@ export function ValidationMatrix({ rollup }: { rollup: ValidationRollup }) {
     <div className="grid grid-cols-2 gap-3 font-ui sm:grid-cols-4">
       {LEVELS.map(({ key, label }) => {
         const active = rollup[key];
-        const explanation = BIO_SYSTEM_EXPLANATIONS[label];
+        const explanation = VALIDATION_ROLLUP_DESCRIPTIONS[key];
         return (
           <Tooltip key={key} content={explanation ?? label} position="bottom">
             <span

@@ -2,7 +2,7 @@
 
 import type { WorkflowStep } from "@/lib/types";
 import { Tooltip } from "./tooltip";
-import { STEP_TYPE_EXPLANATIONS } from "@/lib/explanations";
+import { STEP_TYPE_DESCRIPTIONS } from "@/lib/explanations";
 
 function formatHours(h: number | null): string {
   if (h === null) return "\u2014";
@@ -43,7 +43,7 @@ export function WorkflowTimeline({ steps }: { steps: WorkflowStep[] }) {
       {/* Steps */}
       <div className="space-y-0">
         {steps.map((step, idx) => {
-          const stepExplanation = STEP_TYPE_EXPLANATIONS[step.step_type];
+          const stepExplanation = STEP_TYPE_DESCRIPTIONS[step.step_type];
           return (
             <div
               key={step.id}

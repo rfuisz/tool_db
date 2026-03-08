@@ -10,6 +10,7 @@
     "source_document",
     "entity_candidates",
     "claims",
+    "workflow_stage_observations",
     "unresolved_ambiguities"
   ],
   "properties": {
@@ -26,6 +27,12 @@
     "claims": {
       "type": "array",
       "items": { "$ref": "common.v1.schema.json#/$defs/claim" }
+    },
+    "workflow_stage_observations": {
+      "type": "array",
+      "items": {
+        "$ref": "common.v1.schema.json#/$defs/workflow_stage_observation"
+      }
     },
     "recommended_seed_item_local_ids": {
       "type": "array",

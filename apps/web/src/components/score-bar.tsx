@@ -1,7 +1,14 @@
 "use client";
 
 import { Tooltip } from "./tooltip";
-import { SCORE_EXPLANATIONS } from "@/lib/explanations";
+import { SCORE_DESCRIPTIONS } from "@/lib/explanations";
+
+const LABEL_TO_KEY: Record<string, string> = {
+  Evidence:        "evidence_strength_score",
+  Replication:     "replication_score",
+  Practicality:    "practicality_score",
+  Translatability: "translatability_score",
+};
 
 function scoreColor(value: number): string {
   if (value >= 0.75) return "bg-emerald-500";
@@ -28,7 +35,8 @@ export function ScoreBar({
   }
 
   const pct = Math.round(value * 100);
-  const explanation = SCORE_EXPLANATIONS[label];
+  const key = LABEL_TO_KEY[label];
+  const explanation = key ? SCORE_DESCRIPTIONS[key] : undefined;
 
   const labelEl = (
     <span className={`w-24 shrink-0 text-xs text-ink-muted ${explanation ? "cursor-help border-b border-dotted border-ink-faint" : ""}`}>

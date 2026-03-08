@@ -1,0 +1,51 @@
+id: item_ilid_sspb
+slug: ilid-sspb
+canonical_name: iLID/SspB
+item_type: multi_component_switch
+status: curated
+maturity_stage: research
+family: LOV
+summary: >
+  Light-inducible interaction switch built from an AsLOV2-gated SsrA peptide and
+  the SspB binding partner, with source-backed evidence for large light-dependent
+  affinity change and mammalian-cell signaling/localization use.
+primary_input_modality: light
+primary_output_modality: signaling
+external_ids: {}
+synonyms:
+  - iLID
+  - improved light inducible dimer
+components:
+  - AsLOV2
+  - SsrA peptide
+  - SspB
+mechanisms:
+  - conformational_uncaging
+  - heterodimerization
+techniques:
+  - computational_design
+  - selection_enrichment
+  - structural_characterization
+  - functional_assay
+target_processes:
+  - localization
+  - signaling
+source_status:
+  citation_backfill_required: false
+  validation_backfill_required: true
+  replication_backfill_required: true
+citation_candidates:
+  - citation_role: foundational
+    label: "Engineering an improved light-induced dimer (iLID)"
+    status: curated_reference
+    doi: 10.1073/pnas.1417910112
+  - citation_role: benchmark
+    label: "Correlating in Vitro and in Vivo Activities of Light-Inducible Dimers"
+    status: curated_reference
+    doi: 10.1021/acssynbio.5b00119
+validation_observations_seed: []
+workflow_recommendations:
+  - workflow_slug: fast-no-cloning-screen
+    rationale: useful for quick interaction-switch feasibility checks in known fusion designs
+  - workflow_slug: standard-construct-loop
+    rationale: useful when linker geometry, localization, or effector context needs iteration

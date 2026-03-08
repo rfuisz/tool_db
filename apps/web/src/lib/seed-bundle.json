@@ -1,6 +1,235 @@
 {
   "version": "v1",
-  "generated_at": "2026-03-08T21:31:21+00:00",
+  "generated_at": "2026-03-08T22:48:46+00:00",
+  "vocabularies": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "version": "v1",
+    "item_types": [
+      "protein_domain",
+      "multi_component_switch",
+      "rna_element",
+      "construct_pattern",
+      "engineering_method",
+      "assay_method",
+      "computation_method",
+      "delivery_harness"
+    ],
+    "item_statuses": [
+      "seed",
+      "normalized",
+      "curated",
+      "deprecated"
+    ],
+    "maturity_stages": [
+      "research",
+      "preclinical",
+      "clinical",
+      "deployed"
+    ],
+    "source_types": [
+      "review",
+      "primary_paper",
+      "trial_record",
+      "database_entry",
+      "protocol",
+      "benchmark",
+      "preprint"
+    ],
+    "claim_polarities": [
+      "supports",
+      "contradicts",
+      "mixed",
+      "neutral"
+    ],
+    "citation_roles": [
+      "foundational",
+      "best_review",
+      "independent_validation",
+      "benchmark",
+      "protocol",
+      "therapeutic",
+      "negative_result",
+      "structural",
+      "database_reference"
+    ],
+    "biological_system_levels": [
+      "cell_free",
+      "bacteria",
+      "yeast",
+      "mammalian_cell_line",
+      "primary_cells",
+      "organoid",
+      "mouse",
+      "large_animal",
+      "human_clinical"
+    ],
+    "observation_types": [
+      "mechanistic_demo",
+      "application_demo",
+      "benchmark",
+      "therapeutic_use",
+      "manufacturing_use",
+      "failed_attempt"
+    ],
+    "success_outcomes": [
+      "success",
+      "mixed",
+      "failed"
+    ],
+    "workflow_families": [
+      "fast_screen",
+      "standard_construct",
+      "library_selection",
+      "in_vivo_pilot",
+      "custom"
+    ],
+    "workflow_step_types": [
+      "design",
+      "dna_acquisition",
+      "assembly",
+      "transformation",
+      "colony_screen",
+      "sequence_verification",
+      "transfection",
+      "expression",
+      "selection_round",
+      "assay",
+      "analysis",
+      "decision",
+      "packaging",
+      "delivery"
+    ],
+    "workflow_stage_kinds": [
+      "in_silico_filter",
+      "library_design",
+      "library_build",
+      "broad_screen",
+      "selection",
+      "counter_screen",
+      "recovery",
+      "sequencing_readout",
+      "hit_picking",
+      "functional_characterization",
+      "secondary_characterization",
+      "confirmatory_validation",
+      "in_vivo_validation",
+      "decision_gate"
+    ],
+    "workflow_search_modalities": [
+      "in_silico",
+      "display",
+      "pooled_library",
+      "cell_free",
+      "cell_based",
+      "biochemical",
+      "sequencing",
+      "structural",
+      "animal"
+    ],
+    "common_metric_names": [
+      "fold_induction",
+      "repression_efficiency",
+      "dark_state_leak",
+      "on_kinetics_minutes",
+      "off_kinetics_minutes",
+      "affinity_kd",
+      "viability_percent",
+      "toxicity_signal",
+      "editing_efficiency_percent",
+      "localization_precision",
+      "signal_to_noise",
+      "tissue_penetration_compatibility"
+    ],
+    "mechanism_families": [
+      "heterodimerization",
+      "oligomerization",
+      "conformational_uncaging",
+      "membrane_recruitment",
+      "photocleavage",
+      "dna_binding",
+      "rna_binding",
+      "degradation",
+      "translation_control"
+    ],
+    "technique_families": [
+      "computational_design",
+      "selection_enrichment",
+      "directed_evolution",
+      "sequence_verification",
+      "functional_assay",
+      "structural_characterization",
+      "delivery_optimization"
+    ],
+    "target_processes": [
+      "transcription",
+      "translation",
+      "localization",
+      "degradation",
+      "signaling",
+      "editing",
+      "selection",
+      "manufacturing",
+      "diagnostic"
+    ],
+    "problem_link_breakdown_keys": [
+      "mechanistic_match_score",
+      "context_match_score",
+      "throughput_match_score",
+      "time_to_first_test_score",
+      "cost_to_first_test_score",
+      "replication_confidence_modifier",
+      "practicality_modifier",
+      "translatability_modifier",
+      "overall_gap_applicability_score"
+    ]
+  },
+  "source_registry": [
+    {
+      "source_key": "optobase",
+      "display_name": "OptoBase",
+      "source_kind": "database_entry",
+      "sync_mode": "seed_then_refresh",
+      "role": "curated optogenetics seed catalog",
+      "status": "planned",
+      "base_url": "https://optobase.org/"
+    },
+    {
+      "source_key": "openalex",
+      "display_name": "OpenAlex",
+      "source_kind": "database_entry",
+      "sync_mode": "periodic_api_sync",
+      "role": "work metadata and citation graph",
+      "status": "planned",
+      "base_url": "https://api.openalex.org/"
+    },
+    {
+      "source_key": "semantic_scholar",
+      "display_name": "Semantic Scholar",
+      "source_kind": "database_entry",
+      "sync_mode": "periodic_api_sync",
+      "role": "paper graph and recommendation expansion",
+      "status": "planned",
+      "base_url": "https://api.semanticscholar.org/"
+    },
+    {
+      "source_key": "clinicaltrials_gov",
+      "display_name": "ClinicalTrials.gov",
+      "source_kind": "trial_record",
+      "sync_mode": "periodic_api_sync",
+      "role": "human-use and therapeutic evidence",
+      "status": "planned",
+      "base_url": "https://clinicaltrials.gov/api/query/"
+    },
+    {
+      "source_key": "gap_map",
+      "display_name": "Gap Map",
+      "source_kind": "database_entry",
+      "sync_mode": "periodic_json_sync",
+      "role": "problem catalog for explainable item-gap links",
+      "status": "planned",
+      "base_url": "https://gap-map.org/"
+    }
+  ],
   "items": [
     {
       "slug": "aslov2",
@@ -22,6 +251,7 @@
         "mechanisms": [
           "conformational_uncaging"
         ],
+        "techniques": [],
         "target_processes": [
           "localization",
           "signaling"
@@ -85,6 +315,7 @@
         "mechanisms": [
           "heterodimerization"
         ],
+        "techniques": [],
         "target_processes": [
           "signaling",
           "localization"
@@ -123,6 +354,207 @@
       "evidence_markdown": "# CRY2/CIB1 Evidence\n\n## Current State\n\nThis is a seeded dossier structure, not a curator-finished evidence pack.\n\n## Seed Evidence Boundaries\n\n- High-level mechanism is seeded from project planning context.\n- Concrete validation claims, metrics, and ranked citations remain to be ingested.\n\n## Immediate Curation Targets\n\n1. Add the founding paper.\n2. Add at least one protocol or benchmark citation.\n3. Add independent context-specific follow-up evidence.\n",
       "replication_markdown": "# CRY2/CIB1 Replication\n\n## Status\n\nReplication metrics are intentionally unset until evidence ingestion is live.\n\n## Planned Inputs\n\n- downstream primary-paper reuse\n- same-lab fraction\n- institution diversity\n- contradiction count\n- practicality penalties\n\n## Notes\n\nKeep replication and practicality as separate outputs even if both later score strongly.\n",
       "workflow_fit_markdown": "# CRY2/CIB1 Workflow Fit\n\n## Likely Fit\n\n- `fast-no-cloning-screen`: useful for quick interaction-switch feasibility checks\n- `standard-construct-loop`: useful when localization, stoichiometry, or effector fusion details need iteration\n\n## Missing Evidence\n\n- context-specific failure modes\n- construct-size penalties\n- sequencing and assay choices that dominate turnaround time\n"
+    },
+    {
+      "slug": "ilid-sspb",
+      "structured": {
+        "id": "item_ilid_sspb",
+        "slug": "ilid-sspb",
+        "canonical_name": "iLID/SspB",
+        "item_type": "multi_component_switch",
+        "status": "curated",
+        "maturity_stage": "research",
+        "family": "LOV",
+        "summary": "Light-inducible interaction switch built from an AsLOV2-gated SsrA peptide and the SspB binding partner, with source-backed evidence for large light-dependent affinity change and mammalian-cell signaling/localization use.\n",
+        "primary_input_modality": "light",
+        "primary_output_modality": "signaling",
+        "external_ids": {},
+        "synonyms": [
+          "iLID",
+          "improved light inducible dimer"
+        ],
+        "components": [
+          "AsLOV2",
+          "SsrA peptide",
+          "SspB"
+        ],
+        "mechanisms": [
+          "conformational_uncaging",
+          "heterodimerization"
+        ],
+        "techniques": [
+          "computational_design",
+          "selection_enrichment",
+          "structural_characterization",
+          "functional_assay"
+        ],
+        "target_processes": [
+          "localization",
+          "signaling"
+        ],
+        "source_status": {
+          "citation_backfill_required": false,
+          "validation_backfill_required": true,
+          "replication_backfill_required": true
+        },
+        "citation_candidates": [
+          {
+            "citation_role": "foundational",
+            "label": "Engineering an improved light-induced dimer (iLID)",
+            "status": "curated_reference",
+            "doi": "10.1073/pnas.1417910112"
+          },
+          {
+            "citation_role": "benchmark",
+            "label": "Correlating in Vitro and in Vivo Activities of Light-Inducible Dimers",
+            "status": "curated_reference",
+            "doi": "10.1021/acssynbio.5b00119"
+          }
+        ],
+        "validation_observations_seed": [],
+        "workflow_recommendations": [
+          {
+            "workflow_slug": "fast-no-cloning-screen",
+            "rationale": "useful for quick interaction-switch feasibility checks in known fusion designs"
+          },
+          {
+            "workflow_slug": "standard-construct-loop",
+            "rationale": "useful when linker geometry, localization, or effector context needs iteration"
+          }
+        ]
+      },
+      "index_markdown": "---\nid: item_ilid_sspb\ncanonical_name: iLID/SspB\nitem_type: multi_component_switch\nstatus: curated\nprimary_input_modality: light\nprimary_output_modality: signaling\nfamilies:\n  - LOV\nsynonyms:\n  - iLID\n  - improved light inducible dimer\nlast_reviewed: 2026-03-08\n---\n\n# iLID/SspB\n\n## Summary\n\niLID/SspB is a blue-light-inducible interaction switch built by embedding the SsrA peptide inside the `AsLOV2` C-terminal helix and using `SspB` as the light-enabled binding partner.\n\n## Mechanism\n\nIn the dark, the embedded SsrA motif is sterically constrained. Blue-light activation undocks the `AsLOV2` C-terminal helix and exposes SsrA for `SspB` binding.\n\n## Inputs\n\n- light\n\n## Outputs\n\n- inducible interaction\n- conditional recruitment\n- reversible signaling control\n\n## Components\n\n- `AsLOV2`\n- `SsrA peptide`\n- `SspB`\n\n## Validation Contexts\n\nThe founding paper reports functional utility in mammalian cell culture for subcellular localization and reversible control of small GTPase signaling, but the abstract does not name the exact cell line.\n\n## Replication Notes\n\nThe dossier currently has one founding engineering paper plus one comparative characterization paper. Replication scoring should stay conservative until more independent downstream use is curated.\n\n## Practical Limitations\n\nCurrent evidence is abstract-level only for this dossier slice, so exact host sensitivity, dark leak, off-kinetics, and construct-geometry penalties still need fuller curation.\n\n## Ranked Citations\n\n1. Foundational: 2014 PNAS, \"Engineering an improved light-induced dimer (iLID) for controlling the localization and activity of signaling proteins\" (`10.1073/pnas.1417910112`)\n2. Benchmark: 2015 ACS Synthetic Biology, \"Correlating in Vitro and in Vivo Activities of Light-Inducible Dimers: A Cellular Optogenetics Guide\" (`10.1021/acssynbio.5b00119`)\n\n## Open Questions\n\n- How robust is `iLID/SspB` across different effector fusions and subcellular destinations?\n- Which construct topologies most strongly affect dark-state leak and response range?\n",
+      "evidence_markdown": "# iLID/SspB Evidence\n\n## Current State\n\nThis dossier is curator-promoted from two source-backed packets: the 2014 engineering paper and a 2015 comparative dimers guide.\n\n## Source-Backed Claims\n\n- The 2014 founding paper describes `iLID` as an improved light-inducible dimer created by embedding the bacterial `SsrA` peptide in the C-terminal helix of the `AsLOV2` domain from *Avena sativa*.\n- The same paper reports a dark-state steric block that is released by blue-light-driven helix undocking, enabling `SspB` binding.\n- The founding paper reports an over-50-fold light-dependent affinity change for `SspB`.\n- The founding paper also reports functional demonstrations in mammalian cell culture for light-mediated localization and reversible small-GTPase signaling control.\n- The 2015 comparative guide includes `iLID/SspB` among blue-light-inducible dimers whose dark-state and lit-state affinities correlate with cellular assay behavior.\n\n## Ranked Citations\n\n1. Foundational: 2014 PNAS, \"Engineering an improved light-induced dimer (iLID) for controlling the localization and activity of signaling proteins\" (`10.1073/pnas.1417910112`)\n2. Benchmark: 2015 ACS Synthetic Biology, \"Correlating in Vitro and in Vivo Activities of Light-Inducible Dimers: A Cellular Optogenetics Guide\" (`10.1021/acssynbio.5b00119`)\n\n## Evidence Boundaries\n\n- The currently curated slice is abstract-level, not full-text extraction.\n- Exact mammalian cell model, effector fusion topology, and kinetics breakdown are not yet captured here.\n- No explicit validation rollups should be derived from this markdown alone; those belong in structured observations once curated.\n",
+      "replication_markdown": "# iLID/SspB Replication\n\n## Status\n\nReplication is partially anchored but not yet scored.\n\n## Current Evidence Inputs\n\n- one founding engineering paper\n- one comparative characterization paper covering multiple optical dimerizers\n\n## Still Missing\n\n- downstream independent primary-paper reuse count\n- institution diversity\n- contradiction count\n- practicality penalties such as dark leak, weak dynamic range, or difficult construct geometry\n\n## Notes\n\n`iLID/SspB` has enough evidence to promote into the curated knowledge layer, but not enough yet to claim strong replication confidence.\n",
+      "workflow_fit_markdown": "# iLID/SspB Workflow Fit\n\n## Likely Fit\n\n- `fast-no-cloning-screen`: useful when screening a known `iLID/SspB` geometry or testing a small effector set\n- `standard-construct-loop`: useful when localization, linker choice, and cell-context performance need iteration\n\n## Why\n\nThis switch is attractive for rapid feasibility checks, but many practical outcomes depend on fusion architecture and assay context rather than on the photoswitch alone.\n\n## Missing Evidence\n\n- typical assay choice for first-pass screening\n- construct-specific failure modes\n- how often geometry changes dominate iteration count\n"
+    },
+    {
+      "slug": "licre",
+      "structured": {
+        "id": "item_licre",
+        "slug": "licre",
+        "canonical_name": "LiCre",
+        "item_type": "multi_component_switch",
+        "status": "curated",
+        "maturity_stage": "research",
+        "family": "recombinase",
+        "summary": "Single-chain light-inducible Cre recombinase built from an AsLOV2 sensor fused to a destabilized Cre variant, with source-backed yeast and human-cell activity claims in the founding paper.\n",
+        "primary_input_modality": "light",
+        "primary_output_modality": "recombination",
+        "external_ids": {},
+        "synonyms": [
+          "light-inducible Cre recombinase"
+        ],
+        "components": [
+          "AsLOV2",
+          "Cre recombinase variant"
+        ],
+        "mechanisms": [
+          "conformational_uncaging"
+        ],
+        "techniques": [],
+        "target_processes": [
+          "editing"
+        ],
+        "source_status": {
+          "citation_backfill_required": true,
+          "validation_backfill_required": true,
+          "replication_backfill_required": true
+        },
+        "citation_candidates": [
+          {
+            "citation_role": "foundational",
+            "label": "A single-chain and fast-responding light-inducible Cre recombinase",
+            "status": "curated_reference",
+            "doi": "10.7554/eLife.61268"
+          },
+          {
+            "citation_role": "independent_validation",
+            "label": "TODO add independent follow-up paper",
+            "status": "needs_curation"
+          }
+        ],
+        "validation_observations_seed": [],
+        "workflow_recommendations": [
+          {
+            "workflow_slug": "fast-no-cloning-screen",
+            "rationale": "useful for quick yes-no activity checks in yeast or reporter-cell settings"
+          },
+          {
+            "workflow_slug": "standard-construct-loop",
+            "rationale": "useful when response speed, dark activity, or host context need iteration"
+          }
+        ]
+      },
+      "index_markdown": "---\nid: item_licre\ncanonical_name: LiCre\nitem_type: multi_component_switch\nstatus: curated\nprimary_input_modality: light\nprimary_output_modality: recombination\nfamilies:\n  - recombinase\nsynonyms:\n  - light-inducible Cre recombinase\nlast_reviewed: 2026-03-08\n---\n\n# LiCre\n\n## Summary\n\n`LiCre` is a single-chain optogenetic recombinase that uses an `AsLOV2` photosensor fused to a destabilized Cre variant to enable rapid blue-light activation.\n\n## Mechanism\n\nThe founding paper describes `LiCre` as a single flavin-containing protein built from `AsLOV2` plus a Cre variant carrying destabilizing mutations, allowing light-dependent activation without an added small molecule.\n\n## Inputs\n\n- light\n\n## Outputs\n\n- recombinase activation\n- light-controlled recombination\n\n## Components\n\n- `AsLOV2`\n- destabilized Cre variant\n\n## Validation Contexts\n\nThe founding paper reports successful use in yeast and in human cells, but the abstract does not specify the exact human cell model.\n\n## Replication Notes\n\nThis item is currently anchored by its founding paper only. Independent reuse and context breadth should be treated as open curation work rather than assumed strength.\n\n## Practical Limitations\n\nComparator systems are unnamed in the abstract, and the current curated slice does not yet capture dark leak magnitude, exact activation kinetics beyond \"within minutes,\" or construct-specific deployment caveats.\n\n## Ranked Citations\n\n1. Foundational: 2021 eLife, \"A single-chain and fast-responding light-inducible Cre recombinase as a novel optogenetic switch\" (`10.7554/eLife.61268`)\n\n## Open Questions\n\n- Which split photo-Cre systems are the most relevant comparators for practical benchmarking?\n- How stable is `LiCre` performance across different mammalian reporter architectures?\n",
+      "evidence_markdown": "# LiCre Evidence\n\n## Current State\n\nThis dossier is currently anchored by the founding 2021 eLife paper.\n\n## Source-Backed Claims\n\n- `LiCre` is presented as a novel light-inducible Cre recombinase.\n- The founding paper describes it as a single-chain protein containing the `AsLOV2` photoreceptor domain fused to a destabilized Cre variant.\n- The paper reports activation within minutes under blue light and no need for added chemical cofactor.\n- The abstract reports stronger and faster activation plus lower dark residual activity than unnamed split photoactivatable Cre systems.\n- The same abstract reports functional use in yeast, including light-controlled `beta-carotene` production, and in human cells.\n\n## Ranked Citations\n\n1. Foundational: 2021 eLife, \"A single-chain and fast-responding light-inducible Cre recombinase as a novel optogenetic switch\" (`10.7554/eLife.61268`)\n\n## Evidence Boundaries\n\n- The current dossier slice is abstract-level rather than full-text.\n- The abstract does not identify the exact comparator systems.\n- The human-cell context is underspecified and should not be over-interpreted beyond a mammalian-cell use claim.\n",
+      "replication_markdown": "# LiCre Replication\n\n## Status\n\nReplication confidence is currently low-to-unknown because this dossier is based on a founding paper without curated independent follow-up yet.\n\n## Current Evidence Inputs\n\n- one founding primary paper\n- two reported application contexts in the abstract: yeast and human cells\n\n## Still Missing\n\n- independent-primary-paper count\n- institution diversity\n- downstream reuse over time\n- repeated practicality caveats such as dark leak or payload burden\n\n## Notes\n\n`LiCre` is worth surfacing as a distinct canonical item, but it should not yet receive a strong replication score.\n",
+      "workflow_fit_markdown": "# LiCre Workflow Fit\n\n## Likely Fit\n\n- `fast-no-cloning-screen`: useful for reporter-based activity checks in yeast or mammalian cells\n- `standard-construct-loop`: useful when recombination background, response time, or host-context effects require iteration\n\n## Why\n\nThe main practical questions for `LiCre` are not just whether it works, but how much dark activity and host-specific behavior remain after construct integration.\n\n## Missing Evidence\n\n- quantitative dark-state leak\n- preferred verification strategy for larger recombinase constructs\n- typical time-to-readout in each host context\n"
+    },
+    {
+      "slug": "phyb-pif",
+      "structured": {
+        "id": "item_phyb_pif",
+        "slug": "phyb-pif",
+        "canonical_name": "PhyB/PIF",
+        "item_type": "multi_component_switch",
+        "status": "curated",
+        "maturity_stage": "research",
+        "family": "phytochrome",
+        "summary": "Red/far-red light-inducible interaction system curated here from a mammalian enablement paper that supports fully genetically encoded intracellular signaling control, while the founding switch citation still needs backfill.\n",
+        "primary_input_modality": "light",
+        "primary_output_modality": "signaling",
+        "external_ids": {},
+        "synonyms": [
+          "PhyB-PIF",
+          "phytochrome B / phytochrome-interacting factor"
+        ],
+        "components": [
+          "PhyB",
+          "PIF"
+        ],
+        "mechanisms": [
+          "heterodimerization"
+        ],
+        "techniques": [],
+        "target_processes": [
+          "signaling",
+          "localization"
+        ],
+        "source_status": {
+          "citation_backfill_required": true,
+          "validation_backfill_required": true,
+          "replication_backfill_required": true
+        },
+        "citation_candidates": [
+          {
+            "citation_role": "foundational",
+            "label": "Efficient synthesis of phycocyanobilin in mammalian cells for optogenetic control of cell signaling",
+            "status": "curated_reference",
+            "doi": "10.1073/pnas.1707190114"
+          },
+          {
+            "citation_role": "foundational",
+            "label": "TODO add original PhyB/PIF switch paper",
+            "status": "needs_curation"
+          }
+        ],
+        "validation_observations_seed": [],
+        "workflow_recommendations": [
+          {
+            "workflow_slug": "standard-construct-loop",
+            "rationale": "useful when chromophore supply, host context, and signaling geometry all matter"
+          },
+          {
+            "workflow_slug": "fast-no-cloning-screen",
+            "rationale": "useful for quick subsystem checks when the chromophore-enablement cassette is already available"
+          }
+        ]
+      },
+      "index_markdown": "---\nid: item_phyb_pif\ncanonical_name: PhyB/PIF\nitem_type: multi_component_switch\nstatus: curated\nprimary_input_modality: light\nprimary_output_modality: signaling\nfamilies:\n  - phytochrome\nsynonyms:\n  - PhyB-PIF\n  - phytochrome B / phytochrome-interacting factor\nlast_reviewed: 2026-03-08\n---\n\n# PhyB/PIF\n\n## Summary\n\n`PhyB/PIF` is a red/far-red light-inducible interaction system. This dossier is currently grounded by a mammalian enablement paper that supports genetically encoded signaling control without exogenous chromophore supply.\n\n## Mechanism\n\nThe system uses light-regulated interaction between `PhyB` and `PIF` to control recruitment or signaling outputs, with practical performance depending on chromophore availability.\n\n## Inputs\n\n- light\n\n## Outputs\n\n- inducible interaction\n- signaling control\n\n## Components\n\n- `PhyB`\n- `PIF`\n\n## Validation Contexts\n\nThe currently curated paper supports mammalian-cell use with an internal PCB-synthesis cassette, but does not identify a specific cell line in the abstract.\n\n## Replication Notes\n\nThis item is useful to surface now, but replication and canonical history remain incomplete until the original `PhyB/PIF` switch-defining literature is curated into the dossier.\n\n## Practical Limitations\n\nChromophore supply is a first-class practicality constraint for this system. The current evidence slice focuses on mammalian enablement rather than broad comparative deployment.\n\n## Ranked Citations\n\n1. Mammalian enablement: 2017 PNAS, \"Efficient synthesis of phycocyanobilin in mammalian cells for optogenetic control of cell signaling\" (`10.1073/pnas.1707190114`)\n2. `TODO`: add the original switch-defining `PhyB/PIF` paper\n\n## Open Questions\n\n- Which founding `PhyB/PIF` paper should anchor the canonical origin citation?\n- How large is the practical penalty from chromophore supply in different host contexts?\n",
+      "evidence_markdown": "# PhyB/PIF Evidence\n\n## Current State\n\nThis dossier is intentionally partial. The current curated evidence comes from a mammalian-cell enablement paper rather than from the original switch-defining paper.\n\n## Source-Backed Claims\n\n- The 2017 PNAS paper identifies `PhyB/PIF` as the available red/far-red light-inducible dimerizer in scope for the study.\n- The paper reports an expression vector that coexpresses `HO1`, `PcyA`, ferredoxin, and ferredoxin-NADP+ reductase to synthesize PCB in mammalian-cell mitochondria.\n- The abstract reports that this PCB-synthesis system, together with `PhyB/PIF`, allowed optogenetic regulation of intracellular signaling without external chromophore supply.\n- The same abstract reports that biliverdin reductase A depletion further increased intracellular PCB concentration.\n\n## Ranked Citations\n\n1. Mammalian enablement: 2017 PNAS, \"Efficient synthesis of phycocyanobilin in mammalian cells for optogenetic control of cell signaling\" (`10.1073/pnas.1707190114`)\n\n## Evidence Boundaries\n\n- This is not yet a complete origin dossier for `PhyB/PIF`.\n- The abstract-level evidence is strong for mammalian chromophore enablement but weaker for canonical origin and broad benchmarking.\n- Exact signaling pathway, cell line, and quantitative performance metrics are not yet captured here.\n",
+      "replication_markdown": "# PhyB/PIF Replication\n\n## Status\n\nReplication is intentionally under-scored because the current dossier slice is centered on one mammalian enablement paper.\n\n## Current Evidence Inputs\n\n- one curated mammalian enablement paper\n- explicit practical relevance around chromophore supply\n\n## Still Missing\n\n- the original switch-defining citation\n- independent follow-up papers across multiple host contexts\n- institution diversity and downstream reuse signals\n- explicit practicality penalties collected across deployments\n\n## Notes\n\nTreat this dossier as a useful canonical placeholder with real evidence, not yet as a finished replication summary.\n",
+      "workflow_fit_markdown": "# PhyB/PIF Workflow Fit\n\n## Likely Fit\n\n- `standard-construct-loop`: useful when chromophore biosynthesis, localization, and signaling-output geometry need coordinated testing\n- `fast-no-cloning-screen`: useful only when an enablement cassette is already in hand and the goal is narrow feasibility testing\n\n## Why\n\nThis system has a strong practicality dependency on chromophore handling, so workflow fit is often dominated by build complexity rather than by the dimerizer concept alone.\n\n## Missing Evidence\n\n- comparative turnaround versus blue-light dimerizers\n- typical failure points for PCB enablement constructs\n- host-specific burden from the support cassette\n"
     }
   ],
   "workflows": [

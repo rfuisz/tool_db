@@ -2,7 +2,9 @@
 
 import type { ItemCitation } from "@/lib/types";
 import { CITATION_ROLE_LABELS } from "@/lib/vocabularies";
+import { CITATION_ROLE_DESCRIPTIONS } from "@/lib/explanations";
 import { PaperLink } from "./paper-link";
+import { Tooltip } from "./tooltip";
 
 export function CitationList({ citations }: { citations: ItemCitation[] }) {
   if (citations.length === 0) {
@@ -32,9 +34,14 @@ export function CitationList({ citations }: { citations: ItemCitation[] }) {
               {cit.document.title}
             </PaperLink>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-ui text-xs">
-              <span className="font-semibold text-accent">
-                {CITATION_ROLE_LABELS[cit.citation_role]}
-              </span>
+              <Tooltip
+                content={CITATION_ROLE_DESCRIPTIONS[cit.citation_role] ?? CITATION_ROLE_LABELS[cit.citation_role]}
+                position="bottom"
+              >
+                <span className="cursor-help border-b border-dotted border-accent/40 font-semibold text-accent">
+                  {CITATION_ROLE_LABELS[cit.citation_role]}
+                </span>
+              </Tooltip>
               {cit.document.journal_or_source && !cit.document.journal_or_source.startsWith("http") && (
                 <span className="italic text-ink-muted">{cit.document.journal_or_source}</span>
               )}

@@ -101,6 +101,33 @@ create type workflow_step_type as enum (
   'packaging',
   'delivery'
 );
+create type workflow_stage_kind as enum (
+  'in_silico_filter',
+  'library_design',
+  'library_build',
+  'broad_screen',
+  'selection',
+  'counter_screen',
+  'recovery',
+  'sequencing_readout',
+  'hit_picking',
+  'functional_characterization',
+  'secondary_characterization',
+  'confirmatory_validation',
+  'in_vivo_validation',
+  'decision_gate'
+);
+create type workflow_search_modality as enum (
+  'in_silico',
+  'display',
+  'pooled_library',
+  'cell_free',
+  'cell_based',
+  'biochemical',
+  'sequencing',
+  'structural',
+  'animal'
+);
 
 create table toolkit_item (
   id uuid primary key default gen_random_uuid(),
@@ -402,9 +429,32 @@ create table workflow_template (
   notes text
 );
 
+create table workflow_stage_template (
+  id uuid primary key default gen_random_uuid(),
+  workflow_template_id uuid not null references workflow_template(id) on delete cascade,
+  stage_name text not null,
+  stage_kind workflow_stage_kind not null,
+  stage_order int not null,
+  search_modality workflow_search_modality,
+  input_candidate_count_typical int,
+  output_candidate_count_typical int,
+  candidate_unit text,
+  selection_basis text,
+  counterselection_basis text,
+  enriches_for_axes text[] not null default '{}'::text[],
+  guards_against_axes text[] not null default '{}'::text[],
+  preserves_downstream_property_axes text[] not null default '{}'::text[],
+  advance_criteria text,
+  bottleneck_risk text,
+  higher_fidelity_than_previous boolean,
+  notes text,
+  unique (workflow_template_id, stage_order)
+);
+
 create table workflow_step_template (
   id uuid primary key default gen_random_uuid(),
   workflow_template_id uuid not null references workflow_template(id) on delete cascade,
+  workflow_stage_template_id uuid references workflow_stage_template(id) on delete set null,
   step_name text not null,
   step_type workflow_step_type not null,
   duration_p10_hours numeric(10,2),

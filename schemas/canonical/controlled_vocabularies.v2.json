@@ -1,0 +1,268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "v2",
+  "_note": "v2 adds a 'description' field to every vocabulary entry. The 'values' array preserves the v1 enum list for validators. 'described' maps each value to {label, description} for UI and documentation.",
+
+  "item_types": {
+    "values": ["protein_domain", "multi_component_switch", "rna_element", "construct_pattern", "engineering_method", "assay_method", "computation_method", "delivery_harness"],
+    "described": {
+      "protein_domain":          { "label": "Protein Domain",          "description": "A single protein domain or engineered variant used as a modular building block in synthetic biology constructs." },
+      "multi_component_switch":  { "label": "Multi-Component Switch",  "description": "A system requiring two or more interacting molecular components to achieve stimulus-responsive behavior." },
+      "rna_element":             { "label": "RNA Element",             "description": "An RNA-based regulatory element such as a riboswitch, aptamer, or ribozyme used to control gene expression." },
+      "construct_pattern":       { "label": "Construct Pattern",       "description": "A reusable genetic architecture or design pattern for assembling functional circuits from parts." },
+      "engineering_method":      { "label": "Engineering Method",      "description": "A laboratory method for creating, modifying, or optimizing biological parts (e.g. directed evolution, computational design)." },
+      "assay_method":            { "label": "Assay Method",            "description": "A measurement technique for characterizing the performance of engineered biological parts." },
+      "computation_method":      { "label": "Computation Method",      "description": "A computational tool or algorithm for predicting, designing, or analyzing biological constructs." },
+      "delivery_harness":        { "label": "Delivery Harness",        "description": "A vehicle or strategy for delivering engineered constructs into target cells or tissues (e.g. AAV, LNP, electroporation)." }
+    }
+  },
+
+  "item_statuses": {
+    "values": ["seed", "normalized", "curated", "deprecated"],
+    "described": {
+      "seed":        { "label": "Seed",        "description": "Initial dossier created from known references. Citations, validation data, and scores are placeholders awaiting source-backed curation." },
+      "normalized":  { "label": "Normalized",  "description": "Data ingested and normalized from external sources, but not yet reviewed by a human curator." },
+      "curated":     { "label": "Curated",     "description": "Fully reviewed: citations verified, validation observations confirmed, scores computed from evidence." },
+      "deprecated":  { "label": "Deprecated",  "description": "No longer recommended: superseded by a better tool, retracted, or found to be unreliable." }
+    }
+  },
+
+  "maturity_stages": {
+    "values": ["research", "preclinical", "clinical", "deployed"],
+    "described": {
+      "research":    { "label": "Research",    "description": "Early-stage: demonstrated in academic research settings only." },
+      "preclinical": { "label": "Preclinical", "description": "Validated in animal models or advanced in vitro systems with translational intent." },
+      "clinical":    { "label": "Clinical",    "description": "In human clinical trials or with clinical-grade manufacturing evidence." },
+      "deployed":    { "label": "Deployed",    "description": "Commercially available, FDA-approved, or in routine production use." }
+    }
+  },
+
+  "source_types": {
+    "values": ["review", "primary_paper", "trial_record", "database_entry", "protocol", "benchmark", "preprint"],
+    "described": {
+      "review":          { "label": "Review",          "description": "A review or meta-analysis that surveys the field rather than presenting original data." },
+      "primary_paper":   { "label": "Primary Paper",   "description": "An original research article presenting new experimental results." },
+      "trial_record":    { "label": "Trial Record",    "description": "A clinical trial registration or results record (e.g. ClinicalTrials.gov)." },
+      "database_entry":  { "label": "Database Entry",  "description": "A structured record from a curated database (e.g. UniProt, Addgene, PDB)." },
+      "protocol":        { "label": "Protocol",        "description": "A detailed laboratory protocol or methods paper." },
+      "benchmark":       { "label": "Benchmark",       "description": "A systematic comparison study benchmarking multiple tools or methods." },
+      "preprint":        { "label": "Preprint",        "description": "A manuscript posted to a preprint server (e.g. bioRxiv) before peer review." }
+    }
+  },
+
+  "claim_polarities": {
+    "values": ["supports", "contradicts", "mixed", "neutral"],
+    "described": {
+      "supports":    { "label": "Supports",    "description": "The evidence supports the claim or validates the tool's function as described." },
+      "contradicts": { "label": "Contradicts", "description": "The evidence contradicts the claim—the tool did not perform as expected." },
+      "mixed":       { "label": "Mixed",       "description": "Results are ambiguous: partial support or context-dependent outcomes." },
+      "neutral":     { "label": "Neutral",     "description": "The source mentions the tool but does not provide evidence for or against." }
+    }
+  },
+
+  "citation_roles": {
+    "values": ["foundational", "best_review", "independent_validation", "benchmark", "protocol", "therapeutic", "negative_result", "structural", "database_reference"],
+    "described": {
+      "foundational":            { "label": "Foundational",            "description": "The original paper that first described or created this tool." },
+      "best_review":             { "label": "Best Review",             "description": "The most comprehensive review covering this tool's mechanism, applications, and limitations." },
+      "independent_validation":  { "label": "Independent Validation",  "description": "A study from an independent lab that reproduced or validated the tool's function." },
+      "benchmark":               { "label": "Benchmark",               "description": "A head-to-head comparison of this tool against alternatives in the same category." },
+      "protocol":                { "label": "Protocol",                "description": "A detailed methods paper or protocol for using this tool in the lab." },
+      "therapeutic":             { "label": "Therapeutic",             "description": "Evidence of this tool's use in a therapeutic context: gene therapy, drug development, or clinical intervention." },
+      "negative_result":         { "label": "Negative Result",         "description": "A study reporting failure, limitations, or unexpected problems with this tool." },
+      "structural":              { "label": "Structural",              "description": "Structural biology data (crystal structure, cryo-EM) informing how this tool works at atomic resolution." },
+      "database_reference":      { "label": "Database Reference",      "description": "A curated database record (e.g. Addgene plasmid, PDB entry) for this tool." }
+    }
+  },
+
+  "biological_system_levels": {
+    "values": ["cell_free", "bacteria", "yeast", "mammalian_cell_line", "primary_cells", "organoid", "mouse", "large_animal", "human_clinical"],
+    "described": {
+      "cell_free":            { "label": "Cell-free",            "description": "Cell-free systems: purified protein, in vitro transcription/translation, or lysate-based assays." },
+      "bacteria":             { "label": "Bacteria",             "description": "Bacterial hosts such as E. coli, demonstrating function in a prokaryotic context." },
+      "yeast":                { "label": "Yeast",                "description": "Yeast systems (S. cerevisiae, S. pombe), bridging prokaryotic simplicity and eukaryotic biology." },
+      "mammalian_cell_line":  { "label": "Mammalian Cell Line",  "description": "Immortalized mammalian cell lines (e.g. HEK293, HeLa, CHO) showing function in eukaryotic cells." },
+      "primary_cells":        { "label": "Primary Cells",        "description": "Primary cells isolated directly from tissue, providing more physiologically relevant context than cell lines." },
+      "organoid":             { "label": "Organoid",             "description": "3D organoid cultures that recapitulate tissue architecture and cell-type diversity." },
+      "mouse":                { "label": "Mouse",                "description": "Mouse models in vivo, demonstrating function in a living mammalian organism." },
+      "large_animal":         { "label": "Large Animal",         "description": "Large animal models (e.g. non-human primate, pig) providing translational data closer to human physiology." },
+      "human_clinical":       { "label": "Human Clinical",       "description": "Human clinical trials or clinical-grade applications in patients." }
+    }
+  },
+
+  "observation_types": {
+    "values": ["mechanistic_demo", "application_demo", "benchmark", "therapeutic_use", "manufacturing_use", "failed_attempt"],
+    "described": {
+      "mechanistic_demo":  { "label": "Mechanistic Demo",  "description": "An experiment demonstrating the tool's core mechanism of action (e.g. light-induced dimerization confirmed by co-IP)." },
+      "application_demo":  { "label": "Application Demo",  "description": "A downstream application using this tool to achieve a biological goal (e.g. optogenetic gene activation in neurons)." },
+      "benchmark":         { "label": "Benchmark",         "description": "A quantitative comparison against alternative tools measuring the same output." },
+      "therapeutic_use":   { "label": "Therapeutic Use",   "description": "Use in a therapeutic or clinical context: gene therapy, drug development, or patient treatment." },
+      "manufacturing_use": { "label": "Manufacturing Use", "description": "Use in biomanufacturing, industrial fermentation, or production-scale applications." },
+      "failed_attempt":    { "label": "Failed Attempt",    "description": "A documented failure: the tool did not work as expected in this context. Valuable negative data." }
+    }
+  },
+
+  "success_outcomes": {
+    "values": ["success", "mixed", "failed"],
+    "described": {
+      "success": { "label": "Success", "description": "The tool performed as expected with clear positive results." },
+      "mixed":   { "label": "Mixed",   "description": "Partial success: some metrics met expectations while others fell short, or results were context-dependent." },
+      "failed":  { "label": "Failed",  "description": "The tool did not achieve the intended outcome in this experiment." }
+    }
+  },
+
+  "workflow_families": {
+    "values": ["fast_screen", "standard_construct", "library_selection", "in_vivo_pilot", "custom"],
+    "described": {
+      "fast_screen":        { "label": "Fast Screen",        "description": "A rapid workflow for testing a small number of candidates with minimal cloning (days to one week)." },
+      "standard_construct": { "label": "Standard Construct", "description": "A typical construct-build-test cycle: design, clone, verify, express, assay (one to three weeks)." },
+      "library_selection":  { "label": "Library Selection",  "description": "A multi-round selection workflow starting from a molecular library (e.g. phage display, FACS sorting)." },
+      "in_vivo_pilot":      { "label": "In Vivo Pilot",     "description": "An in vivo experiment requiring packaging, delivery, and animal work (weeks to months)." },
+      "custom":             { "label": "Custom",             "description": "A user-defined workflow that does not fit standard templates." }
+    }
+  },
+
+  "workflow_step_types": {
+    "values": ["design", "dna_acquisition", "assembly", "transformation", "colony_screen", "sequence_verification", "transfection", "expression", "selection_round", "assay", "analysis", "decision", "packaging", "delivery"],
+    "described": {
+      "design":                 { "label": "Design",                 "description": "Computational or manual design of the candidate sequence, construct, or library." },
+      "dna_acquisition":        { "label": "DNA Acquisition",        "description": "Ordering or synthesizing DNA: gene fragments, oligos, or full-length genes from a vendor." },
+      "assembly":               { "label": "Assembly",               "description": "Molecular cloning or assembly of DNA parts into a functional construct (e.g. Gibson, Golden Gate)." },
+      "transformation":         { "label": "Transformation",         "description": "Introducing DNA into bacterial cells for amplification or screening." },
+      "colony_screen":          { "label": "Colony Screen",          "description": "Screening bacterial colonies to identify correct clones after transformation." },
+      "sequence_verification":  { "label": "Sequence Verification",  "description": "Sanger or NGS sequencing to confirm the construct matches the intended design." },
+      "transfection":           { "label": "Transfection",           "description": "Introducing DNA/RNA into mammalian or eukaryotic cells for expression." },
+      "expression":             { "label": "Expression",             "description": "Growing cells and expressing the construct to produce functional protein." },
+      "selection_round":        { "label": "Selection Round",        "description": "One round of selection or enrichment from a molecular library (e.g. phage display, FACS)." },
+      "assay":                  { "label": "Assay",                  "description": "Functional measurement: fluorescence, binding, activity, or phenotypic readout." },
+      "analysis":               { "label": "Analysis",               "description": "Data analysis and interpretation of experimental results." },
+      "decision":               { "label": "Decision",               "description": "Go/no-go decision point based on accumulated data." },
+      "packaging":              { "label": "Packaging",              "description": "Packaging DNA/RNA into delivery vehicles (e.g. AAV, LNP)." },
+      "delivery":               { "label": "Delivery",               "description": "Delivering the packaged construct to target cells or tissues in vivo." }
+    }
+  },
+
+  "common_metric_names": {
+    "values": ["fold_induction", "repression_efficiency", "dark_state_leak", "on_kinetics_minutes", "off_kinetics_minutes", "affinity_kd", "viability_percent", "toxicity_signal", "editing_efficiency_percent", "localization_precision", "signal_to_noise", "tissue_penetration_compatibility"],
+    "described": {
+      "fold_induction":                  { "label": "Fold Induction",                  "description": "Ratio of output signal in the ON state vs OFF state. Higher is better." },
+      "repression_efficiency":           { "label": "Repression Efficiency",           "description": "Fraction of target expression that is silenced (0–1). Higher means more complete repression." },
+      "dark_state_leak":                 { "label": "Dark-State Leak",                 "description": "Residual activity in the OFF/unstimulated state. Lower is better for tight control." },
+      "on_kinetics_minutes":             { "label": "ON Kinetics (min)",               "description": "Time to reach half-maximal activation after stimulus onset. Faster enables tighter temporal control." },
+      "off_kinetics_minutes":            { "label": "OFF Kinetics (min)",              "description": "Time to return to half-maximal after stimulus removal. Faster enables reversible control." },
+      "affinity_kd":                     { "label": "Affinity (Kd)",                   "description": "Dissociation constant for the binding interaction. Lower Kd means tighter binding." },
+      "viability_percent":               { "label": "Viability (%)",                   "description": "Percentage of cells surviving after tool expression or treatment. Higher is less toxic." },
+      "toxicity_signal":                 { "label": "Toxicity Signal",                 "description": "Qualitative or quantitative indicator of cytotoxicity from the tool or its stimulus." },
+      "editing_efficiency_percent":      { "label": "Editing Efficiency (%)",          "description": "Fraction of target loci successfully edited. Higher means more on-target activity." },
+      "localization_precision":          { "label": "Localization Precision",          "description": "Spatial resolution of subcellular targeting (e.g. nuclear vs cytoplasmic enrichment ratio)." },
+      "signal_to_noise":                 { "label": "Signal-to-Noise",                "description": "Ratio of specific signal to background noise. Higher indicates cleaner readout." },
+      "tissue_penetration_compatibility":{ "label": "Tissue Penetration Compatibility","description": "Qualitative rating of whether the tool's stimulus can reach deep tissues in vivo." }
+    }
+  },
+
+  "mechanism_families": {
+    "values": ["heterodimerization", "oligomerization", "conformational_uncaging", "membrane_recruitment", "photocleavage", "dna_binding", "rna_binding", "degradation", "translation_control"],
+    "described": {
+      "heterodimerization":     { "label": "Heterodimerization",     "description": "Two different proteins are brought together by a stimulus, enabling recruitment or complex formation." },
+      "oligomerization":        { "label": "Oligomerization",        "description": "A protein self-associates into multimers upon stimulation, enabling clustering or activation." },
+      "conformational_uncaging":{ "label": "Conformational Uncaging","description": "A stimulus triggers a structural change that exposes a previously hidden functional element." },
+      "membrane_recruitment":   { "label": "Membrane Recruitment",   "description": "A protein is recruited to a membrane surface (e.g. plasma membrane) by a stimulus." },
+      "photocleavage":          { "label": "Photocleavage",          "description": "Light breaks a covalent bond, irreversibly releasing a caged peptide or domain." },
+      "dna_binding":            { "label": "DNA Binding",            "description": "A protein binds DNA in a stimulus-dependent manner to regulate gene expression." },
+      "rna_binding":            { "label": "RNA Binding",            "description": "A protein or RNA element binds RNA to control translation or stability." },
+      "degradation":            { "label": "Degradation",            "description": "A stimulus triggers targeted degradation of a protein via the proteasome or other pathways." },
+      "translation_control":    { "label": "Translation Control",    "description": "Post-transcriptional regulation of mRNA translation rate or efficiency." }
+    }
+  },
+
+  "technique_families": {
+    "values": ["computational_design", "selection_enrichment", "directed_evolution", "sequence_verification", "functional_assay", "structural_characterization", "delivery_optimization"],
+    "described": {
+      "computational_design":         { "label": "Computational Design",         "description": "In silico design of protein sequences, structures, or circuits using algorithms or machine learning." },
+      "selection_enrichment":         { "label": "Selection / Enrichment",       "description": "Experimental selection from a library to enrich for variants with desired properties." },
+      "directed_evolution":           { "label": "Directed Evolution",           "description": "Iterative mutagenesis and selection to evolve improved biological parts." },
+      "sequence_verification":        { "label": "Sequence Verification",        "description": "Confirming construct identity by Sanger or next-generation sequencing." },
+      "functional_assay":             { "label": "Functional Assay",             "description": "Measuring the activity or performance of an engineered part in a biological context." },
+      "structural_characterization":  { "label": "Structural Characterization",  "description": "Determining 3D structure via X-ray crystallography, cryo-EM, or NMR." },
+      "delivery_optimization":        { "label": "Delivery Optimization",        "description": "Optimizing the vehicle, route, or formulation for delivering constructs to target cells or tissues." }
+    }
+  },
+
+  "target_processes": {
+    "values": ["transcription", "translation", "localization", "degradation", "signaling", "editing", "selection", "manufacturing", "diagnostic"],
+    "described": {
+      "transcription":  { "label": "Transcription",  "description": "Regulation of gene transcription (activation, repression, or modification of mRNA synthesis)." },
+      "translation":    { "label": "Translation",    "description": "Control of mRNA translation into protein." },
+      "localization":   { "label": "Localization",   "description": "Control of subcellular localization (e.g. nuclear import/export, membrane targeting)." },
+      "degradation":    { "label": "Degradation",    "description": "Targeted degradation of proteins or RNA molecules." },
+      "signaling":      { "label": "Signaling",      "description": "Activation or modulation of intracellular signaling pathways." },
+      "editing":        { "label": "Editing",        "description": "Genome or epigenome editing at specific loci." },
+      "selection":      { "label": "Selection",      "description": "Enrichment or screening of variants from a molecular library." },
+      "manufacturing":  { "label": "Manufacturing",  "description": "Biomanufacturing or industrial-scale production applications." },
+      "diagnostic":     { "label": "Diagnostic",     "description": "Diagnostic or biosensing applications for detecting analytes or biomarkers." }
+    }
+  },
+
+  "modalities": {
+    "_note": "Not present in v1. Added in v2 to canonicalize the input/output modality vocabulary.",
+    "values": ["light", "chemical", "thermal", "electrical", "mechanical", "magnetic", "sequence", "structure", "conformational_change", "transcription", "translation", "localization", "degradation", "signaling", "editing", "selection", "assay_readout", "analysis"],
+    "described": {
+      "light":                  { "label": "Light",                  "description": "Controlled by light wavelength and intensity (optogenetic)." },
+      "chemical":               { "label": "Chemical",               "description": "Controlled by small molecules, drugs, or chemical inducers." },
+      "thermal":                { "label": "Thermal",                "description": "Controlled by temperature changes." },
+      "electrical":             { "label": "Electrical",             "description": "Controlled by electrical stimulation." },
+      "mechanical":             { "label": "Mechanical",             "description": "Controlled by physical force or mechanical stress." },
+      "magnetic":               { "label": "Magnetic",               "description": "Controlled by magnetic fields." },
+      "sequence":               { "label": "Sequence",               "description": "Takes a DNA/RNA/protein sequence as input." },
+      "structure":              { "label": "Structure",              "description": "Takes a 3D molecular structure as input." },
+      "conformational_change":  { "label": "Conformational Change",  "description": "Produces a structural/conformational change in a protein or domain." },
+      "transcription":          { "label": "Transcription",          "description": "Activates or represses gene transcription." },
+      "translation":            { "label": "Translation",            "description": "Controls mRNA translation into protein." },
+      "localization":           { "label": "Localization",           "description": "Controls subcellular localization (e.g. nuclear, membrane, cytoplasmic)." },
+      "degradation":            { "label": "Degradation",            "description": "Triggers targeted protein or RNA degradation." },
+      "signaling":              { "label": "Signaling",              "description": "Activates or modulates a cell signaling pathway." },
+      "editing":                { "label": "Editing",                "description": "Performs genome or epigenome editing." },
+      "selection":              { "label": "Selection",              "description": "Enriches or selects variants from a library." },
+      "assay_readout":          { "label": "Assay Readout",          "description": "Provides a measurable experimental readout." },
+      "analysis":               { "label": "Analysis",               "description": "Produces a computational analysis or prediction." }
+    }
+  },
+
+  "score_definitions": {
+    "_note": "Defines the four computed scores in replication_summary. Not an enum vocabulary but included here as canonical definitions for UI display.",
+    "described": {
+      "evidence_strength_score": { "label": "Evidence",        "description": "Strength of the published evidence base: paper count, citation quality, and breadth of experimental support." },
+      "replication_score":       { "label": "Replication",     "description": "Degree of independent reproduction: how many distinct labs, institutions, and biological contexts have confirmed the finding." },
+      "practicality_score":      { "label": "Practicality",    "description": "Ease of real-world use: accounts for known failure modes, setup complexity, cost, and documented pitfalls." },
+      "translatability_score":   { "label": "Translatability", "description": "Path toward therapeutic or deployed use: regulatory precedent, in vivo data, clinical trials, and manufacturing readiness." }
+    }
+  },
+
+  "validation_rollup_fields": {
+    "_note": "Maps the boolean rollup fields to the biological_system_levels they summarize, plus two non-system-level flags.",
+    "described": {
+      "has_cell_free_validation":       { "label": "Cell-free",           "maps_to": "cell_free",            "description": "At least one successful observation in a cell-free system." },
+      "has_bacterial_validation":       { "label": "Bacteria",            "maps_to": "bacteria",             "description": "At least one successful observation in bacterial hosts." },
+      "has_mammalian_cell_validation":  { "label": "Mammalian",           "maps_to": "mammalian_cell_line",   "description": "At least one successful observation in mammalian cell lines." },
+      "has_mouse_in_vivo_validation":   { "label": "Mouse",              "maps_to": "mouse",                "description": "At least one successful observation in mouse models in vivo." },
+      "has_human_clinical_validation":  { "label": "Human",              "maps_to": "human_clinical",        "description": "Evidence from human clinical trials or clinical-grade applications." },
+      "has_therapeutic_use":            { "label": "Therapeutic",         "maps_to": null,                   "description": "Used in a therapeutic context: drug development, gene therapy, or clinical intervention." },
+      "has_independent_replication":    { "label": "Indep. Replication",  "maps_to": null,                   "description": "Independently replicated by a lab unaffiliated with the original authors." }
+    }
+  },
+
+  "problem_link_breakdown_keys": {
+    "values": ["mechanistic_match_score", "context_match_score", "throughput_match_score", "time_to_first_test_score", "cost_to_first_test_score", "replication_confidence_modifier", "practicality_modifier", "translatability_modifier", "overall_gap_applicability_score"],
+    "described": {
+      "mechanistic_match_score":          { "label": "Mechanistic Match",          "description": "How well the tool's mechanism aligns with the problem's biological requirements." },
+      "context_match_score":              { "label": "Context Match",              "description": "Whether the tool has been validated in the relevant biological context (organism, cell type, tissue)." },
+      "throughput_match_score":           { "label": "Throughput Match",           "description": "Whether the tool's throughput matches the scale needed for the problem." },
+      "time_to_first_test_score":         { "label": "Time to First Test",        "description": "Estimated calendar time from decision to first experimental result." },
+      "cost_to_first_test_score":         { "label": "Cost to First Test",        "description": "Estimated direct cost (reagents + services) to reach first experimental result." },
+      "replication_confidence_modifier":  { "label": "Replication Confidence",    "description": "Adjustment based on how well the tool has been independently replicated." },
+      "practicality_modifier":            { "label": "Practicality",              "description": "Adjustment for known failure modes, setup complexity, and documented pitfalls." },
+      "translatability_modifier":         { "label": "Translatability",           "description": "Adjustment for regulatory precedent, clinical data, and manufacturing readiness." },
+      "overall_gap_applicability_score":  { "label": "Overall Applicability",     "description": "Composite score representing how well this tool fits the stated problem." }
+    }
+  }
+}

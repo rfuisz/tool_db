@@ -92,7 +92,7 @@ class PostgresLoadPlanExecutor:
         return {
             "mode": "applied",
             "summary": summary,
-            "source_document_id": source_document_id,
+            "source_document_id": str(source_document_id),
             "inserted_claim_count": len(inserted_claim_ids),
             "review_queue_path": str(review_queue_path) if review_queue_path else None,
         }

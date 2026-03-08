@@ -77,6 +77,33 @@
     "packaging",
     "delivery"
   ],
+  "workflow_stage_kinds": [
+    "in_silico_filter",
+    "library_design",
+    "library_build",
+    "broad_screen",
+    "selection",
+    "counter_screen",
+    "recovery",
+    "sequencing_readout",
+    "hit_picking",
+    "functional_characterization",
+    "secondary_characterization",
+    "confirmatory_validation",
+    "in_vivo_validation",
+    "decision_gate"
+  ],
+  "workflow_search_modalities": [
+    "in_silico",
+    "display",
+    "pooled_library",
+    "cell_free",
+    "cell_based",
+    "biochemical",
+    "sequencing",
+    "structural",
+    "animal"
+  ],
   "common_metric_names": [
     "fold_induction",
     "repression_efficiency",

@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { Tooltip } from "./tooltip";
 import {
-  MATURITY_EXPLANATIONS,
-  STATUS_EXPLANATIONS,
-  MODALITY_EXPLANATIONS,
-  MECHANISM_EXPLANATIONS,
+  MATURITY_DESCRIPTIONS,
+  STATUS_DESCRIPTIONS,
+  MODALITY_DESCRIPTIONS,
+  MECHANISM_DESCRIPTIONS,
+  TECHNIQUE_DESCRIPTIONS,
+  ITEM_TYPE_DESCRIPTIONS,
 } from "@/lib/explanations";
 import {
   ITEM_TYPE_LABELS,
@@ -17,16 +19,13 @@ import {
 } from "@/lib/vocabularies";
 import type { ItemType, MaturityStage, Modality, ItemStatus } from "@/lib/types";
 
-export function DetailTooltips() {
-  return null;
-}
-
 export function TypeBadge({ type }: { type: ItemType }) {
+  const description = ITEM_TYPE_DESCRIPTIONS[type];
   return (
-    <Tooltip content={`Filter all items of type: ${ITEM_TYPE_LABELS[type]}`} position="bottom">
+    <Tooltip content={description ?? `Filter all items of type: ${ITEM_TYPE_LABELS[type]}`} position="bottom">
       <Link
         href={`/items?type=${type}`}
-        className="transition-colors hover:text-accent"
+        className="cursor-help transition-colors hover:text-accent"
       >
         {ITEM_TYPE_LABELS[type]}
       </Link>
@@ -35,9 +34,9 @@ export function TypeBadge({ type }: { type: ItemType }) {
 }
 
 export function MaturityBadge({ stage }: { stage: MaturityStage }) {
-  const explanation = MATURITY_EXPLANATIONS[MATURITY_LABELS[stage]];
+  const description = MATURITY_DESCRIPTIONS[stage];
   return (
-    <Tooltip content={explanation ?? MATURITY_LABELS[stage]} position="bottom">
+    <Tooltip content={description ?? MATURITY_LABELS[stage]} position="bottom">
       <span className="cursor-help border-b border-dotted border-ink-faint">
         {MATURITY_LABELS[stage]}
       </span>
@@ -46,10 +45,10 @@ export function MaturityBadge({ stage }: { stage: MaturityStage }) {
 }
 
 export function StatusBadge({ status }: { status: ItemStatus }) {
-  const explanation = STATUS_EXPLANATIONS[status];
+  const description = STATUS_DESCRIPTIONS[status];
   if (status !== "seed") return null;
   return (
-    <Tooltip content={explanation} position="bottom">
+    <Tooltip content={description} position="bottom">
       <span className="ml-2 cursor-help border-b border-dotted border-caution text-caution">
         Seed — needs curation
       </span>
@@ -58,12 +57,12 @@ export function StatusBadge({ status }: { status: ItemStatus }) {
 }
 
 export function ModalityLabel({ modality, direction }: { modality: Modality; direction: "Input" | "Output" }) {
-  const explanation = MODALITY_EXPLANATIONS[modality];
+  const description = MODALITY_DESCRIPTIONS[modality];
   return (
     <p className="text-ink-secondary">
       <span className="text-xs text-ink-muted">{direction}: </span>
-      {explanation ? (
-        <Tooltip content={explanation} position="bottom">
+      {description ? (
+        <Tooltip content={description} position="bottom">
           <span className="cursor-help border-b border-dotted border-ink-faint">
             {MODALITY_LABELS[modality]}
           </span>
@@ -76,10 +75,10 @@ export function ModalityLabel({ modality, direction }: { modality: Modality; dir
 }
 
 export function MechanismTag({ mechanism }: { mechanism: string }) {
-  const explanation = MECHANISM_EXPLANATIONS[mechanism];
+  const description = MECHANISM_DESCRIPTIONS[mechanism];
   const label = MECHANISM_LABELS[mechanism] ?? mechanism.replace(/_/g, " ");
   return (
-    <Tooltip content={explanation ?? `Filter by mechanism: ${label}`} position="bottom">
+    <Tooltip content={description ?? `Filter by mechanism: ${label}`} position="bottom">
       <Link
         href={`/items?mechanism=${mechanism}`}
         className="mr-2 cursor-help border-b border-dotted border-ink-faint text-ink-secondary transition-colors hover:text-accent hover:border-accent"
@@ -91,12 +90,13 @@ export function MechanismTag({ mechanism }: { mechanism: string }) {
 }
 
 export function TechniqueTag({ technique }: { technique: string }) {
+  const description = TECHNIQUE_DESCRIPTIONS[technique];
   const label = TECHNIQUE_LABELS[technique] ?? technique.replace(/_/g, " ");
   return (
-    <Tooltip content={`Filter by technique: ${label}`} position="bottom">
+    <Tooltip content={description ?? `Filter by technique: ${label}`} position="bottom">
       <Link
         href={`/items?technique=${technique}`}
-        className="mr-2 text-ink-secondary transition-colors hover:text-accent"
+        className="mr-2 cursor-help border-b border-dotted border-ink-faint text-ink-secondary transition-colors hover:text-accent hover:border-accent"
       >
         {label}
       </Link>

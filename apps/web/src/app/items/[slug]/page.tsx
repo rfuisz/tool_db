@@ -1,17 +1,11 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ITEMS } from "@/lib/data";
-import {
-  ITEM_TYPE_LABELS,
-  MATURITY_LABELS,
-  MODALITY_LABELS,
-  BIO_SYSTEM_LABELS,
-} from "@/lib/vocabularies";
 import { ScoreBreakdown } from "@/components/score-bar";
 import { ValidationMatrix } from "@/components/validation-dots";
 import { CitationList } from "@/components/citation-list";
 import { TypeBadge, MaturityBadge, StatusBadge, ModalityLabel, MechanismTag, TechniqueTag } from "@/components/detail-tooltips";
-import type { ValidationObservation } from "@/lib/types";
+import { ObservationRow } from "@/components/observation-row";
 
 export function generateStaticParams() {
   return ITEMS.map((item) => ({ slug: item.slug }));
@@ -26,61 +20,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function ObservationRow({ obs }: { obs: ValidationObservation }) {
-  const outcomeColor =
-    obs.success_outcome === "success"
-      ? "text-valid"
-      : obs.success_outcome === "mixed"
-        ? "text-caution"
-        : "text-danger";
-
-  return (
-    <div className="border-b border-edge py-4 last:border-b-0">
-      <div className="mb-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 font-ui text-sm">
-        <span className={`font-semibold ${outcomeColor}`}>
-          {obs.success_outcome}
-        </span>
-        <span className="text-ink-secondary">
-          {BIO_SYSTEM_LABELS[obs.biological_system_level]}
-        </span>
-        <span className="text-ink-muted">
-          {obs.observation_type.replace(/_/g, " ")}
-        </span>
-        {obs.species && <span className="italic text-ink-muted">{obs.species}</span>}
-        {obs.cell_type && <span className="text-ink-muted">{obs.cell_type}</span>}
-        {obs.independent_lab_cluster_id && (
-          <span className="text-brand">independent</span>
-        )}
-      </div>
-
-      {obs.construct_name && (
-        <p className="mb-0.5 font-ui text-sm text-ink-secondary">
-          Construct: <span className="font-data">{obs.construct_name}</span>
-        </p>
-      )}
-
-      {obs.assay_description && (
-        <p className="text-sm text-ink-muted">{obs.assay_description}</p>
-      )}
-
-      {obs.metrics.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 font-data text-sm">
-          {obs.metrics.map((m, i) => (
-            <span key={i} className="text-ink-secondary">
-              <span className="text-ink-muted">{m.metric_name.replace(/_/g, " ")}</span>
-              {m.value_num !== null && (
-                <span className="ml-1.5 text-ink">
-                  {m.value_num}{m.unit && ` ${m.unit}`}
-                </span>
-              )}
-              {m.qualifier && <span className="ml-1 text-ink-muted">({m.qualifier})</span>}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default async function ItemDetailPage({
   params,

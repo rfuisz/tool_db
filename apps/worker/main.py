@@ -24,6 +24,7 @@ from tool_db_backend.postgres_loader import PostgresLoadPlanExecutor
 from tool_db_backend.raw_store import RawPayloadStore
 from tool_db_backend.real_extraction_artifacts import RealExtractionArtifactBuilder
 from tool_db_backend.seed_export import SeedExporter
+from tool_db_backend.seed_loader import SeedLoader
 from tool_db_backend.schema_validation import PACKET_TO_SCHEMA, PacketValidationError, validate_packet
 from tool_db_backend.source_smoke_test import RealDataSmokeTester
 
@@ -45,6 +46,13 @@ def export_seeds(output_dir: str) -> int:
     written_paths = exporter.write_split_files(Path(output_dir))
     for path in written_paths:
         print(f"wrote: {path}")
+    return 0
+
+
+def load_seed_bundle(bundle_path: str) -> int:
+    loader = SeedLoader(get_settings())
+    result = loader.load_bundle_file(Path(bundle_path))
+    print(json.dumps({"bundle_path": bundle_path, **result}, indent=2))
     return 0
 
 
@@ -282,6 +290,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     export_parser = subparsers.add_parser("export-seeds", help="Export JSON seed artifacts from repo knowledge files.")
     export_parser.add_argument("output_dir")
 
+    load_seed_parser = subparsers.add_parser(
+        "load-seed-bundle",
+        help="Load seed items and workflows into Postgres.",
+    )
+    load_seed_parser.add_argument(
+        "bundle_path",
+        nargs="?",
+        default="db/seeds/knowledge_seed_bundle.v1.json",
+    )
+
     openalex_parser = subparsers.add_parser("fetch-openalex-work", help="Fetch an OpenAlex work payload.")
     openalex_parser.add_argument("work_id")
     openalex_parser.add_argument("--output-path")
@@ -388,6 +406,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return validate_packet_file(parsed.packet_kind, parsed.packet_path)
     if parsed.command == "export-seeds":
         return export_seeds(parsed.output_dir)
+    if parsed.command == "load-seed-bundle":
+        return load_seed_bundle(parsed.bundle_path)
     if parsed.command == "fetch-openalex-work":
         return fetch_openalex_work(parsed.work_id, parsed.output_path)
     if parsed.command == "fetch-semanticscholar-paper":

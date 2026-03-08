@@ -1,0 +1,44 @@
+id: item_phyb_pif
+slug: phyb-pif
+canonical_name: PhyB/PIF
+item_type: multi_component_switch
+status: curated
+maturity_stage: research
+family: phytochrome
+summary: >
+  Red/far-red light-inducible interaction system curated here from a mammalian
+  enablement paper that supports fully genetically encoded intracellular signaling
+  control, while the founding switch citation still needs backfill.
+primary_input_modality: light
+primary_output_modality: signaling
+external_ids: {}
+synonyms:
+  - PhyB-PIF
+  - phytochrome B / phytochrome-interacting factor
+components:
+  - PhyB
+  - PIF
+mechanisms:
+  - heterodimerization
+techniques: []
+target_processes:
+  - signaling
+  - localization
+source_status:
+  citation_backfill_required: true
+  validation_backfill_required: true
+  replication_backfill_required: true
+citation_candidates:
+  - citation_role: foundational
+    label: "Efficient synthesis of phycocyanobilin in mammalian cells for optogenetic control of cell signaling"
+    status: curated_reference
+    doi: 10.1073/pnas.1707190114
+  - citation_role: foundational
+    label: TODO add original PhyB/PIF switch paper
+    status: needs_curation
+validation_observations_seed: []
+workflow_recommendations:
+  - workflow_slug: standard-construct-loop
+    rationale: useful when chromophore supply, host context, and signaling geometry all matter
+  - workflow_slug: fast-no-cloning-screen
+    rationale: useful for quick subsystem checks when the chromophore-enablement cassette is already available

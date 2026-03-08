@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ToolkitItem } from "@/lib/types";
 import { ITEM_TYPE_LABELS, MECHANISM_LABELS, TECHNIQUE_LABELS } from "@/lib/vocabularies";
 import { Tooltip } from "./tooltip";
 import { ValidationDots } from "./validation-dots";
-import { MECHANISM_EXPLANATIONS, STATUS_EXPLANATIONS } from "@/lib/explanations";
+import { MECHANISM_DESCRIPTIONS, STATUS_DESCRIPTIONS, TECHNIQUE_DESCRIPTIONS, ITEM_TYPE_DESCRIPTIONS } from "@/lib/explanations";
 
 function Tag({
   label,
@@ -37,10 +38,21 @@ function Tag({
 }
 
 export function ItemCard({ item }: { item: ToolkitItem }) {
+  const router = useRouter();
+
   return (
-    <Link
-      href={`/items/${item.slug}`}
-      className="group block border-b border-edge py-6 transition-colors hover:border-accent"
+    <article
+      role="link"
+      tabIndex={0}
+      aria-label={`Open ${item.canonical_name}`}
+      onClick={() => router.push(`/items/${item.slug}`)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          router.push(`/items/${item.slug}`);
+        }
+      }}
+      className="group block rounded-sm border-b border-edge py-6 outline-none transition-colors hover:border-accent focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-brand/30"
     >
       {/* Top line: name + type */}
       <div className="mb-1.5 flex items-baseline justify-between gap-4">
@@ -48,7 +60,7 @@ export function ItemCard({ item }: { item: ToolkitItem }) {
           {item.canonical_name}
         </h3>
         <Tooltip
-          content={`Filter by ${ITEM_TYPE_LABELS[item.item_type]}`}
+          content={ITEM_TYPE_DESCRIPTIONS[item.item_type] ?? `Filter by ${ITEM_TYPE_LABELS[item.item_type]}`}
           position="bottom"
         >
           <Link
@@ -82,7 +94,7 @@ export function ItemCard({ item }: { item: ToolkitItem }) {
             key={m}
             label={MECHANISM_LABELS[m] ?? m.replace(/_/g, " ")}
             href={`/items?mechanism=${m}`}
-            tooltip={MECHANISM_EXPLANATIONS[m]}
+            tooltip={MECHANISM_DESCRIPTIONS[m]}
           />
         ))}
         {item.techniques.map((t) => (
@@ -90,10 +102,11 @@ export function ItemCard({ item }: { item: ToolkitItem }) {
             key={t}
             label={TECHNIQUE_LABELS[t] ?? t.replace(/_/g, " ")}
             href={`/items?technique=${t}`}
+            tooltip={TECHNIQUE_DESCRIPTIONS[t]}
           />
         ))}
         {item.status === "seed" && (
-          <Tooltip content={STATUS_EXPLANATIONS.seed} position="bottom">
+          <Tooltip content={STATUS_DESCRIPTIONS.seed} position="bottom">
             <span className="cursor-help italic text-caution">seed</span>
           </Tooltip>
         )}
@@ -136,6 +149,6 @@ export function ItemCard({ item }: { item: ToolkitItem }) {
           </div>
         ) : null}
       </div>
-    </Link>
+    </article>
   );
 }

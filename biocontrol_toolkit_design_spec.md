@@ -134,16 +134,17 @@ This captures the design-build-test loop as a compositional workflow.
 Top-level entities:
 
 - `workflow_template`
+- `workflow_stage_template`
 - `workflow_step_template`
 - `workflow_edge`
-- `workflow_cost_assumption`
-- `workflow_timing_assumption`
+- `workflow_assumption`
 - `workflow_instance_observation`
 
 This model lets you represent both:
 
 - a full loop (`design -> order DNA -> assemble -> verify -> assay -> analyze -> iterate`)
 - and the nested subcomponents (`sequencing`, `cell-free assay`, `amplicon NGS`, `clone picking`, etc.)
+- and the funnel shape above those steps (`large search space -> broad screen -> higher-fidelity characterization -> confirmatory gate`)
 
 ---
 
@@ -473,12 +474,45 @@ Fields:
 - `recommended_for`
 - `default_parallelization_assumption`
 
-### 8.2 `workflow_step_template`
+### 8.2 `workflow_stage_template`
+
+Represents one funnel stage within a workflow, such as:
+
+- in silico pre-filtering before library build
+- broad display-based enrichment
+- counter-screen against a failure mode
+- secondary functional characterization in a more realistic host
+- final confirmatory validation
 
 Fields:
 
 - `id`
 - `workflow_template_id`
+- `stage_name`
+- `stage_kind`
+- `stage_order`
+- `search_modality`
+- `input_candidate_count_typical`
+- `output_candidate_count_typical`
+- `candidate_unit`
+- `selection_basis`
+- `counterselection_basis`
+- `enriches_for_axes`
+- `guards_against_axes`
+- `preserves_downstream_property_axes`
+- `advance_criteria`
+- `bottleneck_risk`
+- `higher_fidelity_than_previous`
+
+This is the layer that represents the descending funnel explicitly, so the DB can capture not only what steps are run, but why the candidate set narrows and what later-stage failure modes the early filters are trying to avoid.
+
+### 8.3 `workflow_step_template`
+
+Fields:
+
+- `id`
+- `workflow_template_id`
+- `workflow_stage_template_id`
 - `step_name`
 - `step_type` (`design`, `dna_acquisition`, `assembly`, `transformation`, `colony_screen`, `sequence_verification`, `transfection`, `expression`, `selection_round`, `assay`, `analysis`, `decision`)
 - `duration_p10_hours`
@@ -493,15 +527,17 @@ Fields:
 - `output_artifact`
 - `input_artifact`
 
-### 8.3 `workflow_edge`
+Steps stay useful for critical-path, timing, and cost estimation. Stages stay useful for modeling attrition, proxy alignment, and fidelity escalation across a campaign.
+
+### 8.4 `workflow_edge`
 
 Connects steps and allows critical-path calculation.
 
-### 8.4 `workflow_assumption`
+### 8.5 `workflow_assumption`
 
-Store the source and rationale for any timing or pricing assumption.
+Store the source and rationale for any timing, pricing, attrition, or funnel-design assumption.
 
-### 8.5 `workflow_instance_observation`
+### 8.6 `workflow_instance_observation`
 
 Record real-world timings from your own lab or collaborators. This is what will make the system more accurate over time.
 

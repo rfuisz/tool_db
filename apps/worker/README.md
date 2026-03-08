@@ -120,6 +120,21 @@ Run one LLM extraction job:
 .venv/bin/python -m apps.worker.main run-extraction-job data/pipeline-artifacts/real-extraction-seed/openalex/jobs/optogenetics.llm_extraction_job_v1.json
 ```
 
+LLM extraction calls now go through one shared JSON-call harness with disk cache and retry handling:
+- cached responses are stored under `data/llm-cache/`
+- cache keys are hashed from the full request contract, including model, base URL, call purpose, messages, temperature, and response format
+- identical extraction or repair prompts reuse cached JSON; changing the prompt text, schema text, or job payload produces a new cache key
+- retryable transport failures and `408/409/429/5xx` responses back off and retry automatically before the worker fails
+
+Relevant settings:
+- `LLM_CACHE_ENABLED` to disable cache reads and writes
+- `LLM_RETRY_ATTEMPTS` to change total attempts
+- `LLM_RETRY_BASE_DELAY_SECONDS` and `LLM_RETRY_MAX_DELAY_SECONDS` to tune exponential backoff
+
+Prompt harness guidance:
+- keep prompts deterministic and avoid incidental churn if you want stable cache hits
+- treat prompt edits as intentional cache invalidation for future extraction runs
+
 Run a small batch of LLM extraction jobs:
 
 ```bash

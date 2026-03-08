@@ -140,38 +140,6 @@ nav, button, input, select, label, .ui-text {
   font-family: var(--font-ui);
 }
 
-/* ── Custom Selects ────────────────────────────────── */
-
-select {
-  appearance: none;
-  -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23a8a29e' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.25rem center;
-  background-size: 0.75rem;
-  padding-right: 1.5rem;
-  cursor: pointer;
-  border-radius: 0;
-  transition: border-color 0.15s ease, color 0.15s ease;
-}
-
-select:hover {
-  border-color: var(--color-edge-strong);
-  color: var(--color-ink);
-}
-
-select:focus {
-  border-color: var(--color-accent);
-  color: var(--color-ink);
-}
-
-select option {
-  background: var(--color-surface);
-  color: var(--color-ink);
-  font-family: var(--font-ui);
-  padding: 0.375rem 0.5rem;
-}
-
 /* Tabular data */
 .tabular-nums {
   font-family: var(--font-data);

@@ -10,6 +10,7 @@ data/raw/
 data/review-queue/
 data/pipeline-artifacts/
 data/extractions/
+data/llm-cache/
 .DS_Store
 # Byte-compiled / optimized / DLL files
 __pycache__/

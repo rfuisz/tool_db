@@ -248,18 +248,19 @@ def run_extraction_job(job_path: str, output_path: Optional[str] = None) -> int:
 def run_extraction_batch(job_dir: str, limit: int = 3) -> int:
     runner = LLMExtractionRunner(get_settings())
     results = []
+    failures = []
+    job_paths = sorted(Path(job_dir).glob("*.json"))[:limit]
     try:
-        job_paths = sorted(Path(job_dir).glob("*.json"))[:limit]
         for job_path in job_paths:
-            results.append(runner.run_job_file(job_path))
-    except LLMExtractionError as exc:
-        print(json.dumps({"error": str(exc), "completed_jobs": results}, indent=2))
-        return 1
+            try:
+                results.append(runner.run_job_file(job_path))
+            except LLMExtractionError as exc:
+                failures.append({"job_path": str(job_path), "error": str(exc)})
     finally:
         runner.close()
 
-    print(json.dumps({"completed_jobs": results}, indent=2))
-    return 0
+    print(json.dumps({"completed_jobs": results, "failed_jobs": failures}, indent=2))
+    return 0 if not failures else 1
 
 
 def main(argv: Optional[List[str]] = None) -> int:

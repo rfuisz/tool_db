@@ -6,6 +6,7 @@ import { ITEMS } from "@/lib/data";
 import { ITEM_TYPE_LABELS, MECHANISM_LABELS, TECHNIQUE_LABELS } from "@/lib/vocabularies";
 import type { ItemType } from "@/lib/types";
 import { ItemCard } from "@/components/item-card";
+import { FilterSelect } from "@/components/filter-select";
 
 function ItemsBrowseInner() {
   const searchParams = useSearchParams();
@@ -54,6 +55,30 @@ function ItemsBrowseInner() {
 
   const activeFilterCount = (typeFilter ? 1 : 0) + (mechanismFilter ? 1 : 0) + (techniqueFilter ? 1 : 0) + (familyFilter ? 1 : 0);
 
+  const typeOptions = [
+    { value: "", label: "All types" },
+    ...allTypes.map((t) => ({ value: t, label: ITEM_TYPE_LABELS[t as ItemType] })),
+  ];
+  const mechanismOptions = [
+    { value: "", label: "All mechanisms" },
+    ...allMechanisms.map((m) => ({ value: m, label: MECHANISM_LABELS[m] ?? m.replace(/_/g, " ") })),
+  ];
+  const techniqueOptions = [
+    { value: "", label: "All techniques" },
+    ...allTechniques.map((t) => ({ value: t, label: TECHNIQUE_LABELS[t] ?? t.replace(/_/g, " ") })),
+  ];
+  const familyOptions = [
+    { value: "", label: "All families" },
+    ...allFamilies.map((f) => ({ value: f, label: f })),
+  ];
+  const sortOptions = [
+    { value: "name", label: "Name" },
+    { value: "evidence", label: "Evidence" },
+    { value: "replication", label: "Replication" },
+    { value: "practicality", label: "Practicality" },
+    { value: "year", label: "Year" },
+  ];
+
   return (
     <div>
       <header className="mb-10">
@@ -74,40 +99,14 @@ function ItemsBrowseInner() {
           className="h-9 w-52 border-b border-edge bg-transparent px-0 text-ink placeholder-ink-muted outline-none transition-colors focus:border-accent"
         />
 
-        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}
-          className="h-9 border-b border-edge bg-transparent text-sm text-ink-secondary outline-none">
-          <option value="">All types</option>
-          {allTypes.map((t) => <option key={t} value={t}>{ITEM_TYPE_LABELS[t as ItemType]}</option>)}
-        </select>
-
-        <select value={mechanismFilter} onChange={(e) => setMechanismFilter(e.target.value)}
-          className="h-9 border-b border-edge bg-transparent text-sm text-ink-secondary outline-none">
-          <option value="">All mechanisms</option>
-          {allMechanisms.map((m) => <option key={m} value={m}>{MECHANISM_LABELS[m] ?? m.replace(/_/g, " ")}</option>)}
-        </select>
-
-        <select value={techniqueFilter} onChange={(e) => setTechniqueFilter(e.target.value)}
-          className="h-9 border-b border-edge bg-transparent text-sm text-ink-secondary outline-none">
-          <option value="">All techniques</option>
-          {allTechniques.map((t) => <option key={t} value={t}>{TECHNIQUE_LABELS[t] ?? t.replace(/_/g, " ")}</option>)}
-        </select>
-
-        <select value={familyFilter} onChange={(e) => setFamilyFilter(e.target.value)}
-          className="h-9 border-b border-edge bg-transparent text-sm text-ink-secondary outline-none">
-          <option value="">All families</option>
-          {allFamilies.map((f) => <option key={f} value={f}>{f}</option>)}
-        </select>
+        <FilterSelect value={typeFilter} onChange={setTypeFilter} options={typeOptions} placeholder="All types" />
+        <FilterSelect value={mechanismFilter} onChange={setMechanismFilter} options={mechanismOptions} placeholder="All mechanisms" />
+        <FilterSelect value={techniqueFilter} onChange={setTechniqueFilter} options={techniqueOptions} placeholder="All techniques" />
+        <FilterSelect value={familyFilter} onChange={setFamilyFilter} options={familyOptions} placeholder="All families" />
 
         <div className="ml-auto flex items-center gap-2 text-ink-muted">
           <span className="small-caps">Sort</span>
-          <select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-            className="h-9 border-b border-edge bg-transparent text-sm text-ink-secondary outline-none">
-            <option value="name">Name</option>
-            <option value="evidence">Evidence</option>
-            <option value="replication">Replication</option>
-            <option value="practicality">Practicality</option>
-            <option value="year">Year</option>
-          </select>
+          <FilterSelect value={sortBy} onChange={(v) => setSortBy(v as typeof sortBy)} options={sortOptions} placeholder="Name" />
         </div>
 
         {activeFilterCount > 0 && (

@@ -26,6 +26,10 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("OPENAI_BASE_URL", "LLM_BASE_URL"),
     )
     llm_model: str = Field(default="gpt-5.4", validation_alias=AliasChoices("OPENAI_MODEL", "LLM_MODEL"))
+    llm_cache_enabled: bool = True
+    llm_retry_attempts: int = 3
+    llm_retry_base_delay_seconds: float = 1.0
+    llm_retry_max_delay_seconds: float = 8.0
     openalex_base_url: str = "https://api.openalex.org"
     openalex_mailto: str = ""
     semantic_scholar_base_url: str = "https://api.semanticscholar.org/graph/v1"
@@ -64,6 +68,10 @@ class Settings(BaseSettings):
     @property
     def extraction_root(self) -> Path:
         return self.repo_root / "data" / "extractions"
+
+    @property
+    def llm_cache_root(self) -> Path:
+        return self.repo_root / "data" / "llm-cache"
 
 
 @lru_cache(maxsize=1)

@@ -12,3 +12,8 @@ Convert one structured database entry into a `database_entry_extract_v1` packet.
 ## Output Contract
 
 Validate against `schemas/extraction/database_entry_extract.v1.schema.json`.
+
+## Harness Notes
+
+- The caller caches JSON extraction responses against the full request payload, so prompt edits intentionally create a new cache key.
+- Keep instructions deterministic and source-focused so repeated runs for the same job can reuse the cache safely.

@@ -1,9 +1,10 @@
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import re
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
@@ -28,7 +29,11 @@ from tool_db_backend.real_extraction_artifacts import RealExtractionArtifactBuil
 from tool_db_backend.seed_export import SeedExporter
 from tool_db_backend.seed_loader import SeedLoader
 from tool_db_backend.schema_validation import PACKET_TO_SCHEMA, PacketValidationError, validate_packet
-from tool_db_backend.source_smoke_test import RealDataSmokeTester
+from tool_db_backend.source_smoke_test import (
+    RealDataHarvester,
+    RealDataSmokeTester,
+    build_first_pass_query_sets,
+)
 from tool_db_backend.source_staging import ClinicalTrialArtifactBuilder, OptoBaseSearchParser
 
 
@@ -369,11 +374,51 @@ def smoke_test_real_data(artifact_dir: Optional[str] = None) -> int:
     return 0
 
 
+def harvest_real_data(
+    artifact_dir: Optional[str] = None,
+    profile: str = "broad",
+    seed_query_limit: int = 24,
+    openalex_pages: int = 3,
+    openalex_per_page: int = 50,
+    semantic_scholar_pages: int = 3,
+    semantic_scholar_limit: int = 50,
+    optobase_query_limit: int = 12,
+) -> int:
+    settings = get_settings()
+    if profile == "smoke":
+        tester = RealDataSmokeTester(settings)
+        try:
+            result = tester.run(Path(artifact_dir) if artifact_dir else None)
+        finally:
+            tester.close()
+        print(json.dumps(result, indent=2))
+        return 0
+
+    query_sets = build_first_pass_query_sets(settings, seed_query_limit=seed_query_limit)
+    harvester = RealDataHarvester(settings)
+    try:
+        result = harvester.run(
+            artifact_dir=Path(artifact_dir) if artifact_dir else None,
+            openalex_queries=query_sets["openalex"],
+            openalex_pages=openalex_pages,
+            openalex_per_page=openalex_per_page,
+            semantic_scholar_queries=query_sets["semantic_scholar"],
+            semantic_scholar_pages=semantic_scholar_pages,
+            semantic_scholar_limit=semantic_scholar_limit,
+            optobase_queries=query_sets["optobase"][:optobase_query_limit],
+        )
+    finally:
+        harvester.close()
+    print(json.dumps(result, indent=2))
+    return 0
+
+
 def build_real_extraction_artifacts(
     manifest_path: str,
     output_dir: str,
     gap_limit: int = 80,
-    openalex_limit: int = 40,
+    openalex_limit: int = 200,
+    semantic_scholar_limit: int = 200,
 ) -> int:
     builder = RealExtractionArtifactBuilder(get_settings())
     try:
@@ -382,6 +427,7 @@ def build_real_extraction_artifacts(
             output_dir=Path(output_dir),
             gap_limit=gap_limit,
             openalex_limit=openalex_limit,
+            semantic_scholar_limit=semantic_scholar_limit,
         )
     finally:
         builder.close()
@@ -436,16 +482,24 @@ def _existing_extraction_outputs(settings, job_path: Path) -> List[Path]:
     return sorted(settings.extraction_root.glob(f"{job_path.stem}.*.json"))
 
 
+def _run_extraction_job_path(settings, job_path: Path) -> Dict[str, str]:
+    runner = LLMExtractionRunner(settings)
+    try:
+        return runner.run_job_file(job_path)
+    finally:
+        runner.close()
+
+
 def run_extraction_batch(
     job_dir: str,
-    limit: int = 3,
+    limit: Optional[int] = 50,
     include_terms: Optional[List[str]] = None,
     exclude_terms: Optional[List[str]] = None,
     skip_existing: bool = True,
     manifest_path: Optional[str] = None,
+    max_workers: int = 8,
 ) -> int:
     settings = get_settings()
-    runner = LLMExtractionRunner(get_settings())
     results = []
     failures = []
     skipped_existing = []
@@ -469,21 +523,33 @@ def run_extraction_batch(
             )
             continue
         selected_job_paths.append(job_path)
-        if len(selected_job_paths) >= limit:
+        if limit is not None and limit > 0 and len(selected_job_paths) >= limit:
             break
 
-    try:
+    if max_workers <= 1:
         for job_path in selected_job_paths:
             try:
-                results.append(runner.run_job_file(job_path))
+                results.append(_run_extraction_job_path(settings, job_path))
             except LLMExtractionError as exc:
                 failures.append({"job_path": str(job_path), "error": str(exc)})
-    finally:
-        runner.close()
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(_run_extraction_job_path, settings, job_path): job_path
+                for job_path in selected_job_paths
+            }
+            for future in as_completed(futures):
+                job_path = futures[future]
+                try:
+                    results.append(future.result())
+                except LLMExtractionError as exc:
+                    failures.append({"job_path": str(job_path), "error": str(exc)})
 
     report = {
         "job_dir": str(Path(job_dir)),
         "selected_job_count": len(selected_job_paths),
+        "limit": limit,
+        "max_workers": max_workers,
         "completed_jobs": results,
         "failed_jobs": failures,
         "skipped_existing": skipped_existing,
@@ -648,6 +714,19 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     smoke_test_parser.add_argument("--artifact-dir")
 
+    harvest_parser = subparsers.add_parser(
+        "harvest-real-data",
+        help="Fetch a broader first-pass literature/problem corpus using seed- and vocabulary-expanded queries.",
+    )
+    harvest_parser.add_argument("--artifact-dir")
+    harvest_parser.add_argument("--profile", choices=["smoke", "broad"], default="broad")
+    harvest_parser.add_argument("--seed-query-limit", type=int, default=24)
+    harvest_parser.add_argument("--openalex-pages", type=int, default=3)
+    harvest_parser.add_argument("--openalex-per-page", type=int, default=50)
+    harvest_parser.add_argument("--semantic-scholar-pages", type=int, default=3)
+    harvest_parser.add_argument("--semantic-scholar-limit", type=int, default=50)
+    harvest_parser.add_argument("--optobase-query-limit", type=int, default=12)
+
     extraction_artifacts_parser = subparsers.add_parser(
         "build-real-extraction-artifacts",
         help="Turn fetched real data into typed extraction packets and LLM job artifacts.",
@@ -655,7 +734,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     extraction_artifacts_parser.add_argument("manifest_path")
     extraction_artifacts_parser.add_argument("output_dir")
     extraction_artifacts_parser.add_argument("--gap-limit", type=int, default=80)
-    extraction_artifacts_parser.add_argument("--openalex-limit", type=int, default=40)
+    extraction_artifacts_parser.add_argument("--openalex-limit", type=int, default=200)
+    extraction_artifacts_parser.add_argument("--semantic-scholar-limit", type=int, default=200)
 
     extraction_job_parser = subparsers.add_parser(
         "run-extraction-job",
@@ -666,10 +746,21 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     extraction_batch_parser = subparsers.add_parser(
         "run-extraction-batch",
-        help="Run a small batch of LLM extraction jobs.",
+        help="Run a larger batch of LLM extraction jobs.",
     )
     extraction_batch_parser.add_argument("job_dir")
-    extraction_batch_parser.add_argument("--limit", type=int, default=3)
+    extraction_batch_parser.add_argument(
+        "--limit",
+        type=int,
+        default=50,
+        help="Maximum jobs to run; pass 0 to run all eligible jobs.",
+    )
+    extraction_batch_parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=8,
+        help="Concurrent extraction workers to run.",
+    )
     extraction_batch_parser.add_argument(
         "--include-term",
         action="append",
@@ -755,12 +846,24 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
     if parsed.command == "smoke-test-real-data":
         return smoke_test_real_data(parsed.artifact_dir)
+    if parsed.command == "harvest-real-data":
+        return harvest_real_data(
+            parsed.artifact_dir,
+            parsed.profile,
+            parsed.seed_query_limit,
+            parsed.openalex_pages,
+            parsed.openalex_per_page,
+            parsed.semantic_scholar_pages,
+            parsed.semantic_scholar_limit,
+            parsed.optobase_query_limit,
+        )
     if parsed.command == "build-real-extraction-artifacts":
         return build_real_extraction_artifacts(
             parsed.manifest_path,
             parsed.output_dir,
             parsed.gap_limit,
             parsed.openalex_limit,
+            parsed.semantic_scholar_limit,
         )
     if parsed.command == "run-extraction-job":
         return run_extraction_job(parsed.job_path, parsed.output_path)
@@ -772,6 +875,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             parsed.exclude_term,
             parsed.skip_existing,
             parsed.manifest_path,
+            parsed.max_workers,
         )
 
     parser.print_help()

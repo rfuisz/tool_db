@@ -123,6 +123,14 @@ Pull a modest real-data smoke-test batch:
 
 This fetches a small batch from literature/problem sources and writes a manifest plus raw payload snapshots so you can sanity-check entry counts and payload shape before heavier ingestion work.
 
+Harvest a much broader first-pass corpus:
+
+```bash
+.venv/bin/python -m apps.worker.main harvest-real-data --artifact-dir data/pipeline-artifacts/first-pass-harvest
+```
+
+This expands source queries from the checked-in seed bundle and controlled vocabularies, paginates across OpenAlex and Semantic Scholar, and pulls a much larger raw corpus than the smoke-test path.
+
 Build typed extraction artifacts from fetched real data:
 
 ```bash
@@ -133,6 +141,7 @@ This currently creates:
 
 - deterministic `database_entry_extract_v1` packets for a slice of Gap Map gaps
 - `primary_paper_extract_v1` metadata scaffolds for a slice of OpenAlex works
+- `primary_paper_extract_v1` and `review_extract_v1` metadata scaffolds for a slice of Semantic Scholar papers
 - structured Semantic Scholar summary artifacts for fetched search hits
 - structured OptoBase search-summary artifacts for fetched HTML result pages
 - LLM extraction job files that a future GPT-5.4 caller can execute
@@ -183,7 +192,13 @@ Agent test-visibility guidance:
 Run a small batch of LLM extraction jobs:
 
 ```bash
-.venv/bin/python -m apps.worker.main run-extraction-batch data/pipeline-artifacts/real-extraction-seed/openalex/jobs --limit 3
+.venv/bin/python -m apps.worker.main run-extraction-batch data/pipeline-artifacts/real-extraction-seed/openalex/jobs --limit 50
+```
+
+Run all eligible jobs in a directory:
+
+```bash
+.venv/bin/python -m apps.worker.main run-extraction-batch data/pipeline-artifacts/real-extraction-seed/openalex/jobs --limit 0
 ```
 
 Ingest a directory of checked-in packet files:

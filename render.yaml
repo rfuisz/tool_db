@@ -2,7 +2,7 @@ databases:
   - name: tool-db-postgres
     databaseName: tooldb
     user: tooldb
-    plan: starter
+    plan: basic_1gb
 
 services:
   - type: pserv
@@ -16,7 +16,7 @@ services:
       - key: APP_ENV
         value: production
       - key: PORT
-        value: 8000
+        value: 10000
       - key: PYTHON_VERSION
         value: 3.11.11
       - key: DATABASE_URL

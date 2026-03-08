@@ -11,19 +11,24 @@ export function FirstPassBrowseClient({
   items: FirstPassItemSummary[];
 }) {
   const [query, setQuery] = useState("");
-  const [sortBy, setSortBy] = useState<"sources" | "claims" | "name">("sources");
+  const [sortBy, setSortBy] = useState<"sources" | "claims" | "name">(
+    "sources",
+  );
 
   const filtered = useMemo(() => {
     const lowered = query.trim().toLowerCase();
     const base = lowered
       ? items.filter((item) => {
+          const evidencePreviews = item.evidence_previews ?? [];
+          const claimPreviews = item.claim_previews ?? [];
+          const aliases = item.aliases ?? [];
           const haystacks = [
             item.canonical_name,
             item.item_type ?? "",
             item.evidence_preview ?? "",
-            ...item.evidence_previews,
-            ...item.claim_previews,
-            ...item.aliases,
+            ...evidencePreviews,
+            ...claimPreviews,
+            ...aliases,
           ].map((value) => value.toLowerCase());
           return haystacks.some((value) => value.includes(lowered));
         })
@@ -53,9 +58,9 @@ export function FirstPassBrowseClient({
         <p className="small-caps mb-3">Bulk Extracted Review Layer</p>
         <h1 className="mb-3">First-pass extracted items</h1>
         <p className="max-w-3xl text-ink-secondary">
-          These records are loaded directly from extracted packets so you can judge
-          whether the system is pulling out useful entities and claims before
-          deeper canonical cleanup.
+          These records are loaded directly from extracted packets so you can
+          judge whether the system is pulling out useful entities and claims
+          before deeper canonical cleanup.
         </p>
       </header>
 
@@ -82,83 +87,97 @@ export function FirstPassBrowseClient({
       </div>
 
       <div className="space-y-4">
-        {filtered.map((item) => (
-          <article key={item.slug} className="border border-edge bg-surface p-5">
-            <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <Link
-                  href={`/first-pass/${item.slug}`}
-                  className="text-lg text-ink hover:text-accent"
-                >
-                  {item.canonical_name}
-                </Link>
-                {item.item_type ? (
-                  <p className="mt-1 font-ui text-xs uppercase tracking-wide text-ink-muted">
-                    {item.item_type.replace(/_/g, " ")}
-                  </p>
-                ) : null}
-              </div>
-              <div className="font-data text-xs tabular-nums text-ink-muted">
-                <div>{item.source_document_count} sources</div>
-                <div>{item.claim_count} claims</div>
-              </div>
-            </div>
+        {filtered.map((item) => {
+          const evidencePreviews = item.evidence_previews ?? [];
+          const claimPreviews = item.claim_previews ?? [];
+          const aliases = item.aliases ?? [];
 
-            {item.matched_slug ? (
-              <p className="mb-2 font-ui text-xs text-valid">
-                Canonical match suggestion: <code>{item.matched_slug}</code>
-              </p>
-            ) : null}
-
-            {item.aliases.length > 0 ? (
-              <p className="mb-2 font-ui text-xs text-ink-secondary">
-                Aliases: {item.aliases.slice(0, 5).join(", ")}
-              </p>
-            ) : null}
-
-            {item.evidence_previews.length > 0 ? (
-              <div className="mb-3">
-                <p className="mb-2 font-ui text-xs uppercase tracking-wide text-ink-muted">
-                  Evidence in collection view
-                </p>
-                <div className="space-y-2">
-                  {item.evidence_previews.map((preview) => (
-                    <p key={preview} className="text-sm leading-relaxed text-ink-secondary">
-                      {preview}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <p className="mb-3 text-sm text-ink-muted">No evidence snippet captured.</p>
-            )}
-
-            {item.claim_previews.length > 0 ? (
-              <div className="mb-3">
-                <p className="mb-2 font-ui text-xs uppercase tracking-wide text-ink-muted">
-                  Claim excerpts
-                </p>
-                <div className="space-y-2">
-                  {item.claim_previews.map((preview) => (
-                    <blockquote
-                      key={preview}
-                      className="border-l-2 border-accent/30 pl-3 text-sm leading-relaxed text-ink-secondary"
-                    >
-                      {preview}
-                    </blockquote>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            <Link
-              href={`/first-pass/${item.slug}`}
-              className="font-ui text-sm text-brand hover:text-accent"
+          return (
+            <article
+              key={item.slug}
+              className="border border-edge bg-surface p-5"
             >
-              Open provenance view →
-            </Link>
-          </article>
-        ))}
+              <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <Link
+                    href={`/first-pass/${item.slug}`}
+                    className="text-lg text-ink hover:text-accent"
+                  >
+                    {item.canonical_name}
+                  </Link>
+                  {item.item_type ? (
+                    <p className="mt-1 font-ui text-xs uppercase tracking-wide text-ink-muted">
+                      {item.item_type.replace(/_/g, " ")}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="font-data text-xs tabular-nums text-ink-muted">
+                  <div>{item.source_document_count} sources</div>
+                  <div>{item.claim_count} claims</div>
+                </div>
+              </div>
+
+              {item.matched_slug ? (
+                <p className="mb-2 font-ui text-xs text-valid">
+                  Canonical match suggestion: <code>{item.matched_slug}</code>
+                </p>
+              ) : null}
+
+              {aliases.length > 0 ? (
+                <p className="mb-2 font-ui text-xs text-ink-secondary">
+                  Aliases: {aliases.slice(0, 5).join(", ")}
+                </p>
+              ) : null}
+
+              {evidencePreviews.length > 0 ? (
+                <div className="mb-3">
+                  <p className="mb-2 font-ui text-xs uppercase tracking-wide text-ink-muted">
+                    Evidence in collection view
+                  </p>
+                  <div className="space-y-2">
+                    {evidencePreviews.map((preview) => (
+                      <p
+                        key={preview}
+                        className="text-sm leading-relaxed text-ink-secondary"
+                      >
+                        {preview}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="mb-3 text-sm text-ink-muted">
+                  No evidence snippet captured.
+                </p>
+              )}
+
+              {claimPreviews.length > 0 ? (
+                <div className="mb-3">
+                  <p className="mb-2 font-ui text-xs uppercase tracking-wide text-ink-muted">
+                    Claim excerpts
+                  </p>
+                  <div className="space-y-2">
+                    {claimPreviews.map((preview) => (
+                      <blockquote
+                        key={preview}
+                        className="border-l-2 border-accent/30 pl-3 text-sm leading-relaxed text-ink-secondary"
+                      >
+                        {preview}
+                      </blockquote>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <Link
+                href={`/first-pass/${item.slug}`}
+                className="font-ui text-sm text-brand hover:text-accent"
+              >
+                Open provenance view →
+              </Link>
+            </article>
+          );
+        })}
       </div>
     </div>
   );

@@ -129,6 +129,18 @@ type RawFirstPassItemDetail = Omit<FirstPassItemDetail, "evidence_snippets"> & {
   evidence_snippets?: RawFirstPassEvidenceSnippet[];
 };
 
+type RawFirstPassItemSummary = Partial<
+  Omit<
+    FirstPassItemSummary,
+    "slug" | "canonical_name" | "source_document_count" | "claim_count"
+  >
+> & {
+  slug: string;
+  canonical_name: string;
+  source_document_count: number;
+  claim_count: number;
+};
+
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
 const REVALIDATE_SECONDS = 30;
 
@@ -136,8 +148,7 @@ function getApiBaseUrl(): string {
   const internalHost = process.env.TOOL_DB_API_HOST?.trim();
   if (internalHost) {
     const internalPort = process.env.TOOL_DB_API_PORT?.trim() || "8000";
-    const internalProtocol =
-      process.env.TOOL_DB_API_PROTOCOL?.trim() || "http";
+    const internalProtocol = process.env.TOOL_DB_API_PROTOCOL?.trim() || "http";
     return `${internalProtocol}://${internalHost}:${internalPort}`.replace(
       /\/$/,
       "",
@@ -395,7 +406,9 @@ function normalizeFirstPassEvidenceSnippet(
   };
 }
 
-function normalizeFirstPassItemDetail(detail: RawFirstPassItemDetail): FirstPassItemDetail {
+function normalizeFirstPassItemDetail(
+  detail: RawFirstPassItemDetail,
+): FirstPassItemDetail {
   return {
     ...detail,
     aliases: detail.aliases ?? [],
@@ -404,6 +417,30 @@ function normalizeFirstPassItemDetail(detail: RawFirstPassItemDetail): FirstPass
     ),
     source_documents: detail.source_documents ?? [],
     claims: detail.claims ?? [],
+  };
+}
+
+function normalizeFirstPassItemSummary(
+  summary: RawFirstPassItemSummary,
+): FirstPassItemSummary {
+  const evidencePreviews = summary.evidence_previews ?? [];
+
+  return {
+    slug: summary.slug,
+    canonical_name: summary.canonical_name,
+    item_type: summary.item_type ?? null,
+    matched_slug: summary.matched_slug ?? null,
+    source_document_count: summary.source_document_count,
+    claim_count: summary.claim_count,
+    aliases: summary.aliases ?? [],
+    evidence_preview: summary.evidence_preview ?? null,
+    evidence_previews:
+      evidencePreviews.length > 0
+        ? evidencePreviews
+        : summary.evidence_preview
+          ? [summary.evidence_preview]
+          : [],
+    claim_previews: summary.claim_previews ?? [],
   };
 }
 
@@ -454,7 +491,10 @@ export async function getWorkflows(): Promise<WorkflowTemplate[]> {
 
 export async function getFirstPassItems(): Promise<FirstPassItemSummary[]> {
   try {
-    return await fetchBackendJson<FirstPassItemSummary[]>("/api/v1/first-pass-items");
+    const summaries = await fetchBackendJson<RawFirstPassItemSummary[]>(
+      "/api/v1/first-pass-items",
+    );
+    return summaries.map(normalizeFirstPassItemSummary);
   } catch {
     return [];
   }

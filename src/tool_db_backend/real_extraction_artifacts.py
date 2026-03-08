@@ -51,10 +51,12 @@ class RealExtractionArtifactBuilder:
         manifest_path: Path,
         output_dir: Path,
         gap_limit: int = 80,
-        openalex_limit: int = 40,
+        openalex_limit: int = 200,
+        semantic_scholar_limit: int = 200,
     ) -> Dict[str, Any]:
         manifest = json.loads(manifest_path.read_text())
         output_dir.mkdir(parents=True, exist_ok=True)
+        seen_document_keys = set()
 
         gap_packets = self._build_gap_packets(
             Path(manifest["sources"]["gap_map"]["raw_paths"]["gaps"]),
@@ -68,6 +70,16 @@ class RealExtractionArtifactBuilder:
             ],
             output_dir=output_dir / "openalex",
             limit=openalex_limit,
+            seen_document_keys=seen_document_keys,
+        )
+        semantic_scholar_outputs = self._build_semantic_scholar_packets_and_jobs(
+            raw_search_paths=[
+                Path(path)
+                for path in manifest["sources"].get("semantic_scholar", {}).get("raw_paths", {}).values()
+            ],
+            output_dir=output_dir / "semantic_scholar",
+            limit=semantic_scholar_limit,
+            seen_document_keys=seen_document_keys,
         )
         semantic_scholar_summaries = self._build_semantic_scholar_summaries(
             raw_search_paths=[
@@ -90,11 +102,15 @@ class RealExtractionArtifactBuilder:
             "gap_map_packet_count": len(gap_packets),
             "openalex_packet_count": len(openalex_outputs["packets"]),
             "openalex_job_count": len(openalex_outputs["jobs"]),
+            "semantic_scholar_packet_count": len(semantic_scholar_outputs["packets"]),
+            "semantic_scholar_job_count": len(semantic_scholar_outputs["jobs"]),
             "semantic_scholar_summary_count": len(semantic_scholar_summaries),
             "optobase_summary_count": len(optobase_summaries),
             "gap_map_packets": [str(path) for path in gap_packets],
             "openalex_packets": [str(path) for path in openalex_outputs["packets"]],
             "openalex_jobs": [str(path) for path in openalex_outputs["jobs"]],
+            "semantic_scholar_packets": [str(path) for path in semantic_scholar_outputs["packets"]],
+            "semantic_scholar_jobs": [str(path) for path in semantic_scholar_outputs["jobs"]],
             "semantic_scholar_summaries": [str(path) for path in semantic_scholar_summaries],
             "optobase_summaries": [str(path) for path in optobase_summaries],
         }
@@ -224,6 +240,7 @@ class RealExtractionArtifactBuilder:
         raw_search_paths: List[Path],
         output_dir: Path,
         limit: int,
+        seen_document_keys: Optional[set[str]] = None,
     ) -> Dict[str, List[Path]]:
         packets_dir = output_dir / "packets"
         jobs_dir = output_dir / "jobs"
@@ -233,6 +250,7 @@ class RealExtractionArtifactBuilder:
         self._clear_json_outputs(jobs_dir)
 
         seen_ids = set()
+        seen_document_keys = seen_document_keys if seen_document_keys is not None else set()
         packet_paths: List[Path] = []
         job_paths: List[Path] = []
 
@@ -276,66 +294,27 @@ class RealExtractionArtifactBuilder:
                     "retraction_metadata": {},
                     "raw_payload_ref": str(raw_path),
                 })
-                if is_review:
-                    packet = {
-                        "packet_type": "review_extract_v1",
-                        "schema_version": "v1",
-                        "source_document": source_document,
-                        "review_scope": "Metadata scaffold from OpenAlex review search result.",
-                        "entity_candidates": [],
-                        "claims": [],
-                        "workflow_stage_observations": [],
-                        "recommended_seed_item_local_ids": [],
-                        "unresolved_ambiguities": [
-                            {
-                                "issue": "Metadata scaffold only; title and abstract still need review-level extraction.",
-                                "detail": "Prepared from OpenAlex search results for later LLM extraction.",
-                                "severity": "medium",
-                            }
-                        ],
-                    }
-                    packet_kind = "review_extract_v1"
-                    prompt_template = "prompts/extraction/review_extract_v1.md"
-                    schema_path = "schemas/extraction/review_extract.v1.schema.json"
-                else:
-                    packet = {
-                        "packet_type": "primary_paper_extract_v1",
-                        "schema_version": "v1",
-                        "source_document": source_document,
-                        "entity_candidates": [],
-                        "claims": [],
-                        "validation_observations": [],
-                        "workflow_stage_observations": [],
-                        "replication_signals": {},
-                        "unresolved_ambiguities": [
-                            {
-                                "issue": "Metadata scaffold only; title and abstract still need claim extraction.",
-                                "detail": "Prepared from OpenAlex search results for later LLM extraction.",
-                                "severity": "medium",
-                            }
-                        ],
-                    }
-                    packet_kind = "primary_paper_extract_v1"
-                    prompt_template = "prompts/extraction/primary_paper_extract_v1.md"
-                    schema_path = "schemas/extraction/primary_paper_extract.v1.schema.json"
-
-                validate_packet(packet_kind, packet, self.settings)
-                packet_path = self._unique_output_path(
-                    packets_dir,
-                    slug=slug,
-                    suffix=f".{packet_kind}.json",
-                    external_id=openalex_id,
+                document_key = self._document_key_from_fields(
+                    title=source_document["title"],
+                    doi=doi,
+                    pmid=pmid,
+                    provider_id=openalex_id,
+                    provider_name="openalex",
                 )
-                packet_path.write_text(json.dumps(packet, indent=2) + "\n")
-                packet_paths.append(packet_path)
+                if document_key in seen_document_keys:
+                    continue
+                seen_document_keys.add(document_key)
 
-                job = {
-                    "job_type": "llm_extraction_job_v1",
-                    "target_packet_type": packet_kind,
-                    "prompt_template": prompt_template,
-                    "schema_path": schema_path,
-                    "source_document": source_document,
-                    "input_context": {
+                packet_path, job_path = self._write_literature_packet_and_job(
+                    packets_dir=packets_dir,
+                    jobs_dir=jobs_dir,
+                    slug=slug,
+                    external_id=openalex_id,
+                    source_document=source_document,
+                    abstract_text=abstract_text,
+                    is_review=is_review,
+                    unresolved_detail="Prepared from OpenAlex search results for later LLM extraction.",
+                    input_context={
                         "title": source_document["title"],
                         "abstract_text": abstract_text,
                         "openalex_metadata": {
@@ -346,19 +325,94 @@ class RealExtractionArtifactBuilder:
                         "semantic_scholar_metadata": enrichment.get("semantic_scholar"),
                         "enrichment_metadata": enrichment,
                     },
-                    "notes": [
-                        "LLM extraction should populate packet content conservatively from available evidence.",
-                        "Do not invent canonical item IDs or merges.",
-                        "Preserve source_document identifiers and metadata from the job payload when they are already supplied.",
-                    ],
-                }
-                job_path = self._unique_output_path(
-                    jobs_dir,
-                    slug=slug,
-                    suffix=".llm_extraction_job_v1.json",
-                    external_id=openalex_id,
                 )
-                job_path.write_text(json.dumps(job, indent=2) + "\n")
+                packet_paths.append(packet_path)
+                job_paths.append(job_path)
+
+            if len(packet_paths) >= limit:
+                break
+
+        return {"packets": packet_paths, "jobs": job_paths}
+
+    def _build_semantic_scholar_packets_and_jobs(
+        self,
+        raw_search_paths: List[Path],
+        output_dir: Path,
+        limit: int,
+        seen_document_keys: Optional[set[str]] = None,
+    ) -> Dict[str, List[Path]]:
+        packets_dir = output_dir / "packets"
+        jobs_dir = output_dir / "jobs"
+        packets_dir.mkdir(parents=True, exist_ok=True)
+        jobs_dir.mkdir(parents=True, exist_ok=True)
+        self._clear_json_outputs(packets_dir)
+        self._clear_json_outputs(jobs_dir)
+
+        seen_ids = set()
+        seen_document_keys = seen_document_keys if seen_document_keys is not None else set()
+        packet_paths: List[Path] = []
+        job_paths: List[Path] = []
+
+        for raw_path in raw_search_paths:
+            raw_wrapper = json.loads(raw_path.read_text())
+            for result in raw_wrapper.get("payload", {}).get("data", []):
+                paper_id = result.get("paperId")
+                if not paper_id or paper_id in seen_ids:
+                    continue
+                seen_ids.add(paper_id)
+                if len(packet_paths) >= limit:
+                    break
+
+                title = result.get("title") or paper_id
+                doi = self._normalize_doi((result.get("externalIds") or {}).get("DOI"))
+                pmid = str((result.get("externalIds") or {}).get("PubMed") or "").strip() or None
+                source_document = _compact_dict({
+                    "source_type": "review" if self._is_semantic_scholar_review(result) else "primary_paper",
+                    "title": title,
+                    "doi": doi,
+                    "pmid": pmid,
+                    "semantic_scholar_id": paper_id,
+                    "publication_year": result.get("year"),
+                    "journal_or_source": self._extract_semantic_scholar_source_name(result),
+                    "abstract_text": result.get("abstract"),
+                    "raw_payload_ref": str(raw_path),
+                })
+                document_key = self._document_key_from_fields(
+                    title=title,
+                    doi=doi,
+                    pmid=pmid,
+                    provider_id=paper_id,
+                    provider_name="semantic_scholar",
+                )
+                if document_key in seen_document_keys:
+                    continue
+                seen_document_keys.add(document_key)
+
+                slug = _slugify(title)
+                packet_path, job_path = self._write_literature_packet_and_job(
+                    packets_dir=packets_dir,
+                    jobs_dir=jobs_dir,
+                    slug=slug,
+                    external_id=paper_id,
+                    source_document=source_document,
+                    abstract_text=result.get("abstract") or "",
+                    is_review=source_document["source_type"] == "review",
+                    unresolved_detail="Prepared from Semantic Scholar search results for later LLM extraction.",
+                    input_context={
+                        "title": title,
+                        "abstract_text": result.get("abstract"),
+                        "semantic_scholar_metadata": {
+                            "paperId": paper_id,
+                            "year": result.get("year"),
+                            "citationCount": result.get("citationCount"),
+                            "externalIds": result.get("externalIds", {}),
+                            "publicationTypes": result.get("publicationTypes", []),
+                            "journal": result.get("journal"),
+                            "venue": result.get("venue"),
+                        },
+                    },
+                )
+                packet_paths.append(packet_path)
                 job_paths.append(job_path)
 
             if len(packet_paths) >= limit:
@@ -390,6 +444,21 @@ class RealExtractionArtifactBuilder:
         return source.get("display_name")
 
     @staticmethod
+    def _extract_semantic_scholar_source_name(result: Dict[str, Any]) -> Optional[str]:
+        journal = result.get("journal") or {}
+        if isinstance(journal, dict):
+            name = journal.get("name")
+            if name:
+                return name
+        venue = result.get("venue")
+        return venue if isinstance(venue, str) and venue.strip() else None
+
+    @staticmethod
+    def _is_semantic_scholar_review(result: Dict[str, Any]) -> bool:
+        publication_types = [str(value).strip().casefold() for value in (result.get("publicationTypes") or [])]
+        return any("review" in value for value in publication_types)
+
+    @staticmethod
     def _clear_json_outputs(directory: Path) -> None:
         for path in directory.glob("*.json"):
             path.unlink()
@@ -401,6 +470,115 @@ class RealExtractionArtifactBuilder:
             return candidate
         safe_external = _slugify(external_id.rsplit("/", 1)[-1])
         return directory / f"{slug}-{safe_external}{suffix}"
+
+    @staticmethod
+    def _document_key_from_fields(
+        *,
+        title: str,
+        doi: Optional[str],
+        pmid: Optional[str],
+        provider_id: str,
+        provider_name: str,
+    ) -> str:
+        if doi:
+            return f"doi:{doi.casefold()}"
+        if pmid:
+            return f"pmid:{pmid}"
+        normalized_title = title.strip().casefold()
+        if normalized_title:
+            return f"title:{normalized_title}"
+        return f"{provider_name}:{provider_id}"
+
+    def _write_literature_packet_and_job(
+        self,
+        *,
+        packets_dir: Path,
+        jobs_dir: Path,
+        slug: str,
+        external_id: str,
+        source_document: Dict[str, Any],
+        abstract_text: str,
+        is_review: bool,
+        unresolved_detail: str,
+        input_context: Dict[str, Any],
+    ) -> tuple[Path, Path]:
+        if is_review:
+            packet = {
+                "packet_type": "review_extract_v1",
+                "schema_version": "v1",
+                "source_document": source_document,
+                "review_scope": "Metadata scaffold from literature search result.",
+                "entity_candidates": [],
+                "claims": [],
+                "workflow_stage_observations": [],
+                "recommended_seed_item_local_ids": [],
+                "unresolved_ambiguities": [
+                    {
+                        "issue": "Metadata scaffold only; title and abstract still need review-level extraction.",
+                        "detail": unresolved_detail,
+                        "severity": "medium",
+                    }
+                ],
+            }
+            packet_kind = "review_extract_v1"
+            prompt_template = "prompts/extraction/review_extract_v1.md"
+            schema_path = "schemas/extraction/review_extract.v1.schema.json"
+        else:
+            packet = {
+                "packet_type": "primary_paper_extract_v1",
+                "schema_version": "v1",
+                "source_document": source_document,
+                "entity_candidates": [],
+                "claims": [],
+                "validation_observations": [],
+                "workflow_stage_observations": [],
+                "replication_signals": {},
+                "unresolved_ambiguities": [
+                    {
+                        "issue": "Metadata scaffold only; title and abstract still need claim extraction.",
+                        "detail": unresolved_detail,
+                        "severity": "medium",
+                    }
+                ],
+            }
+            packet_kind = "primary_paper_extract_v1"
+            prompt_template = "prompts/extraction/primary_paper_extract_v1.md"
+            schema_path = "schemas/extraction/primary_paper_extract.v1.schema.json"
+
+        validate_packet(packet_kind, packet, self.settings)
+        packet_path = self._unique_output_path(
+            packets_dir,
+            slug=slug,
+            suffix=f".{packet_kind}.json",
+            external_id=external_id,
+        )
+        packet_path.write_text(json.dumps(packet, indent=2) + "\n")
+
+        job = {
+            "job_type": "llm_extraction_job_v1",
+            "target_packet_type": packet_kind,
+            "prompt_template": prompt_template,
+            "schema_path": schema_path,
+            "source_document": source_document,
+            "input_context": input_context,
+            "notes": [
+                "LLM extraction should populate packet content conservatively from available evidence.",
+                "Do not invent canonical item IDs or merges.",
+                "Preserve source_document identifiers and metadata from the job payload when they are already supplied.",
+            ],
+        }
+        if "title" not in job["input_context"]:
+            job["input_context"]["title"] = source_document["title"]
+        if "abstract_text" not in job["input_context"]:
+            job["input_context"]["abstract_text"] = abstract_text
+        job_path = self._unique_output_path(
+            jobs_dir,
+            slug=slug,
+            suffix=".llm_extraction_job_v1.json",
+            external_id=external_id,
+        )
+        job_path.write_text(json.dumps(job, indent=2) + "\n")
+        return packet_path, job_path
 
     def _enrich_openalex_work(self, title: str, doi: Optional[str], pmid: Optional[str]) -> Dict[str, Any]:
         europe_pmc_result = self.europe_pmc_client.fetch_by_doi_or_pmid(doi=doi, pmid=pmid)

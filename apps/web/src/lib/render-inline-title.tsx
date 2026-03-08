@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 
 const ENCODED_EMPHASIS_TAG_PATTERN = /&lt;(\/?)(i|em)&gt;/gi;
 const EMPHASIS_TAG_PATTERN = /<\/?(?:i|em)>/i;
-const EMPHASIS_SEGMENT_PATTERN = /<(i|em)>(.*?)<\/\1>/gis;
+// Avoid the dotAll flag so Render's current TypeScript target can compile this file.
+const EMPHASIS_SEGMENT_PATTERN = /<(i|em)>([\s\S]*?)<\/\1>/gi;
 
 export function renderInlineTitle(title: string): ReactNode {
   const normalized = title.replace(ENCODED_EMPHASIS_TAG_PATTERN, "<$1$2>");

@@ -116,3 +116,46 @@ def test_item_materializer_builds_literature_backed_comparisons_before_heuristic
     assert comparisons[0]["related_item_id"] == "phyb-pif"
     assert comparisons[0]["relation_type"] == "source_stated_alternative"
     assert comparisons[0]["evidence_payload"]["source_kind"] == "literature_extract"
+
+
+def test_item_materializer_uses_claims_when_no_literature_explainers_exist() -> None:
+    materializer = ItemMaterializer(get_settings())
+    context = _empty_context("Am1_c0023g2", "am1-c0023g2")
+    context.claims = [
+        {
+            "id": "claim-1",
+            "claim_type": "application_result",
+            "claim_text_normalized": "Am1_c0023g2 enables light-dependent control of transcription in yeast.",
+            "source_locator": {
+                "quoted_text": "We demonstrate light-dependent control of transcription in yeast using Am1_c0023g2-derived tools."
+            },
+            "source_document": _source_document("source-1", "CBCR Tools Paper"),
+        },
+        {
+            "id": "claim-2",
+            "claim_type": "engineering_result",
+            "claim_text_normalized": "Am1_c0023g2 binders were developed for different photostates under PCB and biliverdin conditions.",
+            "source_locator": {
+                "quoted_text": "We developed monomeric binders selective for different Am1_c0023g2 photostates under PCB and biliverdin conditions."
+            },
+            "source_document": _source_document("source-2", "Binder Engineering Paper"),
+        },
+    ]
+    replication_summary = {
+        "independent_primary_paper_count": 0,
+        "distinct_biological_contexts": 0,
+        "practicality_penalties": [],
+        "orphan_tool_flag": False,
+    }
+
+    explainers = materializer._derive_explainers(  # noqa: SLF001
+        context,
+        replication_summary=replication_summary,
+        facets=[],
+        problem_links=[],
+    )
+    explainers_by_kind = {explainer["explainer_kind"]: explainer for explainer in explainers}
+
+    assert explainers_by_kind["usefulness"]["evidence_payload"]["source_kind"] == "canonical_claim"
+    assert "light-dependent control of transcription in yeast" in explainers_by_kind["usefulness"]["body"]
+    assert explainers_by_kind["implementation_constraints"]["evidence_payload"]["source_kind"] == "canonical_claim"

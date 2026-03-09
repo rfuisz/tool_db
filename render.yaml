@@ -8,6 +8,7 @@ services:
   - type: pserv
     name: tool-db-api
     runtime: python
+    autoDeployTrigger: commit
     plan: starter
     buildCommand: python -m pip install --upgrade pip && python -m pip install .
     preDeployCommand: python -m apps.worker.main populate-local-db
@@ -23,16 +24,21 @@ services:
         fromDatabase:
           name: tool-db-postgres
           property: connectionString
+      - key: TOOL_DB_ADMIN_SYNC_KEY
+        sync: false
 
   - type: web
     name: tool-db-web
     runtime: node
+    autoDeployTrigger: commit
     plan: starter
     buildCommand: cd apps/web && npm install && npm run build
     startCommand: cd apps/web && node .next/standalone/server.js
     envVars:
       - key: NODE_VERSION
         value: 22.14.0
+      - key: TOOL_DB_ADMIN_SYNC_KEY
+        sync: false
       - key: TOOL_DB_API_PROTOCOL
         value: http
       - key: TOOL_DB_API_HOST

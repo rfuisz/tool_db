@@ -1542,7 +1542,7 @@ class KnowledgeRepository:
                 citation_role = "foundational"
             if document.source_type in {"primary_paper", "preprint", "trial_record"}:
                 primary_primary_seen = True
-            example_text = _strip_inline_markup(str((row["example_texts"] or [""])[0])).strip()
+            example_text = str((row["example_texts"] or [""])[0]).strip()
             why_this_matters = (
                 f"Derived from {row['claim_count']} linked claims"
                 + (

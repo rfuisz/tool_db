@@ -1,11 +1,7 @@
 import Link from "next/link";
-import { getItems, getExtractedWorkflows } from "@/lib/backend-data";
-import { getAllFamilies } from "@/lib/data";
+import { getItemAggregates, getExtractedWorkflows } from "@/lib/backend-data";
 import {
   MECHANISM_HIERARCHY_SECTIONS,
-  buildMechanismConceptSummaries,
-  buildTechniqueConceptSummaries,
-  getItemTypeCount,
   getOrderedItemTypes,
   TECHNIQUE_HIERARCHY_SECTIONS,
 } from "@/lib/item-hierarchy";
@@ -14,31 +10,39 @@ import {
   MECHANISM_LABELS,
   TECHNIQUE_LABELS,
 } from "@/lib/vocabularies";
-import type { ItemType } from "@/lib/types";
+import {
+  MECHANISM_DESCRIPTIONS,
+  TECHNIQUE_DESCRIPTIONS,
+} from "@/lib/explanations";
+import type { ItemType, ItemAggregateTypeBucket } from "@/lib/types";
+
+function bucketMap(buckets: ItemAggregateTypeBucket[]): Record<string, number> {
+  const map: Record<string, number> = {};
+  for (const b of buckets) map[b.value] = b.count;
+  return map;
+}
 
 export default async function Home() {
-  const [items, extractedWorkflows] = await Promise.all([
-    getItems(),
+  const [aggregates, extractedWorkflows] = await Promise.all([
+    getItemAggregates(),
     getExtractedWorkflows(),
   ]);
-  const typeCounts = items.reduce<Record<string, number>>((acc, item) => {
-    acc[item.item_type] = (acc[item.item_type] || 0) + 1;
-    return acc;
-  }, {});
 
-  const withReplication = items.filter(
-    (i) => i.replication_summary && !i.replication_summary.orphan_tool_flag,
-  );
-  const avgEvidence = withReplication.length
-    ? withReplication.reduce(
-        (s, i) => s + (i.replication_summary?.evidence_strength_score ?? 0),
-        0,
-      ) / withReplication.length
-    : null;
+  const typeCounts = bucketMap(aggregates.by_item_type);
+  const mechCounts = bucketMap(aggregates.by_mechanism);
+  const techCounts = bucketMap(aggregates.by_technique);
 
-  const families = getAllFamilies(items);
-  const mechanismConcepts = buildMechanismConceptSummaries(items);
-  const techniqueConcepts = buildTechniqueConceptSummaries(items);
+  const mechanismKeys = aggregates.by_mechanism
+    .map((b) => b.value)
+    .sort((a, b) =>
+      (MECHANISM_LABELS[a] ?? a).localeCompare(MECHANISM_LABELS[b] ?? b),
+    );
+
+  const techniqueKeys = aggregates.by_technique
+    .map((b) => b.value)
+    .sort((a, b) =>
+      (TECHNIQUE_LABELS[a] ?? a).localeCompare(TECHNIQUE_LABELS[b] ?? b),
+    );
 
   return (
     <div>
@@ -86,25 +90,20 @@ Or am I a wild storm, or a great song?`}
         {/* Stats as a quiet data line */}
         <div className="mt-8 flex flex-wrap gap-x-8 gap-y-2 font-data text-sm tracking-wide text-ink-muted">
           <span>
-            <strong className="text-ink">{items.length}</strong> items
+            <strong className="text-ink">{aggregates.total_items}</strong> items
           </span>
           <span>
-            <strong className="text-ink">{families.length}</strong> families
+            <strong className="text-ink">{aggregates.total_families}</strong> families
           </span>
           <span>
             <strong className="text-ink">{extractedWorkflows.length}</strong> workflows
           </span>
-          {avgEvidence !== null && (
+          {aggregates.avg_evidence_score !== null && (
             <span>
               <strong className="text-ink">
-                {Math.round(avgEvidence * 100)}
+                {Math.round(aggregates.avg_evidence_score * 100)}
               </strong>{" "}
               avg evidence score
-            </span>
-          )}
-          {items.some((i) => i.status === "seed") && (
-            <span className="text-caution">
-              seed data &mdash; curation in progress
             </span>
           )}
         </div>
@@ -149,27 +148,27 @@ Or am I a wild storm, or a great song?`}
                   <div className="mt-3">
                     {section.id === "mechanism" ? (
                       <div className="grid gap-3 md:grid-cols-2">
-                        {mechanismConcepts.map((concept) => {
+                        {mechanismKeys.map((key) => {
+                          const count = mechCounts[key] ?? 0;
+                          const description =
+                            MECHANISM_DESCRIPTIONS[key] ??
+                            "A mechanism-level grouping derived from the current toolkit evidence.";
                           return (
                             <Link
-                              key={concept.key}
-                              href={`/mechanisms/${encodeURIComponent(concept.key)}`}
+                              key={key}
+                              href={`/mechanisms/${encodeURIComponent(key)}`}
                               className="group rounded border border-edge p-4 transition-colors hover:border-accent"
                             >
                               <div className="flex items-baseline justify-between gap-3">
                                 <span className="font-display text-lg text-ink group-hover:text-accent">
-                                  {MECHANISM_LABELS[concept.key] ?? concept.label}
+                                  {MECHANISM_LABELS[key] ?? key.replace(/_/g, " ")}
                                 </span>
                                 <span className="font-data text-xs text-ink-muted">
-                                  {concept.totalCount}
+                                  {count}
                                 </span>
                               </div>
                               <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-                                {concept.summary}
-                              </p>
-                              <p className="mt-3 font-ui text-xs text-ink-muted">
-                                {concept.architectureCount} architectures ·{" "}
-                                {concept.componentCount} components
+                                {description}
                               </p>
                             </Link>
                           );
@@ -178,7 +177,7 @@ Or am I a wild storm, or a great song?`}
                     ) : (
                       <div className="space-y-3">
                         {getOrderedItemTypes(section.itemTypes ?? [])
-                          .filter((type) => typeCounts[type] > 0)
+                          .filter((type) => (typeCounts[type] ?? 0) > 0)
                           .map((type) => (
                             <Link
                               key={type}
@@ -189,7 +188,7 @@ Or am I a wild storm, or a great song?`}
                                 {ITEM_TYPE_LABELS[type as ItemType]}
                               </span>
                               <span className="font-data text-sm tabular-nums text-ink-muted">
-                                {getItemTypeCount(items, type)}
+                                {typeCounts[type] ?? 0}
                               </span>
                             </Link>
                           ))}
@@ -228,26 +227,27 @@ Or am I a wild storm, or a great song?`}
                   <div className="mt-3">
                     {section.id === "technique" ? (
                       <div className="grid gap-3 md:grid-cols-2">
-                        {techniqueConcepts.map((concept) => {
+                        {techniqueKeys.map((key) => {
+                          const count = techCounts[key] ?? 0;
+                          const description =
+                            TECHNIQUE_DESCRIPTIONS[key] ??
+                            "A technique-level grouping derived from the current toolkit evidence.";
                           return (
                             <Link
-                              key={concept.key}
-                              href={`/techniques/${encodeURIComponent(concept.key)}`}
+                              key={key}
+                              href={`/techniques/${encodeURIComponent(key)}`}
                               className="group rounded border border-edge p-4 transition-colors hover:border-accent"
                             >
                               <div className="flex items-baseline justify-between gap-3">
                                 <span className="font-display text-lg text-ink group-hover:text-accent">
-                                  {TECHNIQUE_LABELS[concept.key] ?? concept.label}
+                                  {TECHNIQUE_LABELS[key] ?? key.replace(/_/g, " ")}
                                 </span>
                                 <span className="font-data text-xs text-ink-muted">
-                                  {concept.totalCount}
+                                  {count}
                                 </span>
                               </div>
                               <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-                                {concept.summary}
-                              </p>
-                              <p className="mt-3 font-ui text-xs text-ink-muted">
-                                {concept.methodCount} methods
+                                {description}
                               </p>
                             </Link>
                           );
@@ -256,7 +256,7 @@ Or am I a wild storm, or a great song?`}
                     ) : (
                       <div className="space-y-3">
                         {getOrderedItemTypes(section.itemTypes ?? [])
-                          .filter((type) => typeCounts[type] > 0)
+                          .filter((type) => (typeCounts[type] ?? 0) > 0)
                           .map((type) => (
                             <Link
                               key={type}
@@ -267,7 +267,7 @@ Or am I a wild storm, or a great song?`}
                                 {ITEM_TYPE_LABELS[type as ItemType]}
                               </span>
                               <span className="font-data text-sm tabular-nums text-ink-muted">
-                                {getItemTypeCount(items, type)}
+                                {typeCounts[type] ?? 0}
                               </span>
                             </Link>
                           ))}
@@ -279,28 +279,25 @@ Or am I a wild storm, or a great song?`}
             </div>
           </div>
         </div>
-        {families.length >= 3 && (
+        {aggregates.by_family.length > 0 && (
           <>
             <p className="mt-4 max-w-3xl text-sm leading-relaxed text-ink-secondary">
               Families group related lineages that share evolutionary or engineering
               ancestry. They complement the mechanism and technique hierarchies above.
             </p>
             <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
-              {families.map((f) => {
-                const count = items.filter((i) => i.family === f).length;
-                return (
-                  <Link
-                    key={f}
-                    href={`/items?family=${encodeURIComponent(f)}`}
-                    className="group font-body text-base text-ink-secondary transition-colors hover:text-accent"
-                  >
-                    {f}
-                    <sup className="ml-0.5 font-data text-xs text-ink-muted group-hover:text-accent">
-                      {count}
-                    </sup>
-                  </Link>
-                );
-              })}
+              {aggregates.by_family.map((f) => (
+                <Link
+                  key={f.value}
+                  href={`/items?family=${encodeURIComponent(f.value)}`}
+                  className="group font-body text-base text-ink-secondary transition-colors hover:text-accent"
+                >
+                  {f.value}
+                  <sup className="ml-0.5 font-data text-xs text-ink-muted group-hover:text-accent">
+                    {f.count}
+                  </sup>
+                </Link>
+              ))}
             </div>
           </>
         )}

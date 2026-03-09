@@ -14,6 +14,8 @@ import type {
   ClaimMetric,
   GapDetail,
   GapSummary,
+  ItemAggregateResponse,
+  ItemBrowseResponse,
   ItemClaim,
   ItemComparison,
   ItemCitation,
@@ -608,6 +610,105 @@ export async function getItems(): Promise<ToolkitItem[]> {
     return deduplicateBySlug(getSeedItems());
     }
     throw backendUnavailableError("canonical item browse", error);
+  }
+}
+
+export type ItemBrowseParams = {
+  q?: string;
+  type?: string[];
+  mechanism?: string[];
+  technique?: string[];
+  family?: string[];
+  maturity_stage?: string[];
+  status?: string[];
+  has_independent_replication?: boolean;
+  has_mouse_in_vivo_validation?: boolean;
+  has_therapeutic_use?: boolean;
+  sort?: string;
+  limit?: number;
+  offset?: number;
+};
+
+export async function getItemsBrowse(
+  params: ItemBrowseParams,
+): Promise<ItemBrowseResponse> {
+  const qs = new URLSearchParams();
+  if (params.q) qs.set("q", params.q);
+  for (const t of params.type ?? []) qs.append("type", t);
+  for (const m of params.mechanism ?? []) qs.append("mechanism", m);
+  for (const t of params.technique ?? []) qs.append("technique", t);
+  for (const f of params.family ?? []) qs.append("family", f);
+  for (const s of params.maturity_stage ?? []) qs.append("maturity_stage", s);
+  for (const s of params.status ?? []) qs.append("status", s);
+  if (params.has_independent_replication !== undefined)
+    qs.set("has_independent_replication", String(params.has_independent_replication));
+  if (params.has_mouse_in_vivo_validation !== undefined)
+    qs.set("has_mouse_in_vivo_validation", String(params.has_mouse_in_vivo_validation));
+  if (params.has_therapeutic_use !== undefined)
+    qs.set("has_therapeutic_use", String(params.has_therapeutic_use));
+  if (params.sort) qs.set("sort", params.sort);
+  if (params.limit) qs.set("limit", String(params.limit));
+  if (params.offset) qs.set("offset", String(params.offset));
+
+  const queryString = qs.toString();
+  const path = queryString
+    ? `/api/v1/items-browse?${queryString}`
+    : "/api/v1/items-browse";
+
+  const raw = await fetchBackendJson<
+    | BackendItemBrowse[]
+    | { total: number; limit: number; offset: number; items: BackendItemBrowse[] }
+  >(path);
+
+  if (Array.isArray(raw)) {
+    const items = deduplicateBySlug(raw.map(mapBackendBrowseItem));
+    return { total: items.length, limit: items.length, offset: 0, items };
+  }
+  return {
+    total: raw.total,
+    limit: raw.limit,
+    offset: raw.offset,
+    items: deduplicateBySlug(raw.items.map(mapBackendBrowseItem)),
+  };
+}
+
+export async function getItemAggregates(): Promise<ItemAggregateResponse> {
+  try {
+    return await fetchBackendJson<ItemAggregateResponse>("/api/v1/items-aggregate");
+  } catch (error) {
+    if (ALLOW_SEED_FALLBACK) {
+      const items = getSeedItems();
+      const byType: Record<string, number> = {};
+      const byMech: Record<string, number> = {};
+      const byTech: Record<string, number> = {};
+      const byFamily: Record<string, number> = {};
+      const scores: number[] = [];
+      for (const item of items) {
+        byType[item.item_type] = (byType[item.item_type] || 0) + 1;
+        for (const m of item.mechanisms) byMech[m] = (byMech[m] || 0) + 1;
+        for (const t of item.techniques) byTech[t] = (byTech[t] || 0) + 1;
+        if (item.family) byFamily[item.family] = (byFamily[item.family] || 0) + 1;
+        const rs = item.replication_summary;
+        if (rs && rs.evidence_strength_score != null && !rs.orphan_tool_flag)
+          scores.push(rs.evidence_strength_score);
+      }
+      const bucket = (map: Record<string, number>) =>
+        Object.entries(map)
+          .sort((a, b) => b[1] - a[1])
+          .map(([value, count]) => ({ value, count }));
+      return {
+        total_items: items.length,
+        total_families: Object.keys(byFamily).length,
+        avg_evidence_score: scores.length
+          ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 100) / 100
+          : null,
+        by_item_type: bucket(byType),
+        by_mechanism: bucket(byMech),
+        by_technique: bucket(byTech),
+        by_family: bucket(byFamily).filter((b) => b.count >= 3),
+      };
+    }
+    throw backendUnavailableError("item aggregates", error);
   }
 }
 

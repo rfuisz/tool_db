@@ -9,6 +9,8 @@ from tool_db_backend.config import Settings
 
 logger = logging.getLogger(__name__)
 from tool_db_backend.gap_linking import GAP_LINK_SCORE_VERSION
+from dataclasses import dataclass, field
+
 from tool_db_backend.models import (
     ApprovedItemClaim,
     ApprovedItemEvidence,
@@ -34,7 +36,10 @@ from tool_db_backend.models import (
     GapFieldSummary,
     GapResourceSummary,
     GapSummary,
+    ItemAggregateResponse,
+    ItemAggregateTypeBucket,
     ItemBrowse,
+    ItemBrowseResponse,
     ItemDetail,
     ItemComparison,
     ItemExplainer,
@@ -51,6 +56,23 @@ from tool_db_backend.models import (
     WorkflowDetail,
     WorkflowSummary,
 )
+
+
+@dataclass
+class ItemBrowseFilters:
+    q: Optional[str] = None
+    item_types: List[str] = field(default_factory=list)
+    mechanisms: List[str] = field(default_factory=list)
+    techniques: List[str] = field(default_factory=list)
+    families: List[str] = field(default_factory=list)
+    maturity_stages: List[str] = field(default_factory=list)
+    statuses: List[str] = field(default_factory=list)
+    has_independent_replication: Optional[bool] = None
+    has_mouse_in_vivo_validation: Optional[bool] = None
+    has_therapeutic_use: Optional[bool] = None
+    sort: str = "name"
+    limit: int = 20
+    offset: int = 0
 
 
 def _dedupe_preserving_order(values: List[str]) -> List[str]:
@@ -79,6 +101,21 @@ class KnowledgeRepository:
             except Exception:
                 logger.exception("Database item-browse listing failed, falling back to files")
         return [self._item_browse_from_detail(self._get_item_from_files(summary.slug)) for summary in self.list_items()]
+
+    def list_item_browse_filtered(self, filters: ItemBrowseFilters) -> ItemBrowseResponse:
+        if self._should_use_database():
+            return self._list_item_browse_filtered_from_database(filters)
+        all_items = self.list_item_browse()
+        total = len(all_items)
+        start = min(filters.offset, total)
+        end = min(start + filters.limit, total)
+        return ItemBrowseResponse(total=total, limit=filters.limit, offset=filters.offset, items=all_items[start:end])
+
+    def get_item_aggregates(self) -> ItemAggregateResponse:
+        if self._should_use_database():
+            return self._get_item_aggregates_from_database()
+        all_items = self.list_item_browse()
+        return self._compute_aggregates_from_items(all_items)
 
     def list_items(self) -> List[ItemSummary]:
         if self._should_use_database():
@@ -1125,6 +1162,289 @@ class KnowledgeRepository:
                     )
 
                 return [ItemBrowse(**browse_by_id[item_id]) for item_id in ordered_item_ids]
+
+    def _list_item_browse_filtered_from_database(self, filters: ItemBrowseFilters) -> ItemBrowseResponse:
+        with self._connect() as conn:
+            with conn.cursor() as cursor:
+                where_clauses: List[str] = []
+                params: List[Any] = []
+
+                if filters.q:
+                    where_clauses.append("""(
+                        ti.canonical_name ILIKE %s
+                        OR ti.summary ILIKE %s
+                        OR ti.family ILIKE %s
+                        OR EXISTS (SELECT 1 FROM item_synonym s WHERE s.item_id = ti.id AND s.synonym ILIKE %s)
+                        OR EXISTS (SELECT 1 FROM item_mechanism m WHERE m.item_id = ti.id AND m.mechanism_name ILIKE %s)
+                        OR EXISTS (SELECT 1 FROM item_technique t WHERE t.item_id = ti.id AND t.technique_name ILIKE %s)
+                        OR EXISTS (SELECT 1 FROM item_target_process tp WHERE tp.item_id = ti.id AND tp.target_process ILIKE %s)
+                    )""")
+                    pattern = f"%{filters.q}%"
+                    params.extend([pattern] * 7)
+
+                if filters.item_types:
+                    where_clauses.append(f"ti.item_type::text = ANY(%s)")
+                    params.append(filters.item_types)
+
+                if filters.mechanisms:
+                    where_clauses.append(
+                        "EXISTS (SELECT 1 FROM item_mechanism m WHERE m.item_id = ti.id AND LOWER(m.mechanism_name) = ANY(%s))"
+                    )
+                    params.append([v.lower() for v in filters.mechanisms])
+
+                if filters.techniques:
+                    where_clauses.append(
+                        "EXISTS (SELECT 1 FROM item_technique t WHERE t.item_id = ti.id AND LOWER(t.technique_name) = ANY(%s))"
+                    )
+                    params.append([v.lower() for v in filters.techniques])
+
+                if filters.families:
+                    where_clauses.append("LOWER(ti.family) = ANY(%s)")
+                    params.append([v.lower() for v in filters.families])
+
+                if filters.maturity_stages:
+                    where_clauses.append("ti.maturity_stage::text = ANY(%s)")
+                    params.append(filters.maturity_stages)
+
+                if filters.statuses:
+                    where_clauses.append("ti.status::text = ANY(%s)")
+                    params.append(filters.statuses)
+
+                if filters.has_independent_replication is not None:
+                    where_clauses.append(
+                        "EXISTS (SELECT 1 FROM item_validation_rollup_v1 vr WHERE vr.item_id = ti.id AND vr.has_independent_replication = %s)"
+                    )
+                    params.append(filters.has_independent_replication)
+
+                if filters.has_mouse_in_vivo_validation is not None:
+                    where_clauses.append(
+                        "EXISTS (SELECT 1 FROM item_validation_rollup_v1 vr WHERE vr.item_id = ti.id AND vr.has_mouse_in_vivo_validation = %s)"
+                    )
+                    params.append(filters.has_mouse_in_vivo_validation)
+
+                if filters.has_therapeutic_use is not None:
+                    where_clauses.append(
+                        "EXISTS (SELECT 1 FROM item_validation_rollup_v1 vr WHERE vr.item_id = ti.id AND vr.has_therapeutic_use = %s)"
+                    )
+                    params.append(filters.has_therapeutic_use)
+
+                where_sql = (" AND ".join(where_clauses)) if where_clauses else "TRUE"
+
+                sort_map = {
+                    "name": "ti.canonical_name ASC, ti.slug ASC",
+                    "year": "COALESCE(ti.first_publication_year, 9999) ASC, ti.canonical_name ASC",
+                    "score": "COALESCE(rs.evidence_strength_score, 0) + COALESCE(rs.replication_score, 0) + COALESCE(rs.practicality_score, 0) DESC, ti.canonical_name ASC",
+                    "evidence": "COALESCE(rs.evidence_strength_score, 0) DESC, ti.canonical_name ASC",
+                    "replication": "COALESCE(rs.replication_score, 0) DESC, ti.canonical_name ASC",
+                    "practicality": "COALESCE(rs.practicality_score, 0) DESC, ti.canonical_name ASC",
+                }
+                order_sql = sort_map.get(filters.sort, sort_map["name"])
+                needs_rs_join = filters.sort in ("score", "evidence", "replication", "practicality")
+
+                rs_join = "LEFT JOIN replication_summary rs ON rs.item_id = ti.id" if needs_rs_join else ""
+
+                cursor.execute(
+                    f"SELECT COUNT(*) FROM toolkit_item ti {rs_join} WHERE {where_sql}",
+                    params,
+                )
+                total = cursor.fetchone()[0]
+
+                limit = max(1, min(filters.limit, 500))
+                offset = max(0, filters.offset)
+
+                cursor.execute(
+                    f"""
+                    SELECT ti.id, ti.slug, ti.canonical_name, ti.item_type::text, ti.status::text,
+                           ti.family, ti.summary, ti.first_publication_year,
+                           ti.primary_input_modality::text, ti.primary_output_modality::text,
+                           ti.maturity_stage::text
+                    FROM toolkit_item ti
+                    {rs_join}
+                    WHERE {where_sql}
+                    ORDER BY {order_sql}
+                    LIMIT %s OFFSET %s
+                    """,
+                    params + [limit, offset],
+                )
+                rows = cursor.fetchall()
+
+                if not rows:
+                    return ItemBrowseResponse(total=total, limit=limit, offset=offset, items=[])
+
+                browse_by_id: Dict[Any, Dict[str, Any]] = {}
+                ordered_item_ids: List[Any] = []
+                for row in rows:
+                    item_id = row[0]
+                    ordered_item_ids.append(item_id)
+                    browse_by_id[item_id] = {
+                        "slug": row[1], "canonical_name": row[2], "item_type": row[3],
+                        "status": row[4], "family": row[5], "summary": row[6],
+                        "first_publication_year": row[7], "primary_input_modality": row[8],
+                        "primary_output_modality": row[9], "maturity_stage": row[10],
+                        "synonyms": [], "components": [], "mechanisms": [],
+                        "techniques": [], "target_processes": [],
+                        "validation_rollup": None, "replication_summary": None,
+                    }
+
+                id_tuple = tuple(ordered_item_ids)
+                self._hydrate_browse_relations(cursor, browse_by_id, id_tuple)
+
+                items = [ItemBrowse(**browse_by_id[item_id]) for item_id in ordered_item_ids]
+                return ItemBrowseResponse(total=total, limit=limit, offset=offset, items=items)
+
+    def _hydrate_browse_relations(
+        self, cursor: Any, browse_by_id: Dict[Any, Dict[str, Any]], item_ids: tuple
+    ) -> None:
+        if not item_ids:
+            return
+
+        placeholders = ",".join(["%s"] * len(item_ids))
+
+        for table, col, key in [
+            ("item_synonym", "synonym", "synonyms"),
+            ("item_mechanism", "mechanism_name", "mechanisms"),
+            ("item_technique", "technique_name", "techniques"),
+            ("item_target_process", "target_process", "target_processes"),
+        ]:
+            cursor.execute(
+                f"SELECT item_id, {col} FROM {table} WHERE item_id IN ({placeholders}) ORDER BY {col} ASC",
+                item_ids,
+            )
+            for item_id, value in cursor.fetchall():
+                if item_id in browse_by_id:
+                    browse_by_id[item_id][key].append(value)
+
+        cursor.execute(
+            f"""
+            SELECT ic.parent_item_id, component.canonical_name
+            FROM item_component ic
+            JOIN toolkit_item component ON component.id = ic.component_item_id
+            WHERE ic.parent_item_id IN ({placeholders})
+            ORDER BY component.canonical_name ASC
+            """,
+            item_ids,
+        )
+        for item_id, value in cursor.fetchall():
+            if item_id in browse_by_id:
+                browse_by_id[item_id]["components"].append(value)
+
+        cursor.execute(
+            f"""
+            SELECT item_id, has_cell_free_validation, has_bacterial_validation,
+                   has_mammalian_cell_validation, has_mouse_in_vivo_validation,
+                   has_human_clinical_validation, has_therapeutic_use, has_independent_replication
+            FROM item_validation_rollup_v1
+            WHERE item_id IN ({placeholders})
+            """,
+            item_ids,
+        )
+        for row in cursor.fetchall():
+            if row[0] in browse_by_id:
+                browse_by_id[row[0]]["validation_rollup"] = ValidationRollupRecord(
+                    has_cell_free_validation=bool(row[1]),
+                    has_bacterial_validation=bool(row[2]),
+                    has_mammalian_cell_validation=bool(row[3]),
+                    has_mouse_in_vivo_validation=bool(row[4]),
+                    has_human_clinical_validation=bool(row[5]),
+                    has_therapeutic_use=bool(row[6]),
+                    has_independent_replication=bool(row[7]),
+                )
+
+        cursor.execute(
+            f"""
+            SELECT item_id, score_version, primary_paper_count, independent_primary_paper_count,
+                   distinct_last_author_clusters, distinct_institutions, distinct_biological_contexts,
+                   years_since_first_report, downstream_application_count, orphan_tool_flag,
+                   practicality_penalties, evidence_strength_score, replication_score,
+                   practicality_score, translatability_score, explanation
+            FROM replication_summary
+            WHERE item_id IN ({placeholders})
+            """,
+            item_ids,
+        )
+        for row in cursor.fetchall():
+            if row[0] in browse_by_id:
+                browse_by_id[row[0]]["replication_summary"] = ReplicationSummaryRecord(
+                    score_version=row[1], primary_paper_count=row[2],
+                    independent_primary_paper_count=row[3], distinct_last_author_clusters=row[4],
+                    distinct_institutions=row[5], distinct_biological_contexts=row[6],
+                    years_since_first_report=row[7], downstream_application_count=row[8],
+                    orphan_tool_flag=bool(row[9]), practicality_penalties=list(row[10] or []),
+                    evidence_strength_score=float(row[11]) if row[11] is not None else None,
+                    replication_score=float(row[12]) if row[12] is not None else None,
+                    practicality_score=float(row[13]) if row[13] is not None else None,
+                    translatability_score=float(row[14]) if row[14] is not None else None,
+                    explanation=row[15] or {},
+                )
+
+    def _get_item_aggregates_from_database(self) -> ItemAggregateResponse:
+        with self._connect() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT COUNT(*) FROM toolkit_item")
+                total_items = cursor.fetchone()[0]
+
+                cursor.execute("SELECT COUNT(DISTINCT family) FROM toolkit_item WHERE family IS NOT NULL AND family != ''")
+                total_families = cursor.fetchone()[0]
+
+                cursor.execute(
+                    "SELECT AVG(evidence_strength_score) FROM replication_summary "
+                    "WHERE evidence_strength_score IS NOT NULL "
+                    "AND item_id NOT IN (SELECT item_id FROM replication_summary WHERE orphan_tool_flag = TRUE)"
+                )
+                avg_row = cursor.fetchone()
+                avg_evidence = round(float(avg_row[0]), 2) if avg_row and avg_row[0] is not None else None
+
+                cursor.execute("SELECT item_type::text, COUNT(*) FROM toolkit_item GROUP BY item_type ORDER BY COUNT(*) DESC")
+                by_type = [ItemAggregateTypeBucket(value=r[0], count=r[1]) for r in cursor.fetchall()]
+
+                cursor.execute("SELECT mechanism_name, COUNT(DISTINCT item_id) FROM item_mechanism GROUP BY mechanism_name ORDER BY COUNT(DISTINCT item_id) DESC")
+                by_mechanism = [ItemAggregateTypeBucket(value=r[0], count=r[1]) for r in cursor.fetchall()]
+
+                cursor.execute("SELECT technique_name, COUNT(DISTINCT item_id) FROM item_technique GROUP BY technique_name ORDER BY COUNT(DISTINCT item_id) DESC")
+                by_technique = [ItemAggregateTypeBucket(value=r[0], count=r[1]) for r in cursor.fetchall()]
+
+                cursor.execute("SELECT family, COUNT(*) FROM toolkit_item WHERE family IS NOT NULL AND family != '' GROUP BY family HAVING COUNT(*) >= 3 ORDER BY COUNT(*) DESC")
+                by_family = [ItemAggregateTypeBucket(value=r[0], count=r[1]) for r in cursor.fetchall()]
+
+                return ItemAggregateResponse(
+                    total_items=total_items,
+                    total_families=total_families,
+                    avg_evidence_score=avg_evidence,
+                    by_item_type=by_type,
+                    by_mechanism=by_mechanism,
+                    by_technique=by_technique,
+                    by_family=by_family,
+                )
+
+    @staticmethod
+    def _compute_aggregates_from_items(items: List[ItemBrowse]) -> ItemAggregateResponse:
+        from collections import Counter
+        type_counts: Counter[str] = Counter()
+        mech_counts: Counter[str] = Counter()
+        tech_counts: Counter[str] = Counter()
+        family_counts: Counter[str] = Counter()
+        evidence_scores: List[float] = []
+        for item in items:
+            type_counts[item.item_type] += 1
+            for m in item.mechanisms:
+                mech_counts[m] += 1
+            for t in item.techniques:
+                tech_counts[t] += 1
+            if item.family:
+                family_counts[item.family] += 1
+            rs = item.replication_summary
+            if rs and rs.evidence_strength_score is not None and not rs.orphan_tool_flag:
+                evidence_scores.append(rs.evidence_strength_score)
+
+        return ItemAggregateResponse(
+            total_items=len(items),
+            total_families=len(family_counts),
+            avg_evidence_score=round(sum(evidence_scores) / len(evidence_scores), 2) if evidence_scores else None,
+            by_item_type=[ItemAggregateTypeBucket(value=k, count=v) for k, v in type_counts.most_common()],
+            by_mechanism=[ItemAggregateTypeBucket(value=k, count=v) for k, v in mech_counts.most_common()],
+            by_technique=[ItemAggregateTypeBucket(value=k, count=v) for k, v in tech_counts.most_common()],
+            by_family=[ItemAggregateTypeBucket(value=k, count=v) for k, v in family_counts.most_common() if v >= 3],
+        )
 
     def _get_item_from_database(self, slug: str) -> Optional[ItemDetail]:
         with self._connect() as conn:

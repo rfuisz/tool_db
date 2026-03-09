@@ -74,10 +74,10 @@ Recommended deployment is the repo-root `render.yaml` blueprint. It provisions:
 On each Render deploy, the API service runs:
 
 ```bash
-python -m apps.worker.main populate-local-db
+python -m apps.worker.main run-migrations
 ```
 
-That means a normal git push is the hosted sync trigger: Render redeploys, reruns migrations, reloads the checked-in seed bundle, and ingests the checked-in packet artifacts into hosted Postgres before the new API version goes live.
+Migrations are applied automatically. Data is synced to hosted Postgres separately via the incremental sync mechanism (not on every deploy).
 
 The API is intentionally private on Render. The public site reaches it over Render's internal network using `TOOL_DB_API_HOST` and `TOOL_DB_API_PORT`, so you do not have to expose a second public endpoint just to keep the UI synced.
 

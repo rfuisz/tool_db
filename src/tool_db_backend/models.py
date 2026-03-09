@@ -121,6 +121,28 @@ class ItemBrowse(ItemSummary):
     replication_summary: Optional[ReplicationSummaryRecord] = None
 
 
+class ItemBrowseResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    items: List[ItemBrowse]
+
+
+class ItemAggregateTypeBucket(BaseModel):
+    value: str
+    count: int
+
+
+class ItemAggregateResponse(BaseModel):
+    total_items: int
+    total_families: int
+    avg_evidence_score: Optional[float] = None
+    by_item_type: List[ItemAggregateTypeBucket] = Field(default_factory=list)
+    by_mechanism: List[ItemAggregateTypeBucket] = Field(default_factory=list)
+    by_technique: List[ItemAggregateTypeBucket] = Field(default_factory=list)
+    by_family: List[ItemAggregateTypeBucket] = Field(default_factory=list)
+
+
 class ItemRelationLink(BaseModel):
     slug: str
     canonical_name: str

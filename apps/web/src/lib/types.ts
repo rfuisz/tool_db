@@ -658,3 +658,25 @@ export interface FirstPassEntityDetail extends FirstPassEntitySummary {
 export type FirstPassItemSummary = FirstPassEntitySummary;
 
 export type FirstPassItemDetail = FirstPassEntityDetail;
+
+export interface ItemBrowseResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  items: ToolkitItem[];
+}
+
+export interface ItemAggregateTypeBucket {
+  value: string;
+  count: number;
+}
+
+export interface ItemAggregateResponse {
+  total_items: number;
+  total_families: number;
+  avg_evidence_score: number | null;
+  by_item_type: ItemAggregateTypeBucket[];
+  by_mechanism: ItemAggregateTypeBucket[];
+  by_technique: ItemAggregateTypeBucket[];
+  by_family: ItemAggregateTypeBucket[];
+}

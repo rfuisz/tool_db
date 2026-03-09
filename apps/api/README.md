@@ -32,9 +32,9 @@ When `DATABASE_URL` is set, the read layer prefers Postgres so hosted deployment
 The repo-root `render.yaml` blueprint deploys this service with:
 
 - `DATABASE_URL` from a managed Render Postgres instance
-- `preDeployCommand: python -m apps.worker.main populate-local-db`
+- `preDeployCommand: python -m apps.worker.main run-migrations`
 - a private-service network boundary so only your own Render services can reach it
 
-That makes each code push a hosted data refresh for the checked-in bundle and extraction artifacts.
+Migrations are applied on each deploy. Data is synced to hosted Postgres separately via the incremental sync mechanism.
 
 For one-off curator syncs from localhost, the hosted web app can proxy a SQL dump upload into `POST /api/v1/admin/import-db`. Protect that path with `TOOL_DB_ADMIN_SYNC_KEY` on both the web and API services; callers must send it via `x-api-key` or `Authorization: Bearer`.

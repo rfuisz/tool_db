@@ -1,6 +1,9 @@
-import gzip
+from __future__ import annotations
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+import gzip
+from typing import Optional, Union
+
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from tool_db_backend.config import Settings, get_settings
@@ -13,7 +16,9 @@ from tool_db_backend.models import (
     GapDetail,
     GapSummary,
     HealthResponse,
+    ItemAggregateResponse,
     ItemBrowse,
+    ItemBrowseResponse,
     ItemDetail,
     ItemSummary,
     SourceRegistryEntry,
@@ -21,6 +26,7 @@ from tool_db_backend.models import (
     WorkflowDetail,
     WorkflowSummary,
 )
+from tool_db_backend.repository import ItemBrowseFilters
 from tool_db_backend.render_db_sync import (
     RenderDbSyncError,
     get_database_import_preflight,
@@ -107,9 +113,53 @@ def create_app() -> FastAPI:
     def list_items(repo: KnowledgeRepository = Depends(get_repository)) -> list[ItemSummary]:
         return repo.list_items()
 
-    @app.get("/api/v1/items-browse", response_model=list[ItemBrowse])
-    def list_item_browse(repo: KnowledgeRepository = Depends(get_repository)) -> list[ItemBrowse]:
-        return repo.list_item_browse()
+    @app.get("/api/v1/items-browse")
+    def list_item_browse(
+        q: Optional[str] = None,
+        type: list[str] = Query(default=[]),
+        mechanism: list[str] = Query(default=[]),
+        technique: list[str] = Query(default=[]),
+        family: list[str] = Query(default=[]),
+        maturity_stage: list[str] = Query(default=[]),
+        status: list[str] = Query(default=[]),
+        has_independent_replication: Optional[bool] = None,
+        has_mouse_in_vivo_validation: Optional[bool] = None,
+        has_therapeutic_use: Optional[bool] = None,
+        sort: str = "name",
+        limit: int = Query(default=0, ge=0),
+        offset: int = Query(default=0, ge=0),
+        repo: KnowledgeRepository = Depends(get_repository),
+    ) -> Union[list[ItemBrowse], ItemBrowseResponse]:
+        has_any_filter = (
+            q or type or mechanism or technique or family
+            or maturity_stage or status
+            or (has_independent_replication is not None)
+            or (has_mouse_in_vivo_validation is not None)
+            or (has_therapeutic_use is not None)
+            or limit > 0
+        )
+        if not has_any_filter:
+            return repo.list_item_browse()
+        filters = ItemBrowseFilters(
+            q=q,
+            item_types=type,
+            mechanisms=mechanism,
+            techniques=technique,
+            families=family,
+            maturity_stages=maturity_stage,
+            statuses=status,
+            has_independent_replication=has_independent_replication,
+            has_mouse_in_vivo_validation=has_mouse_in_vivo_validation,
+            has_therapeutic_use=has_therapeutic_use,
+            sort=sort,
+            limit=limit if limit > 0 else 20,
+            offset=offset,
+        )
+        return repo.list_item_browse_filtered(filters)
+
+    @app.get("/api/v1/items-aggregate", response_model=ItemAggregateResponse)
+    def get_item_aggregates(repo: KnowledgeRepository = Depends(get_repository)) -> ItemAggregateResponse:
+        return repo.get_item_aggregates()
 
     @app.get("/api/v1/items/{slug}", response_model=ItemDetail)
     def get_item(slug: str, repo: KnowledgeRepository = Depends(get_repository)) -> ItemDetail:

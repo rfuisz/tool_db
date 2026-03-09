@@ -48,10 +48,10 @@ The repo now includes a root `render.yaml` blueprint that provisions:
 The hosted sync model is git-driven. On each Render deploy, the API service runs:
 
 ```bash
-python -m apps.worker.main populate-local-db
+python -m apps.worker.main run-migrations
 ```
 
-That reruns migrations, reloads the checked-in seed bundle, ingests the checked-in extraction artifacts into hosted Postgres, and rematerializes canonical item detail outputs before traffic shifts.
+Migrations are applied automatically. Data is synced to hosted Postgres separately via the incremental sync mechanism, not on every deploy.
 
 Practical implication:
 

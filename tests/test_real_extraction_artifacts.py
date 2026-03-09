@@ -11,6 +11,7 @@ class _FakeEuropePMCClient:
             return {
                 "doi": doi,
                 "pmid": pmid,
+                "pmcid": "PMC1234567",
                 "abstractText": "Europe PMC abstract with enough detail to prefer over a short OpenAlex reconstruction.",
                 "journalTitle": "Example Journal",
                 "pubType": "journal article",
@@ -22,9 +23,30 @@ class _FakeEuropePMCClient:
         return None
 
 
+class _FakePMCClient:
+    def fetch_bioc_fulltext(self, pmcid):
+        assert pmcid == "PMC1234567"
+        return {
+            "documents": [
+                {
+                    "passages": [
+                        {"infons": {"section_type": "ABSTRACT"}, "text": "Abstract passage."},
+                        {"infons": {"section_type": "RESULTS"}, "text": "Results passage."},
+                        {"infons": {"section_type": "DISCUSSION"}, "text": "Discussion passage."},
+                    ]
+                }
+            ]
+        }
+
+    def close(self):
+        return None
+
+
 def test_real_extraction_artifact_builder_writes_packets_and_jobs(tmp_path: Path) -> None:
     manifest_path = tmp_path / "manifest.json"
     gap_raw_path = tmp_path / "gaps.json"
+    capability_raw_path = tmp_path / "capabilities.json"
+    resource_raw_path = tmp_path / "resources.json"
     openalex_raw_path = tmp_path / "openalex.json"
 
     gap_raw_path.write_text(
@@ -44,6 +66,8 @@ def test_real_extraction_artifact_builder_writes_packets_and_jobs(tmp_path: Path
             }
         )
     )
+    capability_raw_path.write_text(json.dumps({"payload": []}))
+    resource_raw_path.write_text(json.dumps({"payload": []}))
     openalex_raw_path.write_text(
         json.dumps(
             {
@@ -84,14 +108,24 @@ def test_real_extraction_artifact_builder_writes_packets_and_jobs(tmp_path: Path
         json.dumps(
             {
                 "sources": {
-                    "gap_map": {"raw_paths": {"gaps": str(gap_raw_path)}},
+                        "gap_map": {
+                            "raw_paths": {
+                                "gaps": str(gap_raw_path),
+                                "capabilities": str(capability_raw_path),
+                                "resources": str(resource_raw_path),
+                            }
+                        },
                     "openalex": {"raw_paths": {"optogenetic": str(openalex_raw_path)}},
                 }
             }
         )
     )
 
-    builder = RealExtractionArtifactBuilder(get_settings(), europe_pmc_client=_FakeEuropePMCClient())
+    builder = RealExtractionArtifactBuilder(
+        get_settings(),
+        europe_pmc_client=_FakeEuropePMCClient(),
+        pmc_client=_FakePMCClient(),
+    )
     result = builder.build_from_smoke_test_manifest(manifest_path, tmp_path / "out", gap_limit=1, openalex_limit=2)
 
     assert result["gap_map_packet_count"] == 1
@@ -105,4 +139,7 @@ def test_real_extraction_artifact_builder_writes_packets_and_jobs(tmp_path: Path
     assert review_packet.exists()
     article_payload = json.loads(article_job.read_text())
     assert article_payload["input_context"]["abstract_text"].startswith("Europe PMC abstract")
-    assert article_payload["input_context"]["enrichment_metadata"]["source"] == "europe_pmc"
+    assert article_payload["input_context"]["enrichment_metadata"]["source"] == "openalex_enrichment"
+    assert article_payload["input_context"]["pmc_bioc_available"] is True
+    assert "[RESULTS]" in article_payload["input_context"]["pmc_bioc_preview_text"]
+    assert article_payload["source_document"]["fulltext_license_status"] == "open_access"

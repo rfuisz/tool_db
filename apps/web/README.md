@@ -28,6 +28,7 @@ The web app now exposes read-only JSON endpoints alongside the UI:
 
 | Route               | Description                                                                                                                      |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/v1/items-browse` via backend | Single-call browse payload used by the web app for hierarchy pages and large item lists                                                |
 | `/api/items`        | Filterable item search with `q`, `type`, `mechanism`, `technique`, `family`, `maturity_stage`, `status`, and validation booleans |
 | `/api/items/[slug]` | Full item payload for one canonical item                                                                                         |
 | `/api/workflows`    | Workflow search with `q` and `workflow_family`                                                                                   |
@@ -80,12 +81,19 @@ That means a normal git push is the hosted sync trigger: Render redeploys, rerun
 
 The API is intentionally private on Render. The public site reaches it over Render's internal network using `TOOL_DB_API_HOST` and `TOOL_DB_API_PORT`, so you do not have to expose a second public endpoint just to keep the UI synced.
 
+Local failure mode:
+
+- canonical pages now expect a real backend API
+- if the backend is missing or serving stale routes, the frontend throws a clear error instead of silently falling back to the small bundled seed dataset
+- only set `TOOL_DB_ALLOW_SEED_FALLBACK=true` if you explicitly want that legacy fallback behavior
+
 Important boundary:
 
 - Render syncs checked-in repo state, not ad hoc local-only database mutations.
 - If you changed data only in your local Postgres, export or check in the corresponding repo artifacts before pushing.
 - The footer now renders a small deployment badge with the active service, branch, short commit, and API target so stale or mismatched Render services are easier to spot.
 - When you run the web app on `localhost`, the top nav also exposes a `Sync Render DB` control that can overwrite the hosted Render Postgres database from your local Postgres after a confirmation prompt.
+- If `TOOL_DB_SYNC_TARGET_URL` and `TOOL_DB_ADMIN_SYNC_KEY` are both set locally, that control switches to the hosted import path and uploads a local `pg_dump --inserts` SQL dump to the hosted `/api/admin/import-db` route instead of requiring direct Postgres connectivity.
 
 **Manual Render settings if you do not use the blueprint:**
 

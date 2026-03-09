@@ -97,6 +97,17 @@ type BackendValidationObservation = Omit<
 type BackendReplicationSummary = ToolkitItem["replication_summary"];
 type BackendValidationRollup = ValidationRollup;
 
+type BackendItemBrowse = BackendItemSummary & {
+  maturity_stage?: MaturityStage | null;
+  synonyms?: string[];
+  components?: string[];
+  mechanisms?: string[];
+  techniques?: string[];
+  target_processes?: string[];
+  validation_rollup?: BackendValidationRollup | null;
+  replication_summary?: BackendReplicationSummary | null;
+};
+
 type BackendItemDetail = BackendItemSummary & {
   maturity_stage?: MaturityStage | null;
   synonyms?: string[];
@@ -238,6 +249,7 @@ type RawFirstPassEntitySummary = Partial<
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
 const REVALIDATE_SECONDS = 30;
+const ALLOW_SEED_FALLBACK = process.env.TOOL_DB_ALLOW_SEED_FALLBACK === "true";
 
 type FetchBackendJsonOptions = {
   cacheMode?: "revalidate" | "no-store";
@@ -277,6 +289,19 @@ async function fetchBackendJson<T>(
   }
 
   return (await response.json()) as T;
+}
+
+function backendUnavailableError(
+  resourceName: string,
+  error: unknown,
+): Error {
+  const detail =
+    error instanceof Error ? error.message : typeof error === "string" ? error : "unknown backend error";
+  return new Error(
+    `Backend data unavailable for ${resourceName} from ${getApiBaseUrl()}. ` +
+      `The frontend no longer silently falls back to the bundled seed dataset unless TOOL_DB_ALLOW_SEED_FALLBACK=true. ` +
+      `Make sure the local API is running and serving current routes. Original error: ${detail}`,
+  );
 }
 
 function coerceModality(value: string | null | undefined): Modality | null {
@@ -422,6 +447,49 @@ function mapBackendItem(detail: BackendItemDetail): ToolkitItem {
     evidence_markdown: detail.evidence_markdown,
     replication_markdown: detail.replication_markdown,
     workflow_fit_markdown: detail.workflow_fit_markdown,
+  };
+}
+
+function mapBackendBrowseItem(detail: BackendItemBrowse): ToolkitItem {
+  const itemId = `item_${detail.slug.replace(/-/g, "_")}`;
+  const synonyms = detail.synonyms ?? [];
+  return {
+    id: itemId,
+    slug: detail.slug,
+    canonical_name: detail.canonical_name,
+    item_type: normalizeItemType(
+      detail.item_type,
+      detail.canonical_name,
+      detail.summary,
+      synonyms,
+    ),
+    family: detail.family ?? null,
+    summary: detail.summary ?? null,
+    status: detail.status,
+    maturity_stage: detail.maturity_stage ?? "research",
+    first_publication_year: detail.first_publication_year ?? null,
+    primary_input_modality: coerceModality(detail.primary_input_modality),
+    primary_output_modality: coerceModality(detail.primary_output_modality),
+    components: detail.components ?? [],
+    mechanisms: detail.mechanisms ?? [],
+    techniques: detail.techniques ?? [],
+    target_processes: detail.target_processes ?? [],
+    synonyms,
+    validation_rollup: detail.validation_rollup ?? null,
+    replication_summary: detail.replication_summary ?? null,
+    citations: [],
+    validations: [],
+    claims: [],
+    item_facets: [],
+    explainers: [],
+    comparisons: [],
+    problem_links: [],
+    workflow_recommendations: [],
+    approval_evidence: null,
+    index_markdown: null,
+    evidence_markdown: null,
+    replication_markdown: null,
+    workflow_fit_markdown: null,
   };
 }
 
@@ -718,16 +786,14 @@ function normalizeGapDetail(detail: BackendGapDetail): GapDetail {
 
 export async function getItems(): Promise<ToolkitItem[]> {
   try {
-    const summaries =
-      await fetchBackendJson<BackendItemSummary[]>("/api/v1/items");
-    const details = await Promise.all(
-      summaries.map((summary) =>
-        fetchBackendJson<BackendItemDetail>(`/api/v1/items/${summary.slug}`),
-      ),
-    );
-    return details.map(mapBackendItem);
-  } catch {
+    const browseItems =
+      await fetchBackendJson<BackendItemBrowse[]>("/api/v1/items-browse");
+    return browseItems.map(mapBackendBrowseItem);
+  } catch (error) {
+    if (ALLOW_SEED_FALLBACK) {
     return getSeedItems();
+    }
+    throw backendUnavailableError("canonical item browse", error);
   }
 }
 
@@ -739,8 +805,11 @@ export async function getItemBySlug(
       `/api/v1/items/${slug}`,
     );
     return mapBackendItem(detail);
-  } catch {
-    return getSeedItems().find((item) => item.slug === slug);
+  } catch (error) {
+    if (ALLOW_SEED_FALLBACK) {
+      return getSeedItems().find((item) => item.slug === slug);
+    }
+    throw backendUnavailableError(`canonical item detail for ${slug}`, error);
   }
 }
 
@@ -756,8 +825,11 @@ export async function getWorkflows(): Promise<WorkflowTemplate[]> {
       ),
     );
     return details.map(mapBackendWorkflow);
-  } catch {
-    return getSeedWorkflows();
+  } catch (error) {
+    if (ALLOW_SEED_FALLBACK) {
+      return getSeedWorkflows();
+    }
+    throw backendUnavailableError("workflow listing", error);
   }
 }
 
@@ -772,8 +844,8 @@ export async function getGaps(): Promise<GapDetail[]> {
         ),
     );
     return details.map(normalizeGapDetail);
-  } catch {
-    return [];
+  } catch (error) {
+    throw backendUnavailableError("gap listing", error);
   }
 }
 
@@ -784,8 +856,8 @@ export async function getFirstPassEntities(): Promise<FirstPassEntitySummary[]> 
       { cacheMode: "no-store" },
     );
     return summaries.map(normalizeFirstPassEntitySummary);
-  } catch {
-    return [];
+  } catch (error) {
+    throw backendUnavailableError("first-pass entity listing", error);
   }
 }
 
@@ -799,8 +871,11 @@ export async function getFirstPassEntityByKey(
       { cacheMode: "no-store" },
     );
     return normalizeFirstPassEntityDetail(detail);
-  } catch {
-    return undefined;
+  } catch (error) {
+    throw backendUnavailableError(
+      `first-pass entity detail for ${candidateType}/${slug}`,
+      error,
+    );
   }
 }
 

@@ -1,13 +1,12 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getItemBySlug } from "@/lib/backend-data";
-import { buildItemDetailFallbacks } from "@/lib/item-detail-fallbacks";
 import { getItemTaxonomyPosition } from "@/lib/item-hierarchy";
 import { renderInlineTitle, stripInlineTitleMarkup } from "@/lib/render-inline-title";
 import { isSupportedTechnique } from "@/lib/vocabularies";
+import type { SourceDocument } from "@/lib/types";
 import { ScoreBreakdown } from "@/components/score-bar";
 import { ValidationMatrix } from "@/components/validation-dots";
-import { CitationList } from "@/components/citation-list";
 import {
   TypeBadge,
   MaturityBadge,
@@ -18,6 +17,7 @@ import {
 } from "@/components/detail-tooltips";
 import { ObservationRow } from "@/components/observation-row";
 import { PaperLink } from "@/components/paper-link";
+import { CITATION_ROLE_LABELS } from "@/lib/vocabularies";
 
 function Section({
   title,
@@ -31,6 +31,159 @@ function Section({
       <p className="small-caps mb-4">{title}</p>
       {children}
     </section>
+  );
+}
+
+function sourceAnchor(documentId: string) {
+  return `#source-${documentId}`;
+}
+
+function claimAnchor(claimId: string) {
+  return `#claim-${claimId}`;
+}
+
+function citationAnchor(citationId: string) {
+  return `#citation-${citationId}`;
+}
+
+function getLocatorRows(locator: Record<string, unknown>) {
+  const entries: Array<{ label: string; value: string }> = [];
+  if (typeof locator.section_label === "string" && locator.section_label.trim()) {
+    entries.push({ label: "Section", value: locator.section_label });
+  }
+  if (typeof locator.page_or_locator === "string" && locator.page_or_locator.trim()) {
+    entries.push({ label: "Page / locator", value: locator.page_or_locator });
+  }
+  if (typeof locator.chunk_index === "number") {
+    entries.push({ label: "Chunk", value: String(locator.chunk_index) });
+  }
+  return entries;
+}
+
+type EvidenceSource = {
+  document: SourceDocument;
+  supportText?: string | null;
+  evidenceText?: string | null;
+  extractField?: string | null;
+};
+
+function extractMarkdownBullets(
+  markdown: string | null | undefined,
+  heading: string,
+): string[] {
+  if (!markdown) {
+    return [];
+  }
+  const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = markdown.match(
+    new RegExp(`^## ${escapedHeading}\\s*\\n([\\s\\S]*?)(?=^##\\s|\\Z)`, "m"),
+  );
+  const section = match?.[1] ?? "";
+  return section
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /^(-|\d+\.)\s+/.test(line))
+    .map((line) =>
+      line
+        .replace(/^(-|\d+\.)\s+/, "")
+        .replace(/`([^`]+)`/g, "$1")
+        .trim(),
+    )
+    .filter(Boolean);
+}
+
+function getEvidenceSources(
+  payload: Record<string, unknown> | undefined,
+): EvidenceSource[] {
+  const rawSources = payload?.sources;
+  if (!Array.isArray(rawSources)) {
+    return [];
+  }
+  const parsedSources: EvidenceSource[] = [];
+  for (const source of rawSources) {
+    if (!source || typeof source !== "object") {
+      continue;
+    }
+    const sourceRecord = source as Record<string, unknown>;
+    const rawDocument = sourceRecord.document;
+    if (!rawDocument || typeof rawDocument !== "object") {
+      continue;
+    }
+    const document = rawDocument as Record<string, unknown>;
+    const id = typeof document.id === "string" ? document.id : null;
+    const title = typeof document.title === "string" ? document.title : null;
+    const sourceType =
+      typeof document.source_type === "string" ? document.source_type : null;
+    if (!id || !title || !sourceType) {
+      continue;
+    }
+    parsedSources.push({
+      document: {
+        id,
+        title,
+        source_type: sourceType,
+        publication_year:
+          typeof document.publication_year === "number"
+            ? document.publication_year
+            : null,
+        journal_or_source:
+          typeof document.journal_or_source === "string"
+            ? document.journal_or_source
+            : null,
+        doi: typeof document.doi === "string" ? document.doi : null,
+        pmid: typeof document.pmid === "string" ? document.pmid : null,
+        is_retracted: Boolean(document.is_retracted),
+      },
+      supportText:
+        typeof sourceRecord.support_text === "string"
+          ? sourceRecord.support_text
+          : null,
+      evidenceText:
+        typeof sourceRecord.evidence_text === "string"
+          ? sourceRecord.evidence_text
+          : null,
+      extractField:
+        typeof sourceRecord.extract_field === "string"
+          ? sourceRecord.extract_field
+          : null,
+    });
+  }
+  return parsedSources;
+}
+
+function EvidenceSources({
+  payload,
+}: {
+  payload?: Record<string, unknown>;
+}) {
+  const sources = getEvidenceSources(payload);
+  if (sources.length === 0) {
+    return null;
+  }
+  return (
+    <div className="mt-3 space-y-2">
+      {sources.map((source, index) => (
+        <div
+          key={`${source.document.id}-${index}`}
+          className="rounded bg-surface-alt px-3 py-2"
+        >
+          <p className="font-ui text-xs text-ink-muted">
+            Source:{" "}
+            <PaperLink
+              document={source.document}
+              className="font-medium text-ink-secondary"
+            >
+              {source.document.title}
+            </PaperLink>
+          </p>
+          {source.supportText && (
+            <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
+              {source.supportText}
+            </p>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -50,17 +203,51 @@ export default async function ItemDetailPage({
   const itemFacets = item.item_facets ?? [];
   const comparisons = item.comparisons ?? [];
   const problemLinks = item.problem_links ?? [];
+  const sortedCitations = [...item.citations].sort(
+    (left, right) => left.importance_rank - right.importance_rank,
+  );
   const workflowRecommendations = item.workflow_recommendations ?? [];
   const explainerByKind = new Map(
     explainers.map((explainer) => [explainer.explainer_kind, explainer]),
   );
   const taxonomyPosition = getItemTaxonomyPosition(item.item_type);
-  const fallback = buildItemDetailFallbacks(item, {
-    axisTitle: taxonomyPosition.axisTitle,
-    layerTitle: taxonomyPosition.layerTitle,
-  });
+  const workflowLikelyFit = extractMarkdownBullets(
+    item.workflow_fit_markdown,
+    "Likely Fit",
+  );
+  const workflowMissingEvidence = extractMarkdownBullets(
+    item.workflow_fit_markdown,
+    "Missing Evidence",
+  );
   const visibleTechniques = item.techniques.filter(isSupportedTechnique);
   const approvalEvidence = item.approval_evidence;
+  const sourceDocumentsById = new Map<string, SourceDocument>();
+  for (const citation of sortedCitations) {
+    sourceDocumentsById.set(citation.document.id, citation.document);
+  }
+  for (const claim of claims) {
+    sourceDocumentsById.set(claim.source_document.id, claim.source_document);
+  }
+  const sourceDocuments = Array.from(sourceDocumentsById.values());
+  const sourceIndexById = new Map(
+    sourceDocuments.map((document, index) => [document.id, index + 1]),
+  );
+  const claimNumberById = new Map(claims.map((claim, index) => [claim.id, index + 1]));
+  const citationNumberById = new Map(
+    sortedCitations.map((citation, index) => [citation.id, index + 1]),
+  );
+  const claimsBySourceId = new Map<string, typeof claims>();
+  const citationsBySourceId = new Map<string, typeof sortedCitations>();
+  for (const claim of claims) {
+    const existing = claimsBySourceId.get(claim.source_document.id) ?? [];
+    existing.push(claim);
+    claimsBySourceId.set(claim.source_document.id, existing);
+  }
+  for (const citation of sortedCitations) {
+    const existing = citationsBySourceId.get(citation.document.id) ?? [];
+    existing.push(citation);
+    citationsBySourceId.set(citation.document.id, existing);
+  }
 
   return (
     <div>
@@ -127,77 +314,88 @@ export default async function ItemDetailPage({
             </p>
           </Section>
 
-          {(explainerByKind.get("usefulness") ||
-            explainerByKind.get("problem_solved") ||
-            fallback.usefulness ||
-            fallback.problemSolved ||
-            problemLinks.length > 0) && (
-            <Section title="Usefulness & Problems">
-              <div className="space-y-5">
-                {(explainerByKind.get("usefulness") || fallback.usefulness) && (
-                  <div>
-                    <p className="mb-1 text-xs uppercase tracking-wide text-ink-muted">
-                      Why this is useful
-                    </p>
-                    <p className="text-sm leading-relaxed text-ink-secondary">
-                      {explainerByKind.get("usefulness")?.body ?? fallback.usefulness}
-                    </p>
-                  </div>
-                )}
-                {(explainerByKind.get("problem_solved") || fallback.problemSolved) && (
-                  <div>
-                    <p className="mb-1 text-xs uppercase tracking-wide text-ink-muted">
-                      Problem solved
-                    </p>
-                    <p className="text-sm leading-relaxed text-ink-secondary">
-                      {explainerByKind.get("problem_solved")?.body ?? fallback.problemSolved}
-                    </p>
-                  </div>
-                )}
-                {problemLinks.length > 0 && (
-                  <div>
-                    <p className="mb-2 text-xs uppercase tracking-wide text-ink-muted">
-                      Problem links
-                    </p>
-                    <div className="space-y-3">
-                      {problemLinks.map((problem) => (
-                        <div
-                          key={`${problem.source_kind}-${problem.problem_label}`}
-                          className="rounded border border-edge px-4 py-3"
-                        >
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <p className="font-ui text-sm font-medium text-ink">
-                              {problem.problem_label}
-                            </p>
-                            <span className="text-xs text-ink-faint">
-                              {problem.source_kind === "gap_map"
-                                ? "Gap map"
-                                : "Derived"}
-                            </span>
-                            {problem.gap_slug && (
-                              <Link
-                                href={`/gaps/${problem.gap_slug}`}
-                                className="text-xs text-accent hover:underline"
-                              >
-                                View gap
-                              </Link>
-                            )}
-                          </div>
-                          <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
-                            {problem.why_this_item_helps}
+          <Section title="Usefulness & Problems">
+            <div className="space-y-5">
+              {explainerByKind.get("usefulness") && (
+                <div>
+                  <p className="mb-1 text-xs uppercase tracking-wide text-ink-muted">
+                    Why this is useful
+                  </p>
+                  <p className="text-sm leading-relaxed text-ink-secondary">
+                    {explainerByKind.get("usefulness")?.body}
+                  </p>
+                  <EvidenceSources
+                    payload={explainerByKind.get("usefulness")?.evidence_payload}
+                  />
+                </div>
+              )}
+              {explainerByKind.get("problem_solved") && (
+                <div>
+                  <p className="mb-1 text-xs uppercase tracking-wide text-ink-muted">
+                    Problem solved
+                  </p>
+                  <p className="text-sm leading-relaxed text-ink-secondary">
+                    {explainerByKind.get("problem_solved")?.body}
+                  </p>
+                  <EvidenceSources
+                    payload={explainerByKind.get("problem_solved")?.evidence_payload}
+                  />
+                </div>
+              )}
+              {problemLinks.length > 0 && (
+                <div>
+                  <p className="mb-2 text-xs uppercase tracking-wide text-ink-muted">
+                    Problem links
+                  </p>
+                  <div className="space-y-3">
+                    {problemLinks.map((problem) => (
+                      <div
+                        key={`${problem.source_kind}-${problem.problem_label}`}
+                        className="rounded border border-edge px-4 py-3"
+                      >
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <p className="font-ui text-sm font-medium text-ink">
+                            {problem.problem_label}
                           </p>
+                          <span className="text-xs text-ink-faint">
+                            {problem.source_kind === "gap_map"
+                              ? "Gap map"
+                              : problem.source_kind === "literature_extract"
+                                ? "Literature"
+                                : "Derived"}
+                          </span>
+                          {problem.gap_slug && (
+                            <Link
+                              href={`/gaps/${problem.gap_slug}`}
+                              className="text-xs text-accent hover:underline"
+                            >
+                              View gap
+                            </Link>
+                          )}
                         </div>
-                      ))}
-                    </div>
+                        <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
+                          {problem.why_this_item_helps}
+                        </p>
+                        <EvidenceSources payload={problem.evidence_payload} />
+                      </div>
+                    ))}
                   </div>
+                </div>
+              )}
+              {!explainerByKind.get("usefulness") &&
+                !explainerByKind.get("problem_solved") &&
+                problemLinks.length === 0 && (
+                  <p className="font-ui text-sm italic text-ink-muted">
+                    No literature-backed usefulness or problem-fit explainer has
+                    been materialized for this record yet.
+                  </p>
                 )}
-              </div>
-            </Section>
-          )}
+            </div>
+          </Section>
 
           {(workflowRecommendations.length > 0 ||
-            fallback.workflowLikelyFit.length > 0 ||
-            fallback.workflowMissingEvidence.length > 0) && (
+            workflowLikelyFit.length > 0 ||
+            workflowMissingEvidence.length > 0) && (
             <Section title="Workflow Fit">
               <div className="space-y-3">
                 {workflowRecommendations.map((recommendation) => (
@@ -228,13 +426,13 @@ export default async function ItemDetailPage({
                     </p>
                   </div>
                 ))}
-                {fallback.workflowLikelyFit.length > 0 && (
+                {workflowLikelyFit.length > 0 && (
                   <div>
                     <p className="mb-2 text-xs uppercase tracking-wide text-ink-muted">
                       Likely fit
                     </p>
                     <ul className="space-y-2 text-sm leading-relaxed text-ink-secondary">
-                      {fallback.workflowLikelyFit.map((note) => (
+                      {workflowLikelyFit.map((note) => (
                         <li key={note} className="flex gap-2">
                           <span className="shrink-0 text-ink-faint">&bull;</span>
                           <span>{note}</span>
@@ -243,13 +441,13 @@ export default async function ItemDetailPage({
                     </ul>
                   </div>
                 )}
-                {fallback.workflowMissingEvidence.length > 0 && (
+                {workflowMissingEvidence.length > 0 && (
                   <div>
                     <p className="mb-2 text-xs uppercase tracking-wide text-ink-muted">
                       Missing evidence
                     </p>
                     <ul className="space-y-2 text-sm leading-relaxed text-ink-muted">
-                      {fallback.workflowMissingEvidence.map((note) => (
+                      {workflowMissingEvidence.map((note) => (
                         <li key={note} className="flex gap-2">
                           <span className="shrink-0 text-ink-faint">&bull;</span>
                           <span>{note}</span>
@@ -372,15 +570,88 @@ export default async function ItemDetailPage({
             </Section>
           )}
 
+          {sourceDocuments.length > 0 && (
+            <Section title="Supporting Sources">
+              <div className="space-y-3">
+                {sourceDocuments.map((document) => {
+                  const relatedClaims = claimsBySourceId.get(document.id) ?? [];
+                  const relatedCitations = citationsBySourceId.get(document.id) ?? [];
+                  const sourceNumber = sourceIndexById.get(document.id) ?? "?";
+                  return (
+                    <article
+                      key={document.id}
+                      id={`source-${document.id}`}
+                      className="rounded border border-edge px-4 py-4"
+                    >
+                      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2 font-ui text-xs text-ink-muted">
+                        <span className="rounded bg-surface-alt px-2 py-1 font-semibold text-ink-secondary">
+                          Source {sourceNumber}
+                        </span>
+                        <span>{document.source_type.replace(/_/g, " ")}</span>
+                        {document.publication_year ? <span>{document.publication_year}</span> : null}
+                        {document.journal_or_source ? (
+                          <span>{document.journal_or_source}</span>
+                        ) : null}
+                      </div>
+                      <div className="mb-2 text-sm text-ink">
+                        <PaperLink
+                          document={document}
+                          className="text-left text-ink no-underline hover:text-accent hover:underline"
+                        >
+                          {renderInlineTitle(document.title)}
+                        </PaperLink>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 font-ui text-xs text-ink-muted">
+                        <a href="#ranked-citations" className="text-accent hover:underline">
+                          {relatedCitations.length} ranked citation
+                          {relatedCitations.length === 1 ? "" : "s"}
+                        </a>
+                        <a href="#ranked-claims" className="text-accent hover:underline">
+                          {relatedClaims.length} ranked claim
+                          {relatedClaims.length === 1 ? "" : "s"}
+                        </a>
+                        {relatedCitations.slice(0, 3).map((citation) => (
+                          <a
+                            key={citation.id}
+                            href={citationAnchor(citation.id)}
+                            className="text-accent hover:underline"
+                          >
+                            Citation {citationNumberById.get(citation.id) ?? "?"}
+                          </a>
+                        ))}
+                        {relatedClaims.slice(0, 3).map((claim) => (
+                          <a
+                            key={claim.id}
+                            href={claimAnchor(claim.id)}
+                            className="text-accent hover:underline"
+                          >
+                            Claim {claimNumberById.get(claim.id) ?? "?"}
+                          </a>
+                        ))}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </Section>
+          )}
+
           {claims.length > 0 && (
-            <Section title="Claims & Evidence">
+            <Section title="Ranked Claims">
               <div className="space-y-4">
-                {claims.map((claim) => (
+                {claims.map((claim, index) => {
+                  const sourceNumber = sourceIndexById.get(claim.source_document.id) ?? "?";
+                  const locatorRows = getLocatorRows(claim.source_locator);
+                  return (
                   <article
                     key={claim.id}
+                    id={`claim-${claim.id}`}
                     className="rounded border border-edge px-4 py-4"
                   >
                     <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-ui text-xs text-ink-muted">
+                      <span className="rounded bg-surface-alt px-2 py-1 font-semibold text-ink-secondary">
+                        Claim {index + 1}
+                      </span>
                       <span className="font-semibold text-ink-secondary">
                         {claim.claim_type.replace(/_/g, " ")}
                       </span>
@@ -395,6 +666,21 @@ export default async function ItemDetailPage({
                       >
                         {claim.polarity}
                       </span>
+                      {claim.source_document.publication_year && (
+                        <span>{claim.source_document.publication_year}</span>
+                      )}
+                      <a
+                        href={sourceAnchor(claim.source_document.id)}
+                        className="text-accent hover:underline"
+                      >
+                        Source {sourceNumber}
+                      </a>
+                      <PaperLink
+                        document={claim.source_document}
+                        className="font-medium text-ink-secondary"
+                      >
+                        {claim.source_document.title}
+                      </PaperLink>
                       {claim.needs_review && (
                         <span className="text-caution">needs review</span>
                       )}
@@ -408,6 +694,15 @@ export default async function ItemDetailPage({
                           {claim.source_locator.quoted_text}
                         </blockquote>
                       )}
+                    {locatorRows.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-ui text-xs text-ink-muted">
+                        {locatorRows.map((row) => (
+                          <span key={`${claim.id}-${row.label}`}>
+                            {row.label}: {row.value}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     {claim.metrics.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-data text-xs text-ink-secondary">
                         {claim.metrics.map((metric, index) => (
@@ -423,17 +718,9 @@ export default async function ItemDetailPage({
                         ))}
                       </div>
                     )}
-                    <p className="mt-3 font-ui text-xs text-ink-muted">
-                      Source:{" "}
-                      <PaperLink
-                        document={claim.source_document}
-                        className="font-medium text-ink-secondary"
-                      >
-                        {claim.source_document.title}
-                      </PaperLink>
-                    </p>
                   </article>
-                ))}
+                  );
+                })}
               </div>
             </Section>
           )}
@@ -534,61 +821,149 @@ export default async function ItemDetailPage({
               </Section>
             )}
 
-          {(explainerByKind.get("strengths") ||
-            comparisons.length > 0 ||
-            fallback.comparisonGuidance) && (
-            <Section title="Comparisons">
-              <div className="space-y-5">
-                {(explainerByKind.get("strengths") || fallback.comparisonGuidance) && (
+          <Section title="Comparisons">
+            <div className="space-y-5">
+              {explainerByKind.get("alternatives") && (
+                <div>
+                  <p className="mb-1 text-xs uppercase tracking-wide text-ink-muted">
+                    Source-stated alternatives
+                  </p>
                   <p className="text-sm leading-relaxed text-ink-secondary">
-                    {explainerByKind.get("strengths")?.body ??
-                      fallback.comparisonGuidance}
+                    {explainerByKind.get("alternatives")?.body}
+                  </p>
+                  <EvidenceSources
+                    payload={explainerByKind.get("alternatives")?.evidence_payload}
+                  />
+                </div>
+              )}
+              {explainerByKind.get("strengths") && (
+                <div>
+                  <p className="mb-1 text-xs uppercase tracking-wide text-ink-muted">
+                    Source-backed strengths
+                  </p>
+                  <p className="text-sm leading-relaxed text-ink-secondary">
+                    {explainerByKind.get("strengths")?.body}
+                  </p>
+                  <EvidenceSources
+                    payload={explainerByKind.get("strengths")?.evidence_payload}
+                  />
+                </div>
+              )}
+              {comparisons.map((comparison) => (
+                <div
+                  key={`${comparison.related_item_slug}-${comparison.relation_type}`}
+                  className="rounded border border-edge px-4 py-4"
+                >
+                  <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <p className="font-ui text-sm font-medium text-ink">
+                      Compared with{" "}
+                      <Link
+                        href={`/items/${comparison.related_item_slug}`}
+                        className="text-accent hover:underline"
+                      >
+                        {renderInlineTitle(comparison.related_item_name)}
+                      </Link>
+                    </p>
+                  </div>
+                  <p className="text-sm leading-relaxed text-ink-secondary">
+                    {comparison.summary}
+                  </p>
+                  {comparison.overlap_reasons.length > 0 && (
+                    <p className="mt-2 font-ui text-xs text-ink-muted">
+                      Shared frame: {comparison.overlap_reasons.join("; ")}
+                    </p>
+                  )}
+                  {comparison.strengths.length > 0 && (
+                    <p className="mt-2 text-sm text-ink-secondary">
+                      Strengths here: {comparison.strengths.join("; ")}.
+                    </p>
+                  )}
+                  {comparison.weaknesses.length > 0 && (
+                    <p className="mt-1 text-sm text-ink-muted">
+                      Relative tradeoffs: {comparison.weaknesses.join("; ")}.
+                    </p>
+                  )}
+                  <EvidenceSources payload={comparison.evidence_payload} />
+                </div>
+              ))}
+              {!explainerByKind.get("alternatives") &&
+                !explainerByKind.get("strengths") &&
+                comparisons.length === 0 && (
+                  <p className="font-ui text-sm italic text-ink-muted">
+                    No literature-backed comparison notes have been materialized
+                    for this record yet.
                   </p>
                 )}
-                {comparisons.map((comparison) => (
-                  <div
-                    key={`${comparison.related_item_slug}-${comparison.relation_type}`}
-                    className="rounded border border-edge px-4 py-4"
-                  >
-                    <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <p className="font-ui text-sm font-medium text-ink">
-                        Compared with{" "}
-                        <Link
-                          href={`/items/${comparison.related_item_slug}`}
-                          className="text-accent hover:underline"
-                        >
-                          {renderInlineTitle(comparison.related_item_name)}
-                        </Link>
-                      </p>
-                    </div>
-                    <p className="text-sm leading-relaxed text-ink-secondary">
-                      {comparison.summary}
-                    </p>
-                    {comparison.overlap_reasons.length > 0 && (
-                      <p className="mt-2 font-ui text-xs text-ink-muted">
-                        Shared frame: {comparison.overlap_reasons.join("; ")}
-                      </p>
-                    )}
-                    {comparison.strengths.length > 0 && (
-                      <p className="mt-2 text-sm text-ink-secondary">
-                        Strengths here: {comparison.strengths.join("; ")}.
-                      </p>
-                    )}
-                    {comparison.weaknesses.length > 0 && (
-                      <p className="mt-1 text-sm text-ink-muted">
-                        Relative tradeoffs: {comparison.weaknesses.join("; ")}.
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </Section>
-          )}
+            </div>
+          </Section>
 
           {/* Citations */}
           <Section title="Ranked Citations">
-            {item.citations.length > 0 ? (
-              <CitationList citations={item.citations} />
+            {sortedCitations.length > 0 ? (
+              <ol id="ranked-citations" className="space-y-6">
+                {sortedCitations.map((citation, index) => {
+                  const sourceNumber = sourceIndexById.get(citation.document.id) ?? "?";
+                  const relatedClaims = claimsBySourceId.get(citation.document.id) ?? [];
+                  return (
+                    <li
+                      key={citation.id}
+                      id={`citation-${citation.id}`}
+                      className="flex gap-4"
+                    >
+                      <span className="mt-1 font-data text-sm font-bold text-ink-muted">
+                        {index + 1}.
+                      </span>
+                      <div className="flex-1">
+                        <PaperLink
+                          document={citation.document}
+                          citationRole={citation.citation_role}
+                          whyThisMatters={citation.why_this_matters}
+                          className="font-body text-[15px] font-medium leading-snug text-ink"
+                        >
+                          {renderInlineTitle(citation.document.title)}
+                        </PaperLink>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-ui text-xs">
+                          <span className="font-semibold text-accent">
+                            {CITATION_ROLE_LABELS[citation.citation_role]}
+                          </span>
+                          <a
+                            href={sourceAnchor(citation.document.id)}
+                            className="text-accent hover:underline"
+                          >
+                            Source {sourceNumber}
+                          </a>
+                          {citation.document.journal_or_source &&
+                            !citation.document.journal_or_source.startsWith("http") && (
+                              <span className="italic text-ink-muted">
+                                {citation.document.journal_or_source}
+                              </span>
+                            )}
+                          {citation.document.publication_year && (
+                            <span className="font-data text-ink-muted">
+                              {citation.document.publication_year}
+                            </span>
+                          )}
+                          {relatedClaims.slice(0, 3).map((claim) => (
+                            <a
+                              key={`${citation.id}-${claim.id}`}
+                              href={claimAnchor(claim.id)}
+                              className="text-accent hover:underline"
+                            >
+                              Claim {claimNumberById.get(claim.id) ?? "?"}
+                            </a>
+                          ))}
+                          {citation.document.is_retracted && (
+                            <span className="font-bold text-danger">RETRACTED</span>
+                          )}
+                        </div>
+                        <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
+                          {citation.why_this_matters}
+                        </p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
             ) : (
               <p className="font-ui text-sm italic text-ink-muted">
                 No citations yet. This item needs source-backed curation.
@@ -705,7 +1080,9 @@ export default async function ItemDetailPage({
             <div>
               <p className="small-caps mb-4">Scores</p>
               <p className="font-ui text-sm italic text-ink-muted">
-                {fallback.scoreStatus}
+                Scores are unavailable because the citation and validation inputs
+                needed for evidence-weighted scoring have not yet been fully
+                materialized for this record.
               </p>
             </div>
           )}

@@ -36,6 +36,19 @@ def _strip_inline_markup(value: str) -> str:
 
 
 @dataclass
+class ExtractedItemEvidence:
+    local_id: str
+    source_document: Dict[str, Any]
+    evidence_text: Optional[str]
+    useful_for: List[str]
+    problem_solved: List[str]
+    strengths: List[str]
+    limitations: List[str]
+    implementation_constraints: List[str]
+    freeform_explainers: Dict[str, str]
+
+
+@dataclass
 class ItemContext:
     item_id: Any
     slug: str
@@ -52,6 +65,7 @@ class ItemContext:
     validations: List[Dict[str, Any]]
     citations: List[Dict[str, Any]]
     gap_links: List[Dict[str, Any]]
+    extracted_evidence: List[ExtractedItemEvidence]
 
     @property
     def text_blob(self) -> str:
@@ -74,6 +88,14 @@ class ItemContext:
         for citation in self.citations:
             parts.append(citation.get("why_this_matters") or "")
             parts.append(citation.get("title") or "")
+        for evidence in self.extracted_evidence:
+            parts.append(evidence.evidence_text or "")
+            parts.extend(evidence.useful_for)
+            parts.extend(evidence.problem_solved)
+            parts.extend(evidence.strengths)
+            parts.extend(evidence.limitations)
+            parts.extend(evidence.implementation_constraints)
+            parts.extend(evidence.freeform_explainers.values())
         return " ".join(part for part in parts if part).casefold()
 
 
@@ -346,6 +368,7 @@ class ItemMaterializer:
         validations = self._fetch_validations(cursor, item_id)
         citations = self._fetch_citations(cursor, item_id)
         gap_links = self._fetch_gap_links(cursor, item_id)
+        extracted_evidence = self._fetch_extracted_evidence(cursor, item_id, row[1])
 
         return ItemContext(
             item_id=row[0],
@@ -363,6 +386,7 @@ class ItemMaterializer:
             validations=validations,
             citations=citations,
             gap_links=gap_links,
+            extracted_evidence=extracted_evidence,
         )
 
     @staticmethod
@@ -603,6 +627,78 @@ class ItemMaterializer:
             for row in cursor.fetchall()
         ]
 
+    @staticmethod
+    def _fetch_extracted_evidence(cursor: Any, item_id: Any, item_slug: str) -> List[ExtractedItemEvidence]:
+        cursor.execute(
+            """
+            select
+              eic.local_id,
+              eic.evidence_text,
+              eic.raw_payload,
+              sd.id,
+              sd.title,
+              sd.source_type::text,
+              sd.publication_year,
+              sd.journal_or_source,
+              sd.doi,
+              sd.pmid,
+              sd.is_retracted
+            from extracted_item_candidate eic
+            join source_document sd on sd.id = eic.source_document_id
+            where eic.candidate_type = 'toolkit_item'
+              and (
+                eic.matched_item_id = %s
+                or eic.matched_slug = %s
+                or (eic.slug = %s and eic.matched_item_id is null and coalesce(eic.matched_slug, '') = '')
+              )
+            order by sd.publication_year desc nulls last, eic.created_at desc
+            """,
+            (item_id, item_slug, item_slug),
+        )
+        evidence_rows = cursor.fetchall()
+        results: List[ExtractedItemEvidence] = []
+        seen = set()
+        for row in evidence_rows:
+            key = (str(row[0]), str(row[3]))
+            if key in seen:
+                continue
+            seen.add(key)
+            payload = row[2] or {}
+            if not isinstance(payload, dict):
+                payload = {}
+            freeform_explainers = payload.get("freeform_explainers") or {}
+            if not isinstance(freeform_explainers, dict):
+                freeform_explainers = {}
+            results.append(
+                ExtractedItemEvidence(
+                    local_id=str(row[0]),
+                    evidence_text=row[1],
+                    useful_for=_dedupe_preserving_order(payload.get("useful_for") or []),
+                    problem_solved=_dedupe_preserving_order(payload.get("problem_solved") or []),
+                    strengths=_dedupe_preserving_order(payload.get("strengths") or []),
+                    limitations=_dedupe_preserving_order(payload.get("limitations") or []),
+                    implementation_constraints=_dedupe_preserving_order(
+                        payload.get("implementation_constraints") or []
+                    ),
+                    freeform_explainers={
+                        key: str(value).strip()
+                        for key, value in freeform_explainers.items()
+                        if str(value).strip()
+                    },
+                    source_document={
+                        "id": str(row[3]),
+                        "title": row[4],
+                        "source_type": row[5],
+                        "publication_year": row[6],
+                        "journal_or_source": row[7],
+                        "doi": row[8],
+                        "pmid": row[9],
+                        "is_retracted": row[10],
+                    },
+                )
+            )
+        return results
+
     def _expand_related_item_ids(self, item_rows: List[Dict[str, Any]], contexts: Iterable[ItemContext]) -> set[Any]:
         related_ids: set[Any] = set()
         rows_by_id = {row["id"]: row for row in item_rows}
@@ -790,8 +886,228 @@ class ItemMaterializer:
             return "requires_exogenous_cofactor"
         return "cofactor_requirement_unknown"
 
+    @staticmethod
+    def _collect_literature_statements(
+        context: ItemContext,
+        *,
+        freeform_key: Optional[str] = None,
+        structured_key: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        statements: List[Dict[str, Any]] = []
+        seen = set()
+        for evidence in context.extracted_evidence:
+            values: List[Tuple[str, str]] = []
+            if freeform_key:
+                freeform_value = evidence.freeform_explainers.get(freeform_key)
+                if freeform_value:
+                    values.append((freeform_value, freeform_key))
+            if structured_key:
+                for structured_value in getattr(evidence, structured_key, []):
+                    cleaned_value = str(structured_value).strip()
+                    if cleaned_value:
+                        values.append((cleaned_value, structured_key))
+            for text, extract_field in values:
+                cleaned_text = str(text).strip()
+                key = (cleaned_text.casefold(), evidence.source_document["id"], extract_field)
+                if not cleaned_text or key in seen:
+                    continue
+                seen.add(key)
+                statements.append(
+                    {
+                        "text": cleaned_text,
+                        "extract_field": extract_field,
+                        "source_document": evidence.source_document,
+                        "evidence_text": evidence.evidence_text,
+                        "local_id": evidence.local_id,
+                    }
+                )
+        return statements
+
+    @staticmethod
+    def _collect_structured_values(context: ItemContext, attribute_name: str) -> List[str]:
+        return _dedupe_preserving_order(
+            value
+            for evidence in context.extracted_evidence
+            for value in getattr(evidence, attribute_name, [])
+        )
+
+    @staticmethod
+    def _build_literature_payload(
+        statements: List[Dict[str, Any]],
+        *,
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "source_kind": "literature_extract",
+            "sources": [
+                {
+                    "document": statement["source_document"],
+                    "support_text": statement["text"],
+                    "evidence_text": statement.get("evidence_text"),
+                    "extract_field": statement["extract_field"],
+                    "local_id": statement["local_id"],
+                }
+                for statement in statements
+            ],
+        }
+        if extra:
+            payload.update(extra)
+        return payload
+
+    @staticmethod
+    def _build_literature_explainer(
+        *,
+        explainer_kind: str,
+        title: str,
+        statements: List[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        if not statements:
+            return None
+        body = "; ".join(_dedupe_preserving_order(statement["text"] for statement in statements))
+        if not body:
+            return None
+        return {
+            "explainer_kind": explainer_kind,
+            "title": title,
+            "body": body,
+            "evidence_payload": ItemMaterializer._build_literature_payload(statements),
+        }
+
+    @staticmethod
+    def _collect_claim_statements(
+        context: ItemContext,
+        *,
+        claim_types: Optional[Sequence[str]] = None,
+        keywords: Optional[Sequence[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        statements: List[Dict[str, Any]] = []
+        seen = set()
+        allowed_claim_types = set(claim_types or [])
+        keyword_tokens = [keyword.casefold() for keyword in (keywords or [])]
+        for claim in context.claims:
+            claim_type = str(claim.get("claim_type") or "")
+            if allowed_claim_types and claim_type not in allowed_claim_types:
+                continue
+            quoted_text = str((claim.get("source_locator") or {}).get("quoted_text") or "").strip()
+            claim_text = str(claim.get("claim_text_normalized") or "").strip()
+            support_text = quoted_text or claim_text
+            if not support_text:
+                continue
+            if keyword_tokens:
+                haystack = f"{claim_text} {quoted_text}".casefold()
+                if not any(token in haystack for token in keyword_tokens):
+                    continue
+            source_document = claim.get("source_document") or {}
+            source_id = str(source_document.get("id") or "")
+            if not source_id:
+                continue
+            key = (support_text.casefold(), source_id, claim_type)
+            if key in seen:
+                continue
+            seen.add(key)
+            statements.append(
+                {
+                    "text": support_text,
+                    "extract_field": claim_type or "claim",
+                    "source_document": source_document,
+                    "claim_id": claim.get("id"),
+                    "claim_text": claim_text,
+                }
+            )
+        return statements
+
+    @staticmethod
+    def _build_claim_payload(
+        statements: List[Dict[str, Any]],
+        *,
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "source_kind": "canonical_claim",
+            "sources": [
+                {
+                    "document": statement["source_document"],
+                    "support_text": statement["text"],
+                    "extract_field": statement["extract_field"],
+                    "claim_id": statement.get("claim_id"),
+                    "claim_text": statement.get("claim_text"),
+                }
+                for statement in statements
+            ],
+        }
+        if extra:
+            payload.update(extra)
+        return payload
+
+    @staticmethod
+    def _build_claim_explainer(
+        *,
+        explainer_kind: str,
+        title: str,
+        statements: List[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        if not statements:
+            return None
+        body = " ".join(_dedupe_preserving_order(statement["text"] for statement in statements))
+        if not body:
+            return None
+        return {
+            "explainer_kind": explainer_kind,
+            "title": title,
+            "body": body,
+            "evidence_payload": ItemMaterializer._build_claim_payload(statements),
+        }
+
+    @staticmethod
+    def _build_problem_label_from_statement(statement: str) -> str:
+        cleaned = statement.strip().rstrip(".")
+        if len(cleaned) <= 110:
+            return cleaned
+        sentence = cleaned.split(". ", 1)[0].strip()
+        if sentence and len(sentence) <= 110:
+            return sentence
+        return cleaned[:107].rstrip() + "..."
+
     def _derive_problem_links(self, context: ItemContext) -> List[Dict[str, Any]]:
         problems: List[Dict[str, Any]] = []
+        for evidence in context.extracted_evidence:
+            freeform_problem = evidence.freeform_explainers.get("problem_it_solves")
+            supporting_text = (
+                freeform_problem
+                or evidence.freeform_explainers.get("what_it_does")
+                or evidence.evidence_text
+                or ""
+            ).strip()
+            labels = list(evidence.problem_solved)
+            if freeform_problem and not labels:
+                labels = [self._build_problem_label_from_statement(freeform_problem)]
+            for label in labels:
+                cleaned_label = str(label).strip()
+                if not cleaned_label:
+                    continue
+                problems.append(
+                    {
+                        "problem_label": cleaned_label,
+                        "why_this_item_helps": supporting_text or cleaned_label,
+                        "source_kind": "literature_extract",
+                        "gap_slug": None,
+                        "overall_score": None,
+                        "evidence_payload": self._build_literature_payload(
+                            [
+                                {
+                                    "text": supporting_text or cleaned_label,
+                                    "extract_field": "problem_it_solves"
+                                    if freeform_problem
+                                    else "problem_solved",
+                                    "source_document": evidence.source_document,
+                                    "evidence_text": evidence.evidence_text,
+                                    "local_id": evidence.local_id,
+                                }
+                            ]
+                        ),
+                    }
+                )
+
         for gap_link in context.gap_links:
             problems.append(
                 {
@@ -808,17 +1124,18 @@ class ItemMaterializer:
                 }
             )
 
-        for problem_label in self._derive_generic_problem_labels(context):
-            problems.append(
-                {
-                    "problem_label": problem_label,
-                    "why_this_item_helps": self._build_problem_help_text(context, problem_label),
-                    "source_kind": "derived",
-                    "gap_slug": None,
-                    "overall_score": None,
-                    "evidence_payload": {"target_processes": context.target_processes},
-                }
-            )
+        if not problems:
+            for problem_label in self._derive_generic_problem_labels(context):
+                problems.append(
+                    {
+                        "problem_label": problem_label,
+                        "why_this_item_helps": self._build_problem_help_text(context, problem_label),
+                        "source_kind": "derived",
+                        "gap_slug": None,
+                        "overall_score": None,
+                        "evidence_payload": {"target_processes": context.target_processes},
+                    }
+                )
 
         deduped: List[Dict[str, Any]] = []
         seen = set()
@@ -877,6 +1194,107 @@ class ItemMaterializer:
         implementation = self._build_implementation_explainer(context, facet_map)
         problem_body = " ".join(link["why_this_item_helps"] for link in problem_links[:3]).strip()
 
+        literature_explainers = [
+            self._build_literature_explainer(
+                explainer_kind="usefulness",
+                title="Why this is useful",
+                statements=self._collect_literature_statements(
+                    context,
+                    freeform_key="what_it_does",
+                    structured_key="useful_for",
+                ),
+            ),
+            self._build_literature_explainer(
+                explainer_kind="problem_solved",
+                title="What problem this helps solve",
+                statements=self._collect_literature_statements(
+                    context,
+                    freeform_key="problem_it_solves",
+                    structured_key="problem_solved",
+                ),
+            ),
+            self._build_literature_explainer(
+                explainer_kind="strengths",
+                title="Strengths",
+                statements=self._collect_literature_statements(
+                    context,
+                    structured_key="strengths",
+                ),
+            ),
+            self._build_literature_explainer(
+                explainer_kind="limitations",
+                title="Limitations",
+                statements=self._collect_literature_statements(
+                    context,
+                    freeform_key="problem_it_does_not_solve",
+                    structured_key="limitations",
+                ),
+            ),
+            self._build_literature_explainer(
+                explainer_kind="implementation_constraints",
+                title="Implementation constraints",
+                statements=self._collect_literature_statements(
+                    context,
+                    freeform_key="resources_required",
+                    structured_key="implementation_constraints",
+                ),
+            ),
+            self._build_literature_explainer(
+                explainer_kind="alternatives",
+                title="Nearby alternatives in the literature",
+                statements=self._collect_literature_statements(
+                    context,
+                    freeform_key="alternatives",
+                ),
+            ),
+        ]
+        claim_explainers = [
+            self._build_claim_explainer(
+                explainer_kind="usefulness",
+                title="Why this is useful",
+                statements=self._collect_claim_statements(
+                    context,
+                    claim_types=(
+                        "application_result",
+                        "application_potential",
+                        "engineering_result",
+                        "mechanism_summary",
+                    ),
+                )[:3],
+            ),
+            self._build_claim_explainer(
+                explainer_kind="problem_solved",
+                title="What problem this helps solve",
+                statements=self._collect_claim_statements(
+                    context,
+                    claim_types=("application_result", "application_potential"),
+                )[:3],
+            ),
+            self._build_claim_explainer(
+                explainer_kind="implementation_constraints",
+                title="Implementation constraints",
+                statements=self._collect_claim_statements(
+                    context,
+                    keywords=(
+                        "phycocyanobilin",
+                        "biliverdin",
+                        "chromophore",
+                        "cofactor",
+                        "illumination",
+                        "light",
+                    ),
+                )[:3],
+            ),
+        ]
+        explainers_by_kind = {
+            explainer["explainer_kind"]: explainer
+            for explainer in literature_explainers
+            if explainer is not None
+        }
+        for explainer in claim_explainers:
+            if explainer is not None:
+                explainers_by_kind.setdefault(explainer["explainer_kind"], explainer)
+
         explainers = [
             {
                 "explainer_kind": "usefulness",
@@ -909,7 +1327,18 @@ class ItemMaterializer:
                 "evidence_payload": {"facets": facets},
             },
         ]
-        return [explainer for explainer in explainers if explainer["body"].strip()]
+        for explainer in explainers:
+            if explainer["body"].strip():
+                explainers_by_kind.setdefault(explainer["explainer_kind"], explainer)
+        ordered_kinds = [
+            "usefulness",
+            "problem_solved",
+            "strengths",
+            "alternatives",
+            "limitations",
+            "implementation_constraints",
+        ]
+        return [explainers_by_kind[kind] for kind in ordered_kinds if kind in explainers_by_kind]
 
     @staticmethod
     def _build_usefulness_explainer(context: ItemContext, problem_links: List[Dict[str, Any]]) -> str:
@@ -1244,16 +1673,20 @@ class ItemMaterializer:
         cursor.execute("delete from item_comparison where item_id = any(%s)", (item_ids,))
         all_contexts = list(contexts.values())
         for context in all_contexts:
-            peers = sorted(
-                (
-                    self._build_comparison(context, candidate)
-                    for candidate in all_contexts
-                    if candidate.item_id != context.item_id
-                ),
-                key=lambda comparison: comparison["score"],
-                reverse=True,
-            )[:3]
-            for comparison in peers:
+            literature_comparisons = self._build_literature_comparisons(context, all_contexts)
+            if literature_comparisons:
+                comparisons = literature_comparisons
+            else:
+                comparisons = sorted(
+                    (
+                        self._build_comparison(context, candidate)
+                        for candidate in all_contexts
+                        if candidate.item_id != context.item_id
+                    ),
+                    key=lambda comparison: comparison["score"],
+                    reverse=True,
+                )[:3]
+            for comparison in comparisons:
                 if comparison["score"] <= 0:
                     continue
                 cursor.execute(
@@ -1276,6 +1709,50 @@ class ItemMaterializer:
                         self.DERIVATION_VERSION,
                     ),
                 )
+
+    def _build_literature_comparisons(
+        self,
+        context: ItemContext,
+        all_contexts: Sequence[ItemContext],
+    ) -> List[Dict[str, Any]]:
+        alternative_statements = self._collect_literature_statements(
+            context,
+            freeform_key="alternatives",
+        )
+        if not alternative_statements:
+            return []
+        extracted_strengths = self._collect_structured_values(context, "strengths")[:3]
+        extracted_limitations = self._collect_structured_values(context, "limitations")[:3]
+        comparisons: List[Dict[str, Any]] = []
+        for candidate in all_contexts:
+            if candidate.item_id == context.item_id:
+                continue
+            matched_statements = [
+                statement
+                for statement in alternative_statements
+                if self._text_mentions_item(statement["text"], candidate)
+            ]
+            if not matched_statements:
+                continue
+            summary = "; ".join(
+                _dedupe_preserving_order(statement["text"] for statement in matched_statements)
+            )
+            comparisons.append(
+                {
+                    "related_item_id": candidate.item_id,
+                    "relation_type": "source_stated_alternative",
+                    "summary": summary,
+                    "strengths": extracted_strengths,
+                    "weaknesses": extracted_limitations,
+                    "overlap_reasons": ["source-stated alternative in extracted literature"],
+                    "evidence_payload": self._build_literature_payload(
+                        matched_statements,
+                        extra={"match_basis": "name_or_synonym_mention"},
+                    ),
+                    "score": 100 + len(matched_statements),
+                }
+            )
+        return comparisons
 
     def _build_comparison(self, context: ItemContext, candidate: ItemContext) -> Dict[str, Any]:
         overlap_reasons = []
@@ -1310,6 +1787,23 @@ class ItemMaterializer:
             "evidence_payload": {"shared_processes": shared_processes, "shared_mechanisms": shared_mechanisms},
             "score": score,
         }
+
+    @staticmethod
+    def _text_mentions_item(text: str, candidate: ItemContext) -> bool:
+        normalized_text = _strip_inline_markup(text).casefold()
+        labels = [candidate.canonical_name, *candidate.synonyms]
+        for label in labels:
+            cleaned_label = _strip_inline_markup(label).strip().casefold()
+            if len(cleaned_label) < 4:
+                continue
+            if "/" in cleaned_label or "-" in cleaned_label:
+                if cleaned_label in normalized_text:
+                    return True
+                continue
+            pattern = rf"(?<![a-z0-9]){re.escape(cleaned_label)}(?![a-z0-9])"
+            if re.search(pattern, normalized_text):
+                return True
+        return False
 
     def _comparison_strengths(self, left: ItemContext, right: ItemContext) -> List[str]:
         strengths: List[str] = []

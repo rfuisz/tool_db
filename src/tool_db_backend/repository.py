@@ -30,6 +30,7 @@ from tool_db_backend.models import (
     GapFieldSummary,
     GapResourceSummary,
     GapSummary,
+    ItemBrowse,
     ItemDetail,
     ItemComparison,
     ItemExplainer,
@@ -51,6 +52,14 @@ from tool_db_backend.models import (
 class KnowledgeRepository:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+
+    def list_item_browse(self) -> List[ItemBrowse]:
+        if self._should_use_database():
+            try:
+                return self._list_item_browse_from_database()
+            except Exception:
+                pass
+        return [self._item_browse_from_detail(self._get_item_from_files(summary.slug)) for summary in self.list_items()]
 
     def list_items(self) -> List[ItemSummary]:
         if self._should_use_database():
@@ -909,6 +918,187 @@ class KnowledgeRepository:
                     for row in cursor.fetchall()
                 ]
 
+    def _list_item_browse_from_database(self) -> List[ItemBrowse]:
+        with self._connect() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    select
+                      id,
+                      slug,
+                      canonical_name,
+                      item_type::text,
+                      status::text,
+                      family,
+                      summary,
+                      first_publication_year,
+                      primary_input_modality::text,
+                      primary_output_modality::text,
+                      maturity_stage::text
+                    from toolkit_item
+                    order by canonical_name asc, slug asc
+                    """
+                )
+                rows = cursor.fetchall()
+
+                browse_by_id: Dict[Any, Dict[str, Any]] = {}
+                ordered_item_ids: List[Any] = []
+                for row in rows:
+                    item_id = row[0]
+                    ordered_item_ids.append(item_id)
+                    browse_by_id[item_id] = {
+                        "slug": row[1],
+                        "canonical_name": row[2],
+                        "item_type": row[3],
+                        "status": row[4],
+                        "family": row[5],
+                        "summary": row[6],
+                        "first_publication_year": row[7],
+                        "primary_input_modality": row[8],
+                        "primary_output_modality": row[9],
+                        "maturity_stage": row[10],
+                        "synonyms": [],
+                        "components": [],
+                        "mechanisms": [],
+                        "techniques": [],
+                        "target_processes": [],
+                        "validation_rollup": None,
+                        "replication_summary": None,
+                    }
+
+                if not ordered_item_ids:
+                    return []
+
+                for item_id, value in self._fetch_grouped_scalar_lists(
+                    cursor,
+                    """
+                    select item_id, synonym
+                    from item_synonym
+                    order by synonym asc
+                    """,
+                ).items():
+                    if item_id in browse_by_id:
+                        browse_by_id[item_id]["synonyms"] = value
+
+                for item_id, value in self._fetch_grouped_scalar_lists(
+                    cursor,
+                    """
+                    select parent_item_id, component.canonical_name
+                    from item_component ic
+                    join toolkit_item component on component.id = ic.component_item_id
+                    order by component.canonical_name asc
+                    """,
+                ).items():
+                    if item_id in browse_by_id:
+                        browse_by_id[item_id]["components"] = value
+
+                for item_id, value in self._fetch_grouped_scalar_lists(
+                    cursor,
+                    """
+                    select item_id, mechanism_name
+                    from item_mechanism
+                    order by mechanism_name asc
+                    """,
+                ).items():
+                    if item_id in browse_by_id:
+                        browse_by_id[item_id]["mechanisms"] = value
+
+                for item_id, value in self._fetch_grouped_scalar_lists(
+                    cursor,
+                    """
+                    select item_id, technique_name
+                    from item_technique
+                    order by technique_name asc
+                    """,
+                ).items():
+                    if item_id in browse_by_id:
+                        browse_by_id[item_id]["techniques"] = value
+
+                for item_id, value in self._fetch_grouped_scalar_lists(
+                    cursor,
+                    """
+                    select item_id, target_process
+                    from item_target_process
+                    order by target_process asc
+                    """,
+                ).items():
+                    if item_id in browse_by_id:
+                        browse_by_id[item_id]["target_processes"] = value
+
+                cursor.execute(
+                    """
+                    select
+                      item_id,
+                      has_cell_free_validation,
+                      has_bacterial_validation,
+                      has_mammalian_cell_validation,
+                      has_mouse_in_vivo_validation,
+                      has_human_clinical_validation,
+                      has_therapeutic_use,
+                      has_independent_replication
+                    from item_validation_rollup_v1
+                    """
+                )
+                for row in cursor.fetchall():
+                    item_id = row[0]
+                    if item_id not in browse_by_id:
+                        continue
+                    browse_by_id[item_id]["validation_rollup"] = ValidationRollupRecord(
+                        has_cell_free_validation=bool(row[1]),
+                        has_bacterial_validation=bool(row[2]),
+                        has_mammalian_cell_validation=bool(row[3]),
+                        has_mouse_in_vivo_validation=bool(row[4]),
+                        has_human_clinical_validation=bool(row[5]),
+                        has_therapeutic_use=bool(row[6]),
+                        has_independent_replication=bool(row[7]),
+                    )
+
+                cursor.execute(
+                    """
+                    select
+                      item_id,
+                      score_version,
+                      primary_paper_count,
+                      independent_primary_paper_count,
+                      distinct_last_author_clusters,
+                      distinct_institutions,
+                      distinct_biological_contexts,
+                      years_since_first_report,
+                      downstream_application_count,
+                      orphan_tool_flag,
+                      practicality_penalties,
+                      evidence_strength_score,
+                      replication_score,
+                      practicality_score,
+                      translatability_score,
+                      explanation
+                    from replication_summary
+                    """
+                )
+                for row in cursor.fetchall():
+                    item_id = row[0]
+                    if item_id not in browse_by_id:
+                        continue
+                    browse_by_id[item_id]["replication_summary"] = ReplicationSummaryRecord(
+                        score_version=row[1],
+                        primary_paper_count=row[2],
+                        independent_primary_paper_count=row[3],
+                        distinct_last_author_clusters=row[4],
+                        distinct_institutions=row[5],
+                        distinct_biological_contexts=row[6],
+                        years_since_first_report=row[7],
+                        downstream_application_count=row[8],
+                        orphan_tool_flag=bool(row[9]),
+                        practicality_penalties=list(row[10] or []),
+                        evidence_strength_score=float(row[11]) if row[11] is not None else None,
+                        replication_score=float(row[12]) if row[12] is not None else None,
+                        practicality_score=float(row[13]) if row[13] is not None else None,
+                        translatability_score=float(row[14]) if row[14] is not None else None,
+                        explanation=row[15] or {},
+                    )
+
+                return [ItemBrowse(**browse_by_id[item_id]) for item_id in ordered_item_ids]
+
     def _get_item_from_database(self, slug: str) -> Optional[ItemDetail]:
         with self._connect() as conn:
             with conn.cursor() as cursor:
@@ -1557,7 +1747,8 @@ class KnowledgeRepository:
               ic.summary,
               ic.strengths,
               ic.weaknesses,
-              ic.overlap_reasons
+              ic.overlap_reasons,
+              ic.evidence_payload
             from item_comparison ic
             join toolkit_item ti on ti.id = ic.related_item_id
             where ic.item_id = %s
@@ -1574,6 +1765,7 @@ class KnowledgeRepository:
                 strengths=list(row[4] or []),
                 weaknesses=list(row[5] or []),
                 overlap_reasons=list(row[6] or []),
+                evidence_payload=row[7] or {},
             )
             for row in cursor.fetchall()
         ]
@@ -1861,9 +2053,41 @@ class KnowledgeRepository:
         return [row[0] for row in cursor.fetchall()]
 
     @staticmethod
+    def _fetch_grouped_scalar_lists(cursor: Any, query: str) -> Dict[Any, List[str]]:
+        cursor.execute(query)
+        grouped: Dict[Any, List[str]] = {}
+        for item_id, value in cursor.fetchall():
+            if item_id not in grouped:
+                grouped[item_id] = []
+            grouped[item_id].append(value)
+        return grouped
+
+    @staticmethod
     def _fetch_scalar_list(cursor: Any, query: str, item_id: Any) -> List[str]:
         cursor.execute(query, (item_id,))
         return [row[0] for row in cursor.fetchall()]
+
+    @staticmethod
+    def _item_browse_from_detail(detail: ItemDetail) -> ItemBrowse:
+        return ItemBrowse(
+            slug=detail.slug,
+            canonical_name=detail.canonical_name,
+            item_type=detail.item_type,
+            status=detail.status,
+            family=detail.family,
+            summary=detail.summary,
+            first_publication_year=detail.first_publication_year,
+            primary_input_modality=detail.primary_input_modality,
+            primary_output_modality=detail.primary_output_modality,
+            maturity_stage=detail.maturity_stage,
+            synonyms=detail.synonyms,
+            components=detail.components,
+            mechanisms=detail.mechanisms,
+            techniques=detail.techniques,
+            target_processes=detail.target_processes,
+            validation_rollup=detail.validation_rollup,
+            replication_summary=detail.replication_summary,
+        )
 
     @staticmethod
     def _fetch_gap_candidate_tools(cursor: Any, gap_item_id: Any) -> List[GapCandidateTool]:

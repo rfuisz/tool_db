@@ -51,9 +51,27 @@ class _FakeOptoBaseClient:
         return None
 
 
+class _FakeEuropePMCClient:
+    def search(self, query, page_size=25, page=1, result_type="core"):
+        return {"resultList": {"result": []}}
+
+    def close(self):
+        return None
+
+
+class _FakePMCClient:
+    def fetch_bioc_fulltext(self, pmcid):
+        return {}
+
+    def close(self):
+        return None
+
+
 def test_real_data_smoke_test_writes_manifest(tmp_path: Path) -> None:
     tester = RealDataSmokeTester(
         get_settings(),
+        europe_pmc_client=_FakeEuropePMCClient(),
+        pmc_client=_FakePMCClient(),
         openalex_client=_FakeOpenAlexClient(),
         semantic_scholar_client=_FakeSemanticScholarClient(),
         gap_map_client=_FakeGapMapClient(),

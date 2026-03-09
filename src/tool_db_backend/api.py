@@ -1,3 +1,5 @@
+import gzip
+
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -10,6 +12,7 @@ from tool_db_backend.models import (
     GapDetail,
     GapSummary,
     HealthResponse,
+    ItemBrowse,
     ItemDetail,
     ItemSummary,
     SourceRegistryEntry,
@@ -19,7 +22,9 @@ from tool_db_backend.models import (
 )
 from tool_db_backend.render_db_sync import (
     RenderDbSyncError,
+    get_database_import_preflight,
     get_render_database_sync_preflight,
+    import_sql_dump_into_database,
     sync_render_database,
 )
 from tool_db_backend.repository import KnowledgeRepository
@@ -35,6 +40,39 @@ def _is_local_admin_request(request: Request, settings: Settings) -> bool:
     host_header = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
     hostname = host_header.split(":")[0].strip().lower()
     return hostname in {"localhost", "127.0.0.1"}
+
+
+def _get_admin_sync_key(settings: Settings) -> str:
+    return settings.admin_sync_key.strip()
+
+
+def _is_sync_key_request(request: Request, settings: Settings) -> bool:
+    required_key = _get_admin_sync_key(settings)
+    if not required_key:
+        return False
+
+    authorization_header = (request.headers.get("authorization") or "").strip()
+    if authorization_header.lower().startswith("bearer "):
+        authorization_header = authorization_header[7:].strip()
+
+    provided_key = (request.headers.get("x-api-key") or authorization_header).strip()
+    return provided_key == required_key
+
+
+def _require_local_admin_or_sync_key(request: Request, settings: Settings) -> None:
+    if _is_local_admin_request(request, settings) or _is_sync_key_request(request, settings):
+        return
+
+    if _get_admin_sync_key(settings):
+        raise HTTPException(
+            status_code=401,
+            detail="Provide a valid sync key via x-api-key or Authorization: Bearer.",
+        )
+
+    raise HTTPException(
+        status_code=403,
+        detail="Hosted database import is only available from localhost until TOOL_DB_ADMIN_SYNC_KEY is set.",
+    )
 
 
 def create_app() -> FastAPI:
@@ -67,6 +105,10 @@ def create_app() -> FastAPI:
     @app.get("/api/v1/items", response_model=list[ItemSummary])
     def list_items(repo: KnowledgeRepository = Depends(get_repository)) -> list[ItemSummary]:
         return repo.list_items()
+
+    @app.get("/api/v1/items-browse", response_model=list[ItemBrowse])
+    def list_item_browse(repo: KnowledgeRepository = Depends(get_repository)) -> list[ItemBrowse]:
+        return repo.list_item_browse()
 
     @app.get("/api/v1/items/{slug}", response_model=ItemDetail)
     def get_item(slug: str, repo: KnowledgeRepository = Depends(get_repository)) -> ItemDetail:
@@ -141,6 +183,37 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=403, detail="Render DB sync is only available from localhost.")
         try:
             return get_render_database_sync_preflight(settings)
+        except RenderDbSyncError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/v1/admin/import-db")
+    def get_import_db_preflight(request: Request, settings: Settings = Depends(get_settings)) -> dict:
+        _require_local_admin_or_sync_key(request, settings)
+        try:
+            return get_database_import_preflight(settings)
+        except RenderDbSyncError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/v1/admin/import-db")
+    async def import_db(request: Request, settings: Settings = Depends(get_settings)) -> dict:
+        _require_local_admin_or_sync_key(request, settings)
+        raw_body = await request.body()
+        if not raw_body:
+            raise HTTPException(status_code=400, detail="Request body must contain a SQL dump.")
+
+        if request.headers.get("content-encoding", "").lower() == "gzip":
+            try:
+                raw_body = gzip.decompress(raw_body)
+            except OSError as exc:
+                raise HTTPException(status_code=400, detail="Could not decompress gzip SQL dump.") from exc
+
+        try:
+            sql_dump = raw_body.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise HTTPException(status_code=400, detail="SQL dump must be valid UTF-8 text.") from exc
+
+        try:
+            return import_sql_dump_into_database(settings, sql_dump)
         except RenderDbSyncError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

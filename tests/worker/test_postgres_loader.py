@@ -44,10 +44,28 @@ class FakeCursor:
             self._last_row = (self.db.insert_source_document(params),)
         elif normalized.startswith("select id from toolkit_item where slug = %s"):
             self._last_row = self.db.find_item_id(params[0])
+        elif normalized.startswith("select item_type::text from toolkit_item where id = %s"):
+            self._last_row = self.db.find_item_type(params[0])
         elif normalized.startswith("insert into toolkit_item"):
             self._last_row = (self.db.upsert_item(params),)
+        elif normalized.startswith("update toolkit_item set item_type = %s::item_type"):
+            self.db.update_item_type(params)
+            self._last_row = None
+        elif normalized.startswith("update toolkit_item set summary = coalesce(summary, %s)"):
+            self.db.update_item_details(params)
+            self._last_row = None
         elif normalized.startswith("insert into item_synonym"):
             self.db.insert_synonym(params)
+            self._last_row = None
+        elif normalized.startswith("insert into item_mechanism"):
+            self._last_row = None
+        elif normalized.startswith("insert into item_technique"):
+            self._last_row = None
+        elif normalized.startswith("insert into item_target_process"):
+            self._last_row = None
+        elif normalized.startswith("delete from item_facet where item_id = %s"):
+            self._last_row = None
+        elif normalized.startswith("insert into item_facet"):
             self._last_row = None
         elif normalized.startswith("insert into extracted_claim"):
             self._last_row = (self.db.insert_claim(params),)
@@ -62,8 +80,26 @@ class FakeCursor:
             self._last_row = None
         elif normalized.startswith("select id from workflow_template where slug = %s"):
             self._last_row = self.db.find_workflow_template_id(params[0])
+        elif normalized.startswith("delete from workflow_mechanism where workflow_template_id = %s"):
+            self._last_row = None
+        elif normalized.startswith("insert into workflow_mechanism"):
+            self._last_row = None
+        elif normalized.startswith("delete from workflow_technique where workflow_template_id = %s"):
+            self._last_row = None
+        elif normalized.startswith("insert into workflow_technique"):
+            self._last_row = None
         elif normalized.startswith("insert into workflow_stage_template"):
             self._last_row = (self.db.upsert_workflow_stage(params),)
+        elif normalized.startswith("select id from workflow_stage_template where workflow_template_id = %s and stage_order = %s"):
+            self._last_row = self.db.find_workflow_stage_id_by_order(*params)
+        elif normalized.startswith("delete from workflow_edge where workflow_template_id = %s"):
+            self._last_row = None
+        elif normalized.startswith("insert into workflow_edge"):
+            self._last_row = None
+        elif normalized.startswith("delete from workflow_item_role where workflow_template_id = %s"):
+            self._last_row = None
+        elif normalized.startswith("insert into workflow_item_role"):
+            self._last_row = None
         elif normalized.startswith("delete from workflow_assumption"):
             self.db.delete_workflow_assumption(params)
             self._last_row = None
@@ -109,7 +145,7 @@ class FakeDatabase:
     def seed_item(self, slug):
         item_id = f"item-{self._next_item_id}"
         self._next_item_id += 1
-        self.items[slug] = {"id": item_id, "slug": slug}
+        self.items[slug] = {"id": item_id, "slug": slug, "item_type": "protein_domain"}
         return item_id
 
     def seed_workflow_template(self, slug):
@@ -153,6 +189,12 @@ class FakeDatabase:
         row = self.items.get(slug)
         return (row["id"],) if row else None
 
+    def find_item_type(self, item_id):
+        for row in self.items.values():
+            if row["id"] == item_id:
+                return (row.get("item_type"),)
+        return None
+
     def find_workflow_template_id(self, slug):
         row = self.workflow_templates.get(slug)
         return (row["id"],) if row else None
@@ -161,11 +203,37 @@ class FakeDatabase:
         slug = params[0]
         existing = self.items.get(slug)
         if existing:
+            if existing.get("summary") is None:
+                existing["summary"] = params[3]
             return existing["id"]
         item_id = f"item-{self._next_item_id}"
         self._next_item_id += 1
-        self.items[slug] = {"id": item_id, "slug": slug, "canonical_name": params[1], "item_type": params[2]}
+        self.items[slug] = {
+            "id": item_id,
+            "slug": slug,
+            "canonical_name": params[1],
+            "item_type": params[2],
+            "summary": params[3],
+            "primary_input_modality": params[6],
+            "primary_output_modality": params[7],
+        }
         return item_id
+
+    def update_item_type(self, params):
+        proposed_item_type, item_id = params
+        for row in self.items.values():
+            if row["id"] == item_id:
+                row["item_type"] = proposed_item_type
+                return
+
+    def update_item_details(self, params):
+        summary, primary_input_modality, primary_output_modality, item_id = params
+        for row in self.items.values():
+            if row["id"] == item_id:
+                row["summary"] = row.get("summary") or summary
+                row["primary_input_modality"] = row.get("primary_input_modality") or primary_input_modality
+                row["primary_output_modality"] = row.get("primary_output_modality") or primary_output_modality
+                return
 
     def insert_synonym(self, params):
         row = {"item_id": params[0], "synonym": params[1], "source_document_id": params[2]}
@@ -207,6 +275,10 @@ class FakeDatabase:
         self._next_workflow_stage_id += 1
         self.workflow_stages[key] = {"id": stage_id, "params": params}
         return stage_id
+
+    def find_workflow_stage_id_by_order(self, workflow_template_id, stage_order):
+        row = self.workflow_stages.get((workflow_template_id, stage_order))
+        return (row["id"],) if row else None
 
     def delete_workflow_assumption(self, params):
         stage_id, source_document_id, assumption_kind = params
@@ -256,6 +328,7 @@ def test_execute_load_plan_applies_existing_item_claims() -> None:
     assert len(fake_db.item_citations) == 2
     assert len(fake_db.workflow_stages) == 2
     assert len(fake_db.workflow_assumptions) == 2
+    assert fake_db.items["aslov2"]["summary"]
 
 
 def test_execute_load_plan_routes_new_candidate_to_review_queue() -> None:

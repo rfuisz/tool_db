@@ -47,6 +47,11 @@ def build_first_pass_query_sets(settings: Settings, seed_query_limit: int = 24) 
         "\"light-controlled signaling\"",
         "\"optogenetic transcription\"",
         "\"light-gated enzyme\"",
+        "\"optogenetic benchmark\"",
+        "\"optogenetic comparison\"",
+        "\"comparative optogenetics\"",
+        "\"optogenetic limitations\"",
+        "\"head-to-head\" optogenetic",
     ]
     seed_terms: List[str] = []
     optobase_terms: List[str] = []
@@ -84,6 +89,9 @@ def build_first_pass_query_sets(settings: Settings, seed_query_limit: int = 24) 
         _append_unique(literature_queries, query)
     for query in seed_terms[:seed_query_limit]:
         _append_unique(literature_queries, query)
+    for query in seed_terms[: min(seed_query_limit, 12)]:
+        _append_unique(literature_queries, f"\"{query}\" benchmark")
+        _append_unique(literature_queries, f"\"{query}\" comparison")
     for query in mechanism_queries:
         _append_unique(literature_queries, query)
     for query in process_queries:

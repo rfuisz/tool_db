@@ -180,6 +180,8 @@ This layer records:
 - whether it supports or contradicts a claim
 - what quantitative metrics were reported
 
+It should also preserve source-backed explainer prose about what a tool does, what problem it solves, what constraints it carries, and what alternatives the source contrasts it against. Those explanations should remain linked to source provenance when surfaced in approved item pages rather than being regenerated as uncited summary copy later.
+
 ### C. Validation / Context Model
 
 This records whether a tool actually worked, where, and how.

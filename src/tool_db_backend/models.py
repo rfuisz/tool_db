@@ -110,6 +110,17 @@ class ReplicationSummaryRecord(BaseModel):
     explanation: Dict[str, Any] = Field(default_factory=dict)
 
 
+class ItemBrowse(ItemSummary):
+    maturity_stage: Optional[str] = None
+    synonyms: List[str] = Field(default_factory=list)
+    components: List[str] = Field(default_factory=list)
+    mechanisms: List[str] = Field(default_factory=list)
+    techniques: List[str] = Field(default_factory=list)
+    target_processes: List[str] = Field(default_factory=list)
+    validation_rollup: Optional[ValidationRollupRecord] = None
+    replication_summary: Optional[ReplicationSummaryRecord] = None
+
+
 class ItemFacet(BaseModel):
     facet_name: str
     facet_value: str
@@ -131,6 +142,7 @@ class ItemComparison(BaseModel):
     strengths: List[str] = Field(default_factory=list)
     weaknesses: List[str] = Field(default_factory=list)
     overlap_reasons: List[str] = Field(default_factory=list)
+    evidence_payload: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ItemProblemLink(BaseModel):

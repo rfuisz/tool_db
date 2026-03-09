@@ -50,6 +50,7 @@
       "unresolved_ambiguities": []
     }
   ],
+  "workflow_observations": [],
   "workflow_stage_observations": [
     {
       "local_id": "stage_broad_screen",
@@ -86,6 +87,7 @@
       "advance_criteria": "reproducible activity in a more relevant host assay"
     }
   ],
+  "workflow_step_observations": [],
   "recommended_seed_item_local_ids": ["item_aslov2", "item_cry2_cib1"],
   "unresolved_ambiguities": [
     {

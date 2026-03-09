@@ -165,9 +165,12 @@ class LoadPlanBuilder:
                         "item_type": promotion.get("item_type") or candidate.get("item_type"),
                         "aliases": candidate.get("aliases", []),
                         "external_ids": candidate.get("external_ids", {}),
+                        "summary": promotion.get("summary"),
                         "mechanisms": promotion.get("mechanisms", []),
                         "techniques": promotion.get("techniques", []),
                         "target_processes": promotion.get("target_processes", []),
+                        "primary_input_modality": promotion.get("primary_input_modality"),
+                        "primary_output_modality": promotion.get("primary_output_modality"),
                         "item_facets": promotion.get("item_facets", []),
                         "classification_notes": promotion.get("classification_notes", []),
                     }
@@ -562,6 +565,18 @@ class LoadPlanBuilder:
         evidence_text = (candidate.get("evidence_text") or "").strip()
         if evidence_text:
             return evidence_text
+        freeform_explainers = candidate.get("freeform_explainers") or {}
+        if isinstance(freeform_explainers, dict):
+            for key in ("what_it_does", "problem_it_solves", "resources_required"):
+                value = str(freeform_explainers.get(key) or "").strip()
+                if value:
+                    return value
+        for key in ("useful_for", "problem_solved"):
+            values = candidate.get(key) or []
+            if values:
+                cleaned_values = [str(value).strip() for value in values if str(value).strip()]
+                if cleaned_values:
+                    return "; ".join(cleaned_values)
         for claim in related_claims:
             claim_text = (claim.get("claim_text_normalized") or "").strip()
             if claim_text:

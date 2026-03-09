@@ -17,12 +17,33 @@ def test_load_plan_builder_creates_existing_item_actions() -> None:
     assert load_plan["load_plan_type"] == "canonical_load_plan_v1"
     toolkit_actions = load_plan["actions"]["toolkit_items"]
     assert any(action["action"] == "attach_evidence_to_existing_item" for action in toolkit_actions)
+    attach_action = next(
+        action for action in toolkit_actions if action["action"] == "attach_evidence_to_existing_item"
+    )
+    assert attach_action["summary"]
     claim_actions = load_plan["actions"]["claims"]
     assert claim_actions[0]["subject_targets"][0]["target_kind"] == "existing_item"
     workflow_actions = load_plan["actions"]["workflows"]
-    assert workflow_actions[0]["action"] == "upsert_workflow_stages_for_existing_workflow"
+    assert workflow_actions[0]["action"] == "upsert_workflow_for_existing_workflow"
     assert workflow_actions[0]["target_slug"] == "fast-no-cloning-screen"
     assert len(workflow_actions[0]["stages"]) == 2
+
+
+def test_load_plan_builder_summary_prefers_extracted_explainer_text() -> None:
+    builder = LoadPlanBuilder(get_settings())
+
+    summary = builder._derive_summary(  # noqa: SLF001
+        {
+            "freeform_explainers": {
+                "what_it_does": "Provides light-gated recruitment in the source-backed extraction output."
+            },
+            "useful_for": ["control transcription timing"],
+            "problem_solved": ["reduce constitutive recruitment"],
+        },
+        [],
+    )
+
+    assert summary == "Provides light-gated recruitment in the source-backed extraction output."
 
 
 def test_load_plan_writer_outputs_json(tmp_path: Path) -> None:

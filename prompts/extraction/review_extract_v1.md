@@ -49,6 +49,7 @@ Convert one review or synthesis source into a `review_extract_v1` packet.
   - `alternatives`
 - Each `freeform_explainers` field should be 1-3 compact sentences, grounded in the title/abstract/full-text evidence actually provided to the model, and left blank or omitted when unsupported.
 - Keep those fields short, source-backed, and empty rather than speculative when the evidence is thin.
+- When the job payload includes sectioned or excerpted full text, preferentially pull usefulness, limitations, alternatives, and implementation details from the most decision-relevant sections such as benchmark tables, comparison passages, discussion, limitations, and protocol-style excerpts rather than repeating title metadata.
 - Set `citation_role_suggestion` only when the source clearly fits an existing canonical citation role such as `foundational`, `best_review`, `independent_validation`, `benchmark`, `protocol`, `therapeutic`, `negative_result`, `structural`, or `database_reference`; otherwise omit it.
 
 ## Output Contract

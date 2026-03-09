@@ -18,6 +18,7 @@
 ## Evidence Discipline
 
 - Every item dossier should surface ranked citations.
+- Source-backed explainer prose about usefulness, constraints, and alternatives should keep document provenance when promoted beyond first-pass review.
 - Contradictory evidence should be stored, not flattened away.
 - Retractions, corrections, and orphan-tool signals must reduce confidence rather than being silently ignored.
 - Validation claims are context-dependent; preserve host, assay, delivery, and construct details.

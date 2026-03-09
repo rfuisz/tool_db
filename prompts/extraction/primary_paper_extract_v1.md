@@ -50,6 +50,7 @@ Convert one literature source into a `primary_paper_extract_v1` packet.
   - `alternatives`
 - Each `freeform_explainers` field should be 1-3 compact sentences, grounded in the title/abstract/full-text evidence actually provided to the model, and left blank or omitted when unsupported.
 - Keep those fields source-backed and terse; use empty arrays when the abstract does not support them.
+- When the job payload includes sectioned or excerpted full text, preferentially pull usefulness, limitations, alternatives, and implementation details from the most decision-relevant sections such as results, discussion, comparison, benchmark, limitations, and protocol/method excerpts rather than repeating title metadata.
 - Set `citation_role_suggestion` only when the source clearly fits an existing canonical citation role such as `foundational`, `best_review`, `independent_validation`, `benchmark`, `protocol`, `therapeutic`, `negative_result`, `structural`, or `database_reference`; otherwise omit it.
 - If you emit any `validation_observations`, every observation must include `success_outcome` with one of: `success`, `mixed`, or `failed`.
 - Do not create partial validation observations; if the abstract does not support a full schema-valid observation, return `validation_observations: []` instead.

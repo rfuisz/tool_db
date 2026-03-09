@@ -14,9 +14,12 @@ When `DATABASE_URL` is set, the read layer prefers Postgres so hosted deployment
 - `GET /api/v1/vocabularies`
 - `GET /api/v1/source-registry`
 - `GET /api/v1/items`
+- `GET /api/v1/items-browse`
 - `GET /api/v1/items/{slug}`
 - `GET /api/v1/workflows`
 - `GET /api/v1/workflows/{slug}`
+- `GET /api/v1/admin/import-db`
+- `POST /api/v1/admin/import-db`
 
 ## Run Locally
 
@@ -33,3 +36,5 @@ The repo-root `render.yaml` blueprint deploys this service with:
 - a private-service network boundary so only your own Render services can reach it
 
 That makes each code push a hosted data refresh for the checked-in bundle and extraction artifacts.
+
+For one-off curator syncs from localhost, the hosted web app can proxy a SQL dump upload into `POST /api/v1/admin/import-db`. Protect that path with `TOOL_DB_ADMIN_SYNC_KEY` on both the web and API services; callers must send it via `x-api-key` or `Authorization: Bearer`.

@@ -11,3 +11,4 @@ alwaysApply: false
 - Models should suggest candidates, claims, contexts, metrics, and ambiguities.
 - Canonical ID assignment, synonym resolution, unit normalization, and merges are deterministic post-processing steps.
 - Add new packet fields only when they serve downstream normalization or curation.
+- If packets include source-backed usefulness, limitation, prerequisite, or alternative prose, preserve that evidence through normalization/materialization and surface it with provenance instead of regenerating generic UI copy later.

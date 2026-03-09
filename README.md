@@ -29,6 +29,8 @@ Quick start:
 
 Worker commands now emit progress logs by default for long-running passes such as `materialize-item-details`. Set `LOG_LEVEL=DEBUG` if you want more verbose worker-side tracing.
 
+The web app now expects the local API to be real when running on localhost. If `http://127.0.0.1:8000` is down or serving stale routes, canonical pages fail loudly instead of silently dropping back to the tiny bundled seed dataset. You can re-enable that legacy fallback only with `TOOL_DB_ALLOW_SEED_FALLBACK=true`.
+
 Recommended local `DATABASE_URL`:
 
 ```text
@@ -56,13 +58,17 @@ Practical implication:
 - if the change exists in tracked repo artifacts and you push it, Render will pick it up
 - if the change exists only in your local Postgres, Render cannot see it until you export or check in the corresponding repo state
 
-For one-off curator syncs from localhost, the local web app now exposes a top-nav `Sync Render DB` control. It runs a preflight against the hosted Render Postgres target, then overwrites that hosted database from your local `DATABASE_URL` after confirmation.
+For one-off curator syncs from localhost, the local web app now exposes a top-nav `Sync Render DB` control. It can still use direct Postgres access when available, but it also supports a hosted import path: the local app creates a `pg_dump --inserts` SQL dump from your local `DATABASE_URL`, uploads it to the hosted app, and the private API restores it into hosted Postgres.
+
+To enable the hosted import path, set the same `TOOL_DB_ADMIN_SYNC_KEY` on both Render services and in your local `.env`, then set `TOOL_DB_SYNC_TARGET_URL` locally to your hosted web origin.
 
 ## Core Modeling Rule
 
 The primary unit of truth is `claim + context + evidence`.
 
 Human-readable summaries such as "has mouse validation" or "used therapeutically" are derived views built from source-backed observations, not hand-entered booleans.
+
+Approved item pages should now prefer source-backed explainer prose extracted from literature packets, with visible document provenance, and only fall back to heuristic derivation when no cited extraction exists.
 
 ## Hierarchy Browsing
 

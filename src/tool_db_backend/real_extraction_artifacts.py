@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from tool_db_backend.clients.europe_pmc import EuropePMCClient
+from tool_db_backend.clients.pmc import PMCClient
 from tool_db_backend.clients.semantic_scholar import SemanticScholarClient
 from tool_db_backend.config import Settings
 from tool_db_backend.schema_validation import validate_packet
@@ -36,16 +37,19 @@ class RealExtractionArtifactBuilder:
         self,
         settings: Settings,
         europe_pmc_client: Optional[EuropePMCClient] = None,
+        pmc_client: Optional[PMCClient] = None,
         semantic_scholar_client: Optional[SemanticScholarClient] = None,
     ) -> None:
         self.settings = settings
         self.europe_pmc_client = europe_pmc_client or EuropePMCClient(settings)
+        self.pmc_client = pmc_client or PMCClient(settings)
         self.semantic_scholar_client = semantic_scholar_client or SemanticScholarClient(settings)
         self.optobase_parser = OptoBaseSearchParser()
         self.enrichment_cache_dir = self.settings.pipeline_artifact_root / "openalex-enrichment-cache"
 
     def close(self) -> None:
         self.europe_pmc_client.close()
+        self.pmc_client.close()
         self.semantic_scholar_client.close()
 
     def build_from_smoke_test_manifest(
@@ -318,13 +322,15 @@ class RealExtractionArtifactBuilder:
                 abstract_text = _reconstruct_openalex_abstract(work.get("abstract_inverted_index"))
                 title = work.get("display_name") or work.get("title") or openalex_id
                 enrichment: Dict[str, Any] = {"source": "openalex_enrichment_skipped"}
-                if len(abstract_text.strip()) < 80:
+                if doi or pmid or len(abstract_text.strip()) < 400:
                     enrichment = self._enrich_openalex_work(
                         title=title,
                         doi=doi,
                         pmid=pmid,
                     )
-                    if enrichment.get("abstract_text"):
+                    if enrichment.get("abstract_text") and len(
+                        str(enrichment.get("abstract_text") or "").strip()
+                    ) >= len(abstract_text.strip()):
                         abstract_text = enrichment["abstract_text"]
                 slug = _slugify(work.get("display_name") or work.get("title") or openalex_id)
                 work_type = (work.get("type") or "").strip().lower()
@@ -373,6 +379,9 @@ class RealExtractionArtifactBuilder:
                             "cited_by_count": work.get("cited_by_count"),
                             "concepts": work.get("concepts", []),
                         },
+                    "europe_pmc_metadata": enrichment.get("europe_pmc_metadata"),
+                    "pmc_bioc_preview_text": enrichment.get("pmc_bioc_preview_text"),
+                    "pmc_bioc_available": enrichment.get("pmc_bioc_available"),
                         "semantic_scholar_metadata": enrichment.get("semantic_scholar"),
                         "enrichment_metadata": enrichment,
                     },
@@ -638,22 +647,68 @@ class RealExtractionArtifactBuilder:
             return None
 
     @staticmethod
-    def _summarize_pmc_bioc_payload(payload: Optional[Dict[str, Any]], max_chars: int = 12000) -> Optional[str]:
+    def _extract_pmc_section_label(passage: Dict[str, Any]) -> Optional[str]:
+        infons = passage.get("infons") or {}
+        if not isinstance(infons, dict):
+            return None
+        for key in (
+            "section_type",
+            "section-title",
+            "section",
+            "type",
+            "iao_name_1",
+            "iao_name",
+        ):
+            value = infons.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return None
+
+    @classmethod
+    def _summarize_pmc_bioc_payload(cls, payload: Optional[Dict[str, Any]], max_chars: int = 12000) -> Optional[str]:
         if not payload:
             return None
-        passages: List[str] = []
+
+        prioritized_sections = [
+            ("abstract", ("abstract",)),
+            ("introduction", ("introduction", "background")),
+            ("results", ("results", "result")),
+            ("discussion", ("discussion", "interpretation")),
+            ("conclusion", ("conclusion", "concluding")),
+            ("limitations", ("limitation",)),
+            ("comparison", ("comparison", "comparative")),
+            ("benchmark", ("benchmark",)),
+            ("methods", ("method", "protocol", "materials")),
+        ]
+        grouped: Dict[str, List[str]] = {name: [] for name, _ in prioritized_sections}
+        grouped["other"] = []
+
         for document in payload.get("documents", []):
             for passage in document.get("passages", []):
                 text = str(passage.get("text") or "").strip()
-                if text:
-                    passages.append(text)
-                if sum(len(chunk) for chunk in passages) >= max_chars:
-                    break
-            if sum(len(chunk) for chunk in passages) >= max_chars:
+                if not text:
+                    continue
+                label = cls._extract_pmc_section_label(passage) or "other"
+                normalized_label = label.casefold()
+                bucket = "other"
+                for section_name, tokens in prioritized_sections:
+                    if any(token in normalized_label for token in tokens):
+                        bucket = section_name
+                        break
+                chunk = f"[{label}] {text}" if bucket != "other" else text
+                if len(grouped[bucket]) < 2:
+                    grouped[bucket].append(chunk)
+            total_chars = sum(len(chunk) for values in grouped.values() for chunk in values)
+            if total_chars >= max_chars:
                 break
-        if not passages:
+
+        ordered_chunks: List[str] = []
+        for section_name, _tokens in prioritized_sections:
+            ordered_chunks.extend(grouped[section_name])
+        ordered_chunks.extend(grouped["other"])
+        if not ordered_chunks:
             return None
-        joined = "\n\n".join(passages)
+        joined = "\n\n".join(ordered_chunks)
         if len(joined) <= max_chars:
             return joined
         return joined[: max_chars - 20].rstrip() + "\n\n[truncated]"
@@ -814,6 +869,13 @@ class RealExtractionArtifactBuilder:
             "source": "openalex_enrichment",
         }
         if europe_pmc_result:
+            pmc_bioc_payload = None
+            pmcid = europe_pmc_result.get("pmcid")
+            if pmcid:
+                try:
+                    pmc_bioc_payload = self.pmc_client.fetch_bioc_fulltext(str(pmcid))
+                except Exception:
+                    pmc_bioc_payload = None
             enrichment.update(
                 _compact_dict(
                     {
@@ -823,7 +885,10 @@ class RealExtractionArtifactBuilder:
                         "abstract_text": europe_pmc_result.get("abstractText"),
                         "journal": europe_pmc_result.get("journalTitle"),
                         "pub_type": europe_pmc_result.get("pubType"),
-                        "is_open_access": europe_pmc_result.get("isOpenAccess"),
+                        "is_open_access": self._is_open_access(europe_pmc_result.get("isOpenAccess")),
+                        "europe_pmc_metadata": self._extract_europe_pmc_metadata(europe_pmc_result),
+                        "pmc_bioc_preview_text": self._summarize_pmc_bioc_payload(pmc_bioc_payload),
+                        "pmc_bioc_available": pmc_bioc_payload is not None,
                     }
                 )
             )
@@ -872,7 +937,7 @@ class RealExtractionArtifactBuilder:
         try:
             payload = self.semantic_scholar_client.search_papers(
                 query=title,
-                limit=5,
+                limit=10,
                 offset=0,
                 fields="paperId,title,year,citationCount,externalIds",
             )
@@ -893,8 +958,34 @@ class RealExtractionArtifactBuilder:
 
     @staticmethod
     def _license_status(enrichment: Dict[str, Any]) -> Optional[str]:
-        if enrichment.get("is_open_access") is True:
+        is_open_access = enrichment.get("is_open_access")
+        if is_open_access in {True, "Y", "y", "open_access"}:
             return "open_access"
-        if enrichment.get("is_open_access") is False:
+        if is_open_access in {False, "N", "n", "closed_or_unknown"}:
             return "closed_or_unknown"
         return None
+
+    @staticmethod
+    def _is_open_access(value: Any) -> Optional[bool]:
+        if value in {True, "Y", "y", "yes", "YES"}:
+            return True
+        if value in {False, "N", "n", "no", "NO"}:
+            return False
+        return None
+
+    @staticmethod
+    def _extract_europe_pmc_metadata(result: Dict[str, Any]) -> Dict[str, Any]:
+        return _compact_dict(
+            {
+                "id": result.get("id"),
+                "source": result.get("source"),
+                "pmid": result.get("pmid"),
+                "pmcid": result.get("pmcid"),
+                "doi": result.get("doi"),
+                "pubType": result.get("pubType"),
+                "journalTitle": result.get("journalTitle"),
+                "authorString": result.get("authorString"),
+                "citedByCount": result.get("citedByCount"),
+                "isOpenAccess": result.get("isOpenAccess"),
+            }
+        )

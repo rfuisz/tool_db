@@ -263,6 +263,7 @@ export interface ItemComparison {
   strengths: string[];
   weaknesses: string[];
   overlap_reasons: string[];
+  evidence_payload?: Record<string, unknown>;
 }
 
 export interface ItemProblemLink {

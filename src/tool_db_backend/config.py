@@ -21,7 +21,14 @@ class Settings(BaseSettings):
     app_env: str = "development"
     log_level: str = "INFO"
     database_url: str = ""
-    render_database_url: str = ""
+    render_database_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("RENDER_DATABASE_URL", "RENDER_POSTGRES_URL"),
+    )
+    admin_sync_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("TOOL_DB_ADMIN_SYNC_KEY", "ADMIN_SYNC_KEY"),
+    )
     render_api_key: str = ""
     render_postgres_id: str = ""
     render_postgres_name: str = "tool-db-postgres"

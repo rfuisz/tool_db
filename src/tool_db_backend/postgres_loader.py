@@ -336,6 +336,13 @@ class PostgresLoadPlanExecutor:
                     slug_to_item_id[target_slug],
                     action.get("item_type"),
                 )
+                self._maybe_update_existing_item_details(
+                    cursor,
+                    slug_to_item_id[target_slug],
+                    summary=action.get("summary"),
+                    primary_input_modality=action.get("primary_input_modality"),
+                    primary_output_modality=action.get("primary_output_modality"),
+                )
                 self._upsert_synonyms(
                     cursor,
                     slug_to_item_id[target_slug],
@@ -401,6 +408,28 @@ class PostgresLoadPlanExecutor:
             where id = %s
             """,
             (proposed_item_type, item_id),
+        )
+
+    @staticmethod
+    def _maybe_update_existing_item_details(
+        cursor: Any,
+        item_id: Any,
+        *,
+        summary: Optional[str],
+        primary_input_modality: Optional[str],
+        primary_output_modality: Optional[str],
+    ) -> None:
+        cursor.execute(
+            """
+            update toolkit_item
+            set
+              summary = coalesce(summary, %s),
+              primary_input_modality = coalesce(primary_input_modality, %s),
+              primary_output_modality = coalesce(primary_output_modality, %s),
+              updated_at = now()
+            where id = %s
+            """,
+            (summary, primary_input_modality, primary_output_modality, item_id),
         )
 
     def _execute_claim_actions(

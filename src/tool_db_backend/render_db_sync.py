@@ -13,10 +13,67 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 import psycopg
 
 from tool_db_backend.config import Settings
+from tool_db_backend.db_migrations import MigrationRunner
 
 
 class RenderDbSyncError(RuntimeError):
     pass
+
+
+def get_database_import_preflight(settings: Settings) -> Dict[str, Any]:
+    if not settings.database_url:
+        raise RenderDbSyncError("DATABASE_URL must point at the target database.")
+
+    return {
+        "status": "ready",
+        "message": "Hosted database import endpoint is ready.",
+        "render_database_source": "current_database",
+        "render_database": {
+            "postgres_id": None,
+            "postgres_name": None,
+            "display_url": _build_display_database_url(settings.database_url),
+        },
+        "target_summary": _read_database_summary(settings.database_url),
+    }
+
+
+def import_sql_dump_into_database(settings: Settings, sql_dump: str) -> Dict[str, Any]:
+    if not settings.database_url:
+        raise RenderDbSyncError("DATABASE_URL must point at the target database.")
+
+    normalized_dump = sql_dump.strip()
+    if not normalized_dump:
+        raise RenderDbSyncError("The uploaded SQL dump is empty.")
+
+    MigrationRunner(settings).apply_all()
+    started_at = time.time()
+    target_before_summary = _read_database_summary(settings.database_url)
+    truncate_statement = _build_truncate_statement(settings.database_url)
+    table_count = truncate_statement.count('", "') + 1 if truncate_statement else 0
+
+    with psycopg.connect(_normalize_database_url_for_connection(settings.database_url)) as conn:
+        with conn.transaction():
+            with conn.cursor() as cursor:
+                cursor.execute(truncate_statement)
+                cursor.execute(normalized_dump)
+                cursor.execute("ANALYZE;")
+
+    target_after_summary = _read_database_summary(settings.database_url)
+    duration_seconds = round(time.time() - started_at, 2)
+    return {
+        "status": "success",
+        "message": "Hosted Postgres was overwritten from the uploaded local database dump.",
+        "duration_seconds": duration_seconds,
+        "table_count": table_count,
+        "render_database_source": "current_database",
+        "render_database": {
+            "postgres_id": None,
+            "postgres_name": None,
+            "display_url": _build_display_database_url(settings.database_url),
+        },
+        "target_before_summary": target_before_summary,
+        "target_after_summary": target_after_summary,
+    }
 
 
 def get_render_database_sync_preflight(settings: Settings) -> Dict[str, Any]:

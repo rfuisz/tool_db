@@ -180,6 +180,8 @@ This expands source queries from the checked-in seed bundle and controlled vocab
 
 The broad harvester now also queries Europe PMC and can fetch a bounded set of PMC BioC full-text payloads for open-access papers discovered through Europe PMC.
 
+OpenAlex-backed extraction artifacts now try to inherit richer Europe PMC / PMC evidence when DOI or PMID resolution succeeds, so downstream extraction jobs are less likely to stay title-and-abstract-only for open-access papers.
+
 Build typed extraction artifacts from fetched real data:
 
 ```bash
@@ -189,8 +191,8 @@ Build typed extraction artifacts from fetched real data:
 This currently creates:
 
 - deterministic `database_entry_extract_v1` packets for a slice of Gap Map gaps
-- `review_extract_v1` and `primary_paper_extract_v1` metadata scaffolds from Europe PMC search results, with PMC full-text previews attached when available
-- `primary_paper_extract_v1` metadata scaffolds for a slice of OpenAlex works
+- `review_extract_v1` and `primary_paper_extract_v1` metadata scaffolds from Europe PMC search results, with section-aware PMC full-text previews attached when available
+- `primary_paper_extract_v1` metadata scaffolds for a slice of OpenAlex works, enriched from Europe PMC / PMC when resolvable
 - `primary_paper_extract_v1` and `review_extract_v1` metadata scaffolds for a slice of Semantic Scholar papers
 - structured Semantic Scholar summary artifacts for fetched search hits
 - structured OptoBase search-summary artifacts for fetched HTML result pages
@@ -220,6 +222,8 @@ For `toolkit_item` candidates, first-pass extraction should now capture both ter
 - what resources or prerequisites are required to execute it
 - what problem it solves and does not solve
 - what alternatives the source contrasts it against
+
+That richer prose is expected to survive into canonical item explainers, problem-fit notes, and comparison copy with source provenance when the extraction is later promoted.
 
 LLM extraction calls now go through one shared JSON-call harness with disk cache and retry handling:
 

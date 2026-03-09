@@ -1,3 +1,4 @@
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -41,6 +42,7 @@ class RealExtractionArtifactBuilder:
         self.europe_pmc_client = europe_pmc_client or EuropePMCClient(settings)
         self.semantic_scholar_client = semantic_scholar_client or SemanticScholarClient(settings)
         self.optobase_parser = OptoBaseSearchParser()
+        self.enrichment_cache_dir = self.settings.pipeline_artifact_root / "openalex-enrichment-cache"
 
     def close(self) -> None:
         self.europe_pmc_client.close()
@@ -59,8 +61,10 @@ class RealExtractionArtifactBuilder:
         seen_document_keys = set()
 
         gap_packets = self._build_gap_packets(
-            Path(manifest["sources"]["gap_map"]["raw_paths"]["gaps"]),
-            output_dir / "gap_map",
+            gaps_raw_path=Path(manifest["sources"]["gap_map"]["raw_paths"]["gaps"]),
+            capabilities_raw_path=Path(manifest["sources"]["gap_map"]["raw_paths"]["capabilities"]),
+            resources_raw_path=Path(manifest["sources"]["gap_map"]["raw_paths"]["resources"]),
+            output_dir=output_dir / "gap_map",
             limit=gap_limit,
         )
         openalex_outputs = self._build_openalex_packets_and_jobs(
@@ -119,14 +123,41 @@ class RealExtractionArtifactBuilder:
         result["manifest_path"] = str(manifest_out)
         return result
 
-    def _build_gap_packets(self, raw_path: Path, output_dir: Path, limit: int) -> List[Path]:
-        raw_wrapper = json.loads(raw_path.read_text())
-        entries = raw_wrapper["payload"][:limit]
+    def _build_gap_packets(
+        self,
+        gaps_raw_path: Path,
+        capabilities_raw_path: Path,
+        resources_raw_path: Path,
+        output_dir: Path,
+        limit: int,
+    ) -> List[Path]:
+        gaps_wrapper = json.loads(gaps_raw_path.read_text())
+        capabilities_wrapper = json.loads(capabilities_raw_path.read_text())
+        resources_wrapper = json.loads(resources_raw_path.read_text())
+        entries = gaps_wrapper["payload"][:limit]
+        capability_by_id = {
+            entry["id"]: entry for entry in capabilities_wrapper["payload"] if entry.get("id")
+        }
+        resource_by_id = {
+            entry["id"]: entry for entry in resources_wrapper["payload"] if entry.get("id")
+        }
         output_dir.mkdir(parents=True, exist_ok=True)
         self._clear_json_outputs(output_dir)
         written_paths = []
         for entry in entries:
             local_id = f"gap_{entry['id']}"
+            capabilities = [
+                capability_by_id[capability_id]
+                for capability_id in entry.get("foundationalCapabilities", [])
+                if capability_id in capability_by_id
+            ]
+            resource_ids = {
+                resource_id
+                for capability in capabilities
+                for resource_id in capability.get("resources", [])
+                if resource_id in resource_by_id
+            }
+            resources = [resource_by_id[resource_id] for resource_id in sorted(resource_ids)]
             packet = {
                 "packet_type": "database_entry_extract_v1",
                 "schema_version": "v1",
@@ -167,6 +198,8 @@ class RealExtractionArtifactBuilder:
                 "database_fields": {
                     "field": entry.get("field"),
                     "foundationalCapabilities": entry.get("foundationalCapabilities", []),
+                    "capabilities": capabilities,
+                    "resources": resources,
                     "tags": entry.get("tags", []),
                 },
                 "unresolved_ambiguities": [],
@@ -268,20 +301,23 @@ class RealExtractionArtifactBuilder:
                 doi = self._normalize_doi(work.get("doi"))
                 pmid = self._extract_pmid(work.get("ids", {}))
                 abstract_text = _reconstruct_openalex_abstract(work.get("abstract_inverted_index"))
-                enrichment = self._enrich_openalex_work(
-                    title=work.get("display_name") or work.get("title") or openalex_id,
-                    doi=doi,
-                    pmid=pmid,
-                )
-                if len(abstract_text.strip()) < 80 and enrichment.get("abstract_text"):
-                    abstract_text = enrichment["abstract_text"]
+                title = work.get("display_name") or work.get("title") or openalex_id
+                enrichment: Dict[str, Any] = {"source": "openalex_enrichment_skipped"}
+                if len(abstract_text.strip()) < 80:
+                    enrichment = self._enrich_openalex_work(
+                        title=title,
+                        doi=doi,
+                        pmid=pmid,
+                    )
+                    if enrichment.get("abstract_text"):
+                        abstract_text = enrichment["abstract_text"]
                 slug = _slugify(work.get("display_name") or work.get("title") or openalex_id)
                 work_type = (work.get("type") or "").strip().lower()
                 is_review = work_type == "review"
                 source_type = "review" if is_review else "primary_paper"
                 source_document = _compact_dict({
                     "source_type": source_type,
-                    "title": work.get("display_name") or work.get("title") or openalex_id,
+                    "title": title,
                     "doi": doi,
                     "openalex_id": openalex_id,
                     "pmid": pmid,
@@ -465,11 +501,29 @@ class RealExtractionArtifactBuilder:
 
     @staticmethod
     def _unique_output_path(directory: Path, slug: str, suffix: str, external_id: str) -> Path:
-        candidate = directory / f"{slug}{suffix}"
+        safe_slug = RealExtractionArtifactBuilder._safe_output_stem(slug, suffix)
+        candidate = directory / f"{safe_slug}{suffix}"
         if not candidate.exists():
             return candidate
         safe_external = _slugify(external_id.rsplit("/", 1)[-1])
-        return directory / f"{slug}-{safe_external}{suffix}"
+        safe_external_slug = RealExtractionArtifactBuilder._safe_output_stem(
+            f"{safe_slug}-{safe_external}",
+            suffix,
+        )
+        return directory / f"{safe_external_slug}{suffix}"
+
+    @staticmethod
+    def _safe_output_stem(stem: str, suffix: str, max_name_length: int = 240) -> str:
+        candidate_name = f"{stem}{suffix}"
+        if len(candidate_name) <= max_name_length:
+            return stem
+
+        digest = hashlib.sha256(stem.encode("utf-8")).hexdigest()[:12]
+        max_stem_length = max(32, max_name_length - len(suffix) - len(digest) - 1)
+        trimmed = stem[:max_stem_length].rstrip("-._")
+        if not trimmed:
+            trimmed = "artifact"
+        return f"{trimmed}-{digest}"
 
     @staticmethod
     def _document_key_from_fields(
@@ -581,6 +635,11 @@ class RealExtractionArtifactBuilder:
         return packet_path, job_path
 
     def _enrich_openalex_work(self, title: str, doi: Optional[str], pmid: Optional[str]) -> Dict[str, Any]:
+        cache_path = self._enrichment_cache_path(title=title, doi=doi, pmid=pmid)
+        cached = self._read_json_cache(cache_path)
+        if cached is not None:
+            return cached
+
         europe_pmc_result = self.europe_pmc_client.fetch_by_doi_or_pmid(doi=doi, pmid=pmid)
         semantic_scholar_result = self._find_semantic_scholar_match(title=title, doi=doi, pmid=pmid)
         enrichment = {
@@ -611,7 +670,29 @@ class RealExtractionArtifactBuilder:
                     "externalIds": semantic_scholar_result.get("externalIds"),
                 }
             )
-        return _compact_dict(enrichment)
+        compact_enrichment = _compact_dict(enrichment)
+        self._write_json_cache(cache_path, compact_enrichment)
+        return compact_enrichment
+
+    def _enrichment_cache_path(self, *, title: str, doi: Optional[str], pmid: Optional[str]) -> Path:
+        identity = doi or pmid or title.strip().casefold() or "unknown"
+        digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+        return self.enrichment_cache_dir / f"{digest}.json"
+
+    @staticmethod
+    def _read_json_cache(path: Path) -> Optional[Dict[str, Any]]:
+        if not path.exists():
+            return None
+        try:
+            payload = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    @staticmethod
+    def _write_json_cache(path: Path, payload: Dict[str, Any]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=2) + "\n")
 
     def _find_semantic_scholar_match(
         self,

@@ -7,7 +7,7 @@ function isLocalHost(hostname: string): boolean {
   return normalized === "localhost" || normalized === "127.0.0.1";
 }
 
-export async function isFirstPassEnabled(): Promise<boolean> {
+export async function isLocalAdminEnabled(): Promise<boolean> {
   if (process.env.RENDER || process.env.RENDER_EXTERNAL_URL) {
     return false;
   }
@@ -16,4 +16,8 @@ export async function isFirstPassEnabled(): Promise<boolean> {
   const hostHeader = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "";
   const hostname = hostHeader.split(":")[0];
   return isLocalHost(hostname);
+}
+
+export async function isFirstPassEnabled(): Promise<boolean> {
+  return isLocalAdminEnabled();
 }

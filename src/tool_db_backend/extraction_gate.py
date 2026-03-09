@@ -5,7 +5,7 @@ class ExtractionGate:
     def assess(self, packet_kind: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         issues: List[str] = []
         source_type = (payload.get("source_document") or {}).get("source_type")
-        supported_item_types = {"toolkit_item", "workflow_template"}
+        supported_item_types = {"toolkit_item", "workflow_template", "concept_label"}
         entity_candidates = payload.get("entity_candidates", [])
         entity_types_by_local_id = {
             entity.get("local_id"): entity.get("candidate_type")

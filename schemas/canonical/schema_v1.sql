@@ -510,6 +510,7 @@ create table workflow_instance_observation (
 create table gap_field (
   id uuid primary key default gen_random_uuid(),
   external_gap_field_id text not null unique,
+  slug text unique,
   name text not null,
   payload jsonb not null default '{}'::jsonb
 );
@@ -518,6 +519,7 @@ create table gap_item (
   id uuid primary key default gen_random_uuid(),
   external_gap_item_id text not null unique,
   gap_field_id uuid references gap_field(id) on delete set null,
+  slug text unique,
   title text not null,
   payload jsonb not null default '{}'::jsonb
 );
@@ -525,6 +527,7 @@ create table gap_item (
 create table gap_capability (
   id uuid primary key default gen_random_uuid(),
   external_gap_capability_id text not null unique,
+  slug text unique,
   name text not null,
   payload jsonb not null default '{}'::jsonb
 );
@@ -534,6 +537,18 @@ create table gap_resource (
   external_gap_resource_id text not null unique,
   title text not null,
   payload jsonb not null default '{}'::jsonb
+);
+
+create table gap_item_capability (
+  gap_item_id uuid not null references gap_item(id) on delete cascade,
+  gap_capability_id uuid not null references gap_capability(id) on delete cascade,
+  primary key (gap_item_id, gap_capability_id)
+);
+
+create table gap_capability_resource (
+  gap_capability_id uuid not null references gap_capability(id) on delete cascade,
+  gap_resource_id uuid not null references gap_resource(id) on delete cascade,
+  primary key (gap_capability_id, gap_resource_id)
 );
 
 create table item_gap_link (

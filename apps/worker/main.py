@@ -23,6 +23,7 @@ from tool_db_backend.llm_extractor import LLMExtractionError, LLMExtractionRunne
 from tool_db_backend.load_plan import LoadPlanBuilder
 from tool_db_backend.normalization import PacketNormalizer
 from tool_db_backend.pipeline import PacketIngestPipeline
+from tool_db_backend.pipeline import build_artifact_basename
 from tool_db_backend.postgres_loader import PostgresLoadPlanExecutor
 from tool_db_backend.raw_store import RawPayloadStore
 from tool_db_backend.real_extraction_artifacts import RealExtractionArtifactBuilder
@@ -200,11 +201,14 @@ def ingest_packet_batch(
     for packet_path in packet_paths:
         try:
             packet_kind = _infer_packet_kind(packet_path)
+            artifact_basename = build_artifact_basename(packet_path)
             per_packet_artifact_dir = (
-                Path(artifact_root) / packet_path.stem if artifact_root else settings.pipeline_artifact_root / packet_path.stem
+                Path(artifact_root) / artifact_basename
+                if artifact_root
+                else settings.pipeline_artifact_root / artifact_basename
             )
             per_packet_review_output = (
-                Path(review_output_dir) / f"{packet_path.stem}.review.json"
+                Path(review_output_dir) / f"{artifact_basename}.review.json"
                 if review_output_dir
                 else None
             )
@@ -497,9 +501,10 @@ def run_extraction_batch(
     exclude_terms: Optional[List[str]] = None,
     skip_existing: bool = True,
     manifest_path: Optional[str] = None,
-    max_workers: int = 8,
+    max_workers: Optional[int] = None,
 ) -> int:
     settings = get_settings()
+    effective_max_workers = max_workers if max_workers is not None else settings.llm_max_concurrency
     results = []
     failures = []
     skipped_existing = []
@@ -526,14 +531,14 @@ def run_extraction_batch(
         if limit is not None and limit > 0 and len(selected_job_paths) >= limit:
             break
 
-    if max_workers <= 1:
+    if effective_max_workers <= 1:
         for job_path in selected_job_paths:
             try:
                 results.append(_run_extraction_job_path(settings, job_path))
-            except LLMExtractionError as exc:
+            except (LLMExtractionError, OSError, ValueError) as exc:
                 failures.append({"job_path": str(job_path), "error": str(exc)})
     else:
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        with ThreadPoolExecutor(max_workers=effective_max_workers) as executor:
             futures = {
                 executor.submit(_run_extraction_job_path, settings, job_path): job_path
                 for job_path in selected_job_paths
@@ -542,14 +547,14 @@ def run_extraction_batch(
                 job_path = futures[future]
                 try:
                     results.append(future.result())
-                except LLMExtractionError as exc:
+                except (LLMExtractionError, OSError, ValueError) as exc:
                     failures.append({"job_path": str(job_path), "error": str(exc)})
 
     report = {
         "job_dir": str(Path(job_dir)),
         "selected_job_count": len(selected_job_paths),
         "limit": limit,
-        "max_workers": max_workers,
+        "max_workers": effective_max_workers,
         "completed_jobs": results,
         "failed_jobs": failures,
         "skipped_existing": skipped_existing,
@@ -758,8 +763,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     extraction_batch_parser.add_argument(
         "--max-workers",
         type=int,
-        default=8,
-        help="Concurrent extraction workers to run.",
+        help="Concurrent extraction workers to run. Defaults to LLM_MAX_CONCURRENCY.",
     )
     extraction_batch_parser.add_argument(
         "--include-term",

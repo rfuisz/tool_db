@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ToolkitItem } from "@/lib/types";
+import { renderInlineTitle, stripInlineTitleMarkup } from "@/lib/render-inline-title";
 import { ITEM_TYPE_LABELS, MECHANISM_LABELS, TECHNIQUE_LABELS } from "@/lib/vocabularies";
 import { Tooltip } from "./tooltip";
 import { ValidationDots } from "./validation-dots";
@@ -39,12 +40,13 @@ function Tag({
 
 export function ItemCard({ item }: { item: ToolkitItem }) {
   const router = useRouter();
+  const plainTitle = stripInlineTitleMarkup(item.canonical_name);
 
   return (
     <article
       role="link"
       tabIndex={0}
-      aria-label={`Open ${item.canonical_name}`}
+      aria-label={`Open ${plainTitle}`}
       onClick={() => router.push(`/items/${item.slug}`)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -57,7 +59,7 @@ export function ItemCard({ item }: { item: ToolkitItem }) {
       {/* Top line: name + type */}
       <div className="mb-1.5 flex items-baseline justify-between gap-4">
         <h3 className="text-lg text-ink group-hover:text-accent">
-          {item.canonical_name}
+          {renderInlineTitle(item.canonical_name)}
         </h3>
         <Tooltip
           content={ITEM_TYPE_DESCRIPTIONS[item.item_type] ?? `Filter by ${ITEM_TYPE_LABELS[item.item_type]}`}
@@ -115,7 +117,7 @@ export function ItemCard({ item }: { item: ToolkitItem }) {
       {/* Summary */}
       {item.summary && (
         <p className="mb-3 line-clamp-2 text-[15px] leading-relaxed text-ink-secondary">
-          {item.summary}
+          {renderInlineTitle(item.summary)}
         </p>
       )}
 

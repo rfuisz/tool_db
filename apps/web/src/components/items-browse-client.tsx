@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ItemCard } from "@/components/item-card";
 import { FilterSelect } from "@/components/filter-select";
@@ -11,6 +11,8 @@ import {
 } from "@/lib/vocabularies";
 import type { ItemType, ToolkitItem } from "@/lib/types";
 
+const PAGE_SIZE_OPTIONS = [10, 50, 100, 500] as const;
+
 type InitialFilters = {
   type?: string;
   mechanism?: string;
@@ -18,12 +20,54 @@ type InitialFilters = {
   family?: string;
 };
 
-export function ItemsBrowseClient({
-  items,
-  initialFilters,
-}: {
+type FilterOptionsData = {
+  types: string[];
+  mechanisms: string[];
+  techniques: string[];
+  families: string[];
+};
+
+type ItemSearchResponse = {
+  total: number;
+  limit: number;
+  offset: number;
   items: ToolkitItem[];
+};
+
+function buildItemSearchParams(filters: {
+  typeFilter: string;
+  mechanismFilter: string;
+  techniqueFilter: string;
+  familyFilter: string;
+  searchQuery: string;
+  sortBy: "name" | "evidence" | "replication" | "practicality" | "year";
+  pageSize: number;
+  offset: number;
+}): URLSearchParams {
+  const params = new URLSearchParams();
+
+  if (filters.typeFilter) params.set("type", filters.typeFilter);
+  if (filters.mechanismFilter) params.set("mechanism", filters.mechanismFilter);
+  if (filters.techniqueFilter) params.set("technique", filters.techniqueFilter);
+  if (filters.familyFilter) params.set("family", filters.familyFilter);
+  if (filters.searchQuery.trim()) params.set("q", filters.searchQuery.trim());
+  params.set("sort", filters.sortBy);
+  params.set("limit", String(filters.pageSize));
+  params.set("offset", String(filters.offset));
+
+  return params;
+}
+
+export function ItemsBrowseClient({
+  initialItems,
+  initialTotal,
+  initialFilters,
+  filterOptions,
+}: {
+  initialItems: ToolkitItem[];
+  initialTotal: number;
   initialFilters: InitialFilters;
+  filterOptions: FilterOptionsData;
 }) {
   const initialType = initialFilters.type ?? "";
   const initialMechanism = initialFilters.mechanism ?? "";
@@ -38,89 +82,146 @@ export function ItemsBrowseClient({
   const [sortBy, setSortBy] = useState<
     "name" | "evidence" | "replication" | "practicality" | "year"
   >("name");
+  const [pageSize, setPageSize] =
+    useState<(typeof PAGE_SIZE_OPTIONS)[number]>(50);
+  const [offset, setOffset] = useState(0);
+  const [visibleItems, setVisibleItems] = useState(initialItems);
+  const [totalCount, setTotalCount] = useState(initialTotal);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const cacheRef = useRef(
+    new Map<string, ItemSearchResponse>([
+      [
+        buildItemSearchParams({
+          typeFilter: initialType,
+          mechanismFilter: initialMechanism,
+          techniqueFilter: initialTechnique,
+          familyFilter: initialFamily,
+          searchQuery: "",
+          sortBy: "name",
+          pageSize: 50,
+          offset: 0,
+        }).toString(),
+        {
+          total: initialTotal,
+          limit: 50,
+          offset: 0,
+          items: initialItems,
+        },
+      ],
+    ]),
+  );
+  const inFlightRef = useRef(new Set<string>());
 
-  const allTypes = useMemo(
-    () => Array.from(new Set(items.map((item) => item.item_type))).sort(),
-    [items],
-  );
-  const allMechanisms = useMemo(
-    () => Array.from(new Set(items.flatMap((item) => item.mechanisms))).sort(),
-    [items],
-  );
-  const allTechniques = useMemo(
-    () => Array.from(new Set(items.flatMap((item) => item.techniques))).sort(),
-    [items],
-  );
-  const allFamilies = useMemo(
-    () =>
-      Array.from(
-        new Set(items.map((item) => item.family).filter(Boolean) as string[]),
-      ).sort(),
-    [items],
-  );
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = buildItemSearchParams({
+      typeFilter,
+      mechanismFilter,
+      techniqueFilter,
+      familyFilter,
+      searchQuery,
+      sortBy,
+      pageSize,
+      offset,
+    });
+    const cacheKey = params.toString();
 
-  const filtered = useMemo(() => {
-    let result = items;
-    if (typeFilter)
-      result = result.filter((item) => item.item_type === typeFilter);
-    if (mechanismFilter)
-      result = result.filter((item) =>
-        item.mechanisms.includes(mechanismFilter),
-      );
-    if (techniqueFilter)
-      result = result.filter((item) =>
-        item.techniques.includes(techniqueFilter),
-      );
-    if (familyFilter)
-      result = result.filter((item) => item.family === familyFilter);
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(
-        (item) =>
-          item.canonical_name.toLowerCase().includes(q) ||
-          item.summary?.toLowerCase().includes(q) ||
-          item.synonyms.some((synonym) => synonym.toLowerCase().includes(q)),
-      );
+    async function fetchPage(
+      requestedParams: URLSearchParams,
+      options: { foreground: boolean },
+    ) {
+      const key = requestedParams.toString();
+
+      if (cacheRef.current.has(key)) {
+        return cacheRef.current.get(key)!;
+      }
+
+      if (inFlightRef.current.has(key)) {
+        return null;
+      }
+
+      inFlightRef.current.add(key);
+
+      if (options.foreground) {
+        setIsLoading(true);
+        setErrorMessage(null);
+      }
+
+      try {
+        const response = await fetch(`/api/items?${key}`, {
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Request failed with status ${response.status}`);
+        }
+
+        const payload = (await response.json()) as ItemSearchResponse;
+        cacheRef.current.set(key, payload);
+        return payload;
+      } catch {
+        if (controller.signal.aborted) {
+          return null;
+        }
+        if (options.foreground) {
+          setErrorMessage("Could not load collection items right now.");
+        }
+        return null;
+      } finally {
+        inFlightRef.current.delete(key);
+        if (options.foreground && !controller.signal.aborted) {
+          setIsLoading(false);
+        }
+      }
     }
 
-    const sorted = [...result];
-    switch (sortBy) {
-      case "evidence":
-        sorted.sort(
-          (a, b) =>
-            (b.replication_summary?.evidence_strength_score ?? 0) -
-            (a.replication_summary?.evidence_strength_score ?? 0),
-        );
-        break;
-      case "replication":
-        sorted.sort(
-          (a, b) =>
-            (b.replication_summary?.replication_score ?? 0) -
-            (a.replication_summary?.replication_score ?? 0),
-        );
-        break;
-      case "practicality":
-        sorted.sort(
-          (a, b) =>
-            (b.replication_summary?.practicality_score ?? 0) -
-            (a.replication_summary?.practicality_score ?? 0),
-        );
-        break;
-      case "year":
-        sorted.sort(
-          (a, b) =>
-            (a.first_publication_year ?? 9999) -
-            (b.first_publication_year ?? 9999),
-        );
-        break;
-      default:
-        sorted.sort((a, b) => a.canonical_name.localeCompare(b.canonical_name));
+    async function loadItems() {
+      const cached = cacheRef.current.get(cacheKey);
+      if (cached) {
+        setVisibleItems(cached.items);
+        setTotalCount(cached.total);
+        setErrorMessage(null);
+      }
+
+      const payload = await fetchPage(params, { foreground: !cached });
+      if (payload) {
+        setVisibleItems(payload.items);
+        setTotalCount(payload.total);
+      }
+
+      const resolvedTotal = payload?.total ?? cached?.total ?? 0;
+      const prevOffset = offset > 0 ? Math.max(0, offset - pageSize) : null;
+      const nextOffset =
+        offset + pageSize < resolvedTotal ? offset + pageSize : null;
+
+      for (const adjacentOffset of [prevOffset, nextOffset]) {
+        if (adjacentOffset === null) {
+          continue;
+        }
+
+        const adjacentParams = buildItemSearchParams({
+          typeFilter,
+          mechanismFilter,
+          techniqueFilter,
+          familyFilter,
+          searchQuery,
+          sortBy,
+          pageSize,
+          offset: adjacentOffset,
+        });
+
+        void fetchPage(adjacentParams, { foreground: false });
+      }
     }
-    return sorted;
+
+    void loadItems();
+    return () => controller.abort();
   }, [
     familyFilter,
-    items,
     mechanismFilter,
+    offset,
+    pageSize,
     searchQuery,
     sortBy,
     techniqueFilter,
@@ -133,30 +234,35 @@ export function ItemsBrowseClient({
     (techniqueFilter ? 1 : 0) +
     (familyFilter ? 1 : 0);
 
+  const currentPage = Math.floor(offset / pageSize) + 1;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const rangeStart = totalCount === 0 ? 0 : offset + 1;
+  const rangeEnd = Math.min(totalCount, offset + visibleItems.length);
+
   const typeOptions = [
     { value: "", label: "All types" },
-    ...allTypes.map((type) => ({
+    ...filterOptions.types.map((type) => ({
       value: type,
       label: ITEM_TYPE_LABELS[type as ItemType],
     })),
   ];
   const mechanismOptions = [
     { value: "", label: "All mechanisms" },
-    ...allMechanisms.map((mechanism) => ({
+    ...filterOptions.mechanisms.map((mechanism) => ({
       value: mechanism,
       label: MECHANISM_LABELS[mechanism] ?? mechanism.replace(/_/g, " "),
     })),
   ];
   const techniqueOptions = [
     { value: "", label: "All techniques" },
-    ...allTechniques.map((technique) => ({
+    ...filterOptions.techniques.map((technique) => ({
       value: technique,
       label: TECHNIQUE_LABELS[technique] ?? technique.replace(/_/g, " "),
     })),
   ];
   const familyOptions = [
     { value: "", label: "All families" },
-    ...allFamilies.map((family) => ({ value: family, label: family })),
+    ...filterOptions.families.map((family) => ({ value: family, label: family })),
   ];
   const sortOptions = [
     { value: "name", label: "Name" },
@@ -165,15 +271,52 @@ export function ItemsBrowseClient({
     { value: "practicality", label: "Practicality" },
     { value: "year", label: "Year" },
   ];
+  const canGoPrev = offset > 0 && !isLoading;
+  const canGoNext = currentPage < totalPages && !isLoading;
+
+  const goPrevPage = () => {
+    setOffset((current) => Math.max(0, current - pageSize));
+  };
+
+  const goNextPage = () => {
+    setOffset((current) =>
+      Math.min(current + pageSize, Math.max(0, totalCount - pageSize)),
+    );
+  };
+
+  const paginationControls = (
+    <div className="flex items-center gap-3">
+      <button
+        type="button"
+        onClick={goPrevPage}
+        disabled={!canGoPrev}
+        className="small-caps text-ink-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:text-ink-faint"
+      >
+        Prev
+      </button>
+      <span className="font-data text-xs text-ink-muted">
+        Page {currentPage} / {totalPages}
+      </span>
+      <button
+        type="button"
+        onClick={goNextPage}
+        disabled={!canGoNext}
+        className="small-caps text-ink-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:text-ink-faint"
+      >
+        Next
+      </button>
+    </div>
+  );
 
   return (
     <div>
       <header className="mb-10">
         <h1 className="mb-2">Collection</h1>
         <p className="text-ink-secondary">
-          {filtered.length} item{filtered.length !== 1 ? "s" : ""}
+          {totalCount} item{totalCount !== 1 ? "s" : ""}
           {activeFilterCount > 0 &&
             ` matching ${activeFilterCount} filter${activeFilterCount > 1 ? "s" : ""}`}
+          {isLoading && " · updating"}
         </p>
       </header>
 
@@ -182,31 +325,46 @@ export function ItemsBrowseClient({
           type="text"
           placeholder={"Search\u2026"}
           value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
+          onChange={(event) => {
+            setSearchQuery(event.target.value);
+            setOffset(0);
+          }}
           className="h-9 w-52 border-b border-edge bg-transparent px-0 text-ink placeholder-ink-muted outline-none transition-colors focus:border-accent"
         />
 
         <FilterSelect
           value={typeFilter}
-          onChange={setTypeFilter}
+          onChange={(value) => {
+            setTypeFilter(value);
+            setOffset(0);
+          }}
           options={typeOptions}
           placeholder="All types"
         />
         <FilterSelect
           value={mechanismFilter}
-          onChange={setMechanismFilter}
+          onChange={(value) => {
+            setMechanismFilter(value);
+            setOffset(0);
+          }}
           options={mechanismOptions}
           placeholder="All mechanisms"
         />
         <FilterSelect
           value={techniqueFilter}
-          onChange={setTechniqueFilter}
+          onChange={(value) => {
+            setTechniqueFilter(value);
+            setOffset(0);
+          }}
           options={techniqueOptions}
           placeholder="All techniques"
         />
         <FilterSelect
           value={familyFilter}
-          onChange={setFamilyFilter}
+          onChange={(value) => {
+            setFamilyFilter(value);
+            setOffset(0);
+          }}
           options={familyOptions}
           placeholder="All families"
         />
@@ -215,7 +373,10 @@ export function ItemsBrowseClient({
           <span className="small-caps">Sort</span>
           <FilterSelect
             value={sortBy}
-            onChange={(value) => setSortBy(value as typeof sortBy)}
+            onChange={(value) => {
+              setSortBy(value as typeof sortBy);
+              setOffset(0);
+            }}
             options={sortOptions}
             placeholder="Name"
           />
@@ -229,6 +390,7 @@ export function ItemsBrowseClient({
               setTechniqueFilter("");
               setFamilyFilter("");
               setSearchQuery("");
+              setOffset(0);
             }}
             className="text-xs text-accent hover:text-accent-hover"
           >
@@ -288,15 +450,58 @@ export function ItemsBrowseClient({
         </div>
       )}
 
-      {filtered.length === 0 ? (
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-4 border-y border-edge py-3 font-ui text-sm">
+        <p className="text-ink-secondary">
+          Showing {rangeStart}-{rangeEnd} of {totalCount}
+        </p>
+
+        <div className="flex flex-wrap items-center gap-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="small-caps text-ink-muted">Load</span>
+            {PAGE_SIZE_OPTIONS.map((size) => {
+              const active = pageSize === size;
+              return (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => {
+                    setPageSize(size);
+                    setOffset(0);
+                  }}
+                  className={`border-b pb-0.5 font-data text-xs transition-colors ${
+                    active
+                      ? "border-accent text-accent"
+                      : "border-transparent text-ink-muted hover:border-edge hover:text-ink"
+                  }`}
+                >
+                  {size}
+                </button>
+              );
+            })}
+            <span className="text-ink-muted">items</span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {paginationControls}
+          </div>
+        </div>
+      </div>
+
+      {errorMessage ? (
+        <p className="py-20 text-center text-danger">{errorMessage}</p>
+      ) : totalCount === 0 ? (
         <p className="py-20 text-center text-ink-muted">
           No items match the current filters.
         </p>
       ) : (
         <div>
-          {filtered.map((item) => (
+          {visibleItems.map((item) => (
             <ItemCard key={item.id} item={item} />
           ))}
+
+          <div className="mt-8 flex justify-end border-t border-edge pt-4 font-ui text-sm">
+            {paginationControls}
+          </div>
         </div>
       )}
     </div>

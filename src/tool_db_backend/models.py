@@ -53,6 +53,43 @@ class WorkflowDetail(WorkflowSummary):
     index_markdown: str
 
 
+class GapFieldSummary(BaseModel):
+    external_gap_field_id: str
+    slug: Optional[str] = None
+    name: str
+
+
+class GapResourceSummary(BaseModel):
+    external_gap_resource_id: str
+    title: str
+    url: Optional[str] = None
+    summary: Optional[str] = None
+    types: List[str] = Field(default_factory=list)
+
+
+class GapCapabilityDetail(BaseModel):
+    external_gap_capability_id: str
+    slug: Optional[str] = None
+    name: str
+    description: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    resources: List[GapResourceSummary] = Field(default_factory=list)
+
+
+class GapSummary(BaseModel):
+    external_gap_item_id: str
+    slug: Optional[str] = None
+    title: str
+    field: Optional[GapFieldSummary] = None
+    capability_count: int = 0
+
+
+class GapDetail(GapSummary):
+    description: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    capabilities: List[GapCapabilityDetail] = Field(default_factory=list)
+
+
 class VocabularyPayload(BaseModel):
     version: str
     data: Dict[str, Any]
@@ -93,7 +130,27 @@ class FirstPassClaim(BaseModel):
     source_document: FirstPassSourceDocument
 
 
-class FirstPassItemSummary(BaseModel):
+class FirstPassWorkflowStageObservation(BaseModel):
+    local_id: str
+    workflow_local_id: Optional[str] = None
+    stage_name: str
+    stage_kind: str
+    stage_order: int
+    search_modality: Optional[str] = None
+    selection_basis: Optional[str] = None
+    counterselection_basis: Optional[str] = None
+    enriches_for_axes: List[str] = Field(default_factory=list)
+    guards_against_axes: List[str] = Field(default_factory=list)
+    preserves_downstream_property_axes: List[str] = Field(default_factory=list)
+    advance_criteria: Optional[str] = None
+    bottleneck_risk: Optional[str] = None
+    higher_fidelity_than_previous: Optional[bool] = None
+    source_locator: Dict[str, Any] = Field(default_factory=dict)
+    source_document: FirstPassSourceDocument
+
+
+class FirstPassEntitySummary(BaseModel):
+    candidate_type: str
     slug: str
     canonical_name: str
     item_type: Optional[str] = None
@@ -106,7 +163,16 @@ class FirstPassItemSummary(BaseModel):
     claim_previews: List[str] = Field(default_factory=list)
 
 
-class FirstPassItemDetail(FirstPassItemSummary):
+class FirstPassEntityDetail(FirstPassEntitySummary):
     evidence_snippets: List[FirstPassEvidenceSnippet] = Field(default_factory=list)
     source_documents: List[FirstPassSourceDocument] = Field(default_factory=list)
     claims: List[FirstPassClaim] = Field(default_factory=list)
+    workflow_stage_observations: List[FirstPassWorkflowStageObservation] = Field(default_factory=list)
+
+
+class FirstPassItemSummary(FirstPassEntitySummary):
+    pass
+
+
+class FirstPassItemDetail(FirstPassEntityDetail):
+    pass

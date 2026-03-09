@@ -16,6 +16,9 @@ Convert one review or synthesis source into a `review_extract_v1` packet.
 - Preserve the provided `source_document` metadata exactly when it is already present in the job payload, including IDs, `abstract_text`, license flags, and raw payload references.
 - Do not turn topic labels or journal metadata into unsupported claims.
 - If a toolkit item is named directly in the title or abstract, it is acceptable to emit an `entity_candidate` even when deeper review claims remain sparse.
+- Emit `toolkit_item` candidates only for discrete tools, tool components, engineered constructs, delivery harnesses, or named methods/assays that could plausibly become collection records.
+- Do not emit plain genes, endogenous proteins, receptors, enzymes, pathways, compounds, cell types, tissues, species, or diseases as `toolkit_item` candidates unless the review clearly treats them as the tool itself or as a named engineered construct/pattern.
+- If a broad class or topic is useful context but is not a collection-worthy item, emit it as `candidate_type: "concept_label"` instead of `toolkit_item`.
 - Do not emit toolkit-item candidates from concept metadata alone unless the same entity is also supported by the title or abstract text.
 - If you set `item_type`, use only canonical-safe values such as `protein_domain`, `multi_component_switch`, `rna_element`, `construct_pattern`, `engineering_method`, `assay_method`, `computation_method`, or `delivery_harness`; otherwise omit `item_type`.
 - Set `citation_role_suggestion` only when the source clearly fits an existing canonical citation role such as `foundational`, `best_review`, `independent_validation`, `benchmark`, `protocol`, `therapeutic`, `negative_result`, `structural`, or `database_reference`; otherwise omit it.
@@ -35,4 +38,5 @@ Validate against `schemas/extraction/review_extract.v1.schema.json`.
 - Metadata-only packets are valid extraction outputs, but they remain review-only until there is source-backed entity, claim, or workflow evidence.
 - If the review title or abstract explicitly names toolkit items, extract those entities conservatively using the field shapes from `common.v1.schema.json`.
 - Use `recommended_seed_item_local_ids` only for extracted entities that appear central to the review's stated scope.
+- Do not use `recommended_seed_item_local_ids` for broad classes, topic labels, or generic biological categories that are unlikely to survive canonicalization.
 - If the review explicitly lays out a staged funnel, emit one `workflow_stage_observation` per described stage in order. Leave omitted stage fields blank rather than inferring them from general domain knowledge.

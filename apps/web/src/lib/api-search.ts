@@ -1,7 +1,14 @@
 import type { ToolkitItem, WorkflowTemplate } from "./types";
 
 const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 100;
+const MAX_LIMIT = 500;
+
+type ItemSort =
+  | "name"
+  | "evidence"
+  | "replication"
+  | "practicality"
+  | "year";
 
 export interface ItemSearchFilters {
   q?: string;
@@ -14,6 +21,7 @@ export interface ItemSearchFilters {
   has_independent_replication?: boolean;
   has_mouse_in_vivo_validation?: boolean;
   has_therapeutic_use?: boolean;
+  sort?: ItemSort;
   limit?: number;
   offset?: number;
 }
@@ -30,6 +38,46 @@ export interface SearchResult<T> {
   limit: number;
   offset: number;
   results: T[];
+}
+
+function sortItems(items: ToolkitItem[], sort: ItemSort | undefined): ToolkitItem[] {
+  const sorted = [...items];
+
+  switch (sort) {
+    case "evidence":
+      sorted.sort(
+        (a, b) =>
+          (b.replication_summary?.evidence_strength_score ?? 0) -
+          (a.replication_summary?.evidence_strength_score ?? 0),
+      );
+      break;
+    case "replication":
+      sorted.sort(
+        (a, b) =>
+          (b.replication_summary?.replication_score ?? 0) -
+          (a.replication_summary?.replication_score ?? 0),
+      );
+      break;
+    case "practicality":
+      sorted.sort(
+        (a, b) =>
+          (b.replication_summary?.practicality_score ?? 0) -
+          (a.replication_summary?.practicality_score ?? 0),
+      );
+      break;
+    case "year":
+      sorted.sort(
+        (a, b) =>
+          (a.first_publication_year ?? 9999) - (b.first_publication_year ?? 9999),
+      );
+      break;
+    case "name":
+    default:
+      sorted.sort((a, b) => a.canonical_name.localeCompare(b.canonical_name));
+      break;
+  }
+
+  return sorted;
 }
 
 function normalizeText(value: string | null | undefined): string {
@@ -209,7 +257,7 @@ export function searchItems(
     return true;
   });
 
-  return paginate(filtered, filters.limit, filters.offset);
+  return paginate(sortItems(filtered, filters.sort), filters.limit, filters.offset);
 }
 
 export function searchWorkflows(

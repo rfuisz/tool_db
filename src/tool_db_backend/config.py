@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     app_name: str = "BioControl Toolkit API"
     app_env: str = "development"
     database_url: str = ""
+    render_database_url: str = ""
+    render_api_key: str = ""
+    render_postgres_id: str = ""
+    render_postgres_name: str = "tool-db-postgres"
     llm_api_key: str = Field(default="", validation_alias=AliasChoices("OPENAI_API_KEY", "LLM_API_KEY"))
     llm_base_url: str = Field(
         default="https://api.openai.com/v1",
@@ -27,6 +31,7 @@ class Settings(BaseSettings):
     )
     llm_model: str = Field(default="gpt-5.4", validation_alias=AliasChoices("OPENAI_MODEL", "LLM_MODEL"))
     llm_cache_enabled: bool = True
+    llm_max_concurrency: int = 64
     llm_retry_attempts: int = 3
     llm_retry_base_delay_seconds: float = 1.0
     llm_retry_max_delay_seconds: float = 8.0

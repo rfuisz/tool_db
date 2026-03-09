@@ -3,11 +3,15 @@ import "server-only";
 import seedBundle from "./seed-bundle.json";
 import { WORKFLOW_EXPLAINERS } from "./workflow-explainers";
 import type {
+  FirstPassEntityDetail,
+  FirstPassEntitySummary,
   FirstPassItemDetail,
   FirstPassEvidenceSnippet,
   FirstPassSourceDocument,
   FirstPassItemSummary,
   CitationRole,
+  GapDetail,
+  GapSummary,
   ItemCitation,
   ItemStatus,
   MaturityStage,
@@ -108,6 +112,9 @@ type BackendWorkflowDetail = BackendWorkflowSummary & {
   index_markdown: string;
 };
 
+type BackendGapSummary = GapSummary;
+type BackendGapDetail = GapDetail;
+
 type SeedBundleItem = {
   slug: string;
   structured: Record<string, unknown>;
@@ -125,16 +132,17 @@ type RawFirstPassEvidenceSnippet =
       source_document?: FirstPassSourceDocument | null;
     };
 
-type RawFirstPassItemDetail = Omit<FirstPassItemDetail, "evidence_snippets"> & {
+type RawFirstPassEntityDetail = Omit<FirstPassEntityDetail, "evidence_snippets"> & {
   evidence_snippets?: RawFirstPassEvidenceSnippet[];
 };
 
-type RawFirstPassItemSummary = Partial<
+type RawFirstPassEntitySummary = Partial<
   Omit<
-    FirstPassItemSummary,
-    "slug" | "canonical_name" | "source_document_count" | "claim_count"
+    FirstPassEntitySummary,
+    "candidate_type" | "slug" | "canonical_name" | "source_document_count" | "claim_count"
   >
 > & {
+  candidate_type: string;
   slug: string;
   canonical_name: string;
   source_document_count: number;
@@ -144,7 +152,11 @@ type RawFirstPassItemSummary = Partial<
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
 const REVALIDATE_SECONDS = 30;
 
-function getApiBaseUrl(): string {
+type FetchBackendJsonOptions = {
+  cacheMode?: "revalidate" | "no-store";
+};
+
+export function getApiBaseUrl(): string {
   const internalHost = process.env.TOOL_DB_API_HOST?.trim();
   if (internalHost) {
     const internalPort = process.env.TOOL_DB_API_PORT?.trim() || "8000";
@@ -162,9 +174,15 @@ function getApiBaseUrl(): string {
   ).replace(/\/$/, "");
 }
 
-async function fetchBackendJson<T>(path: string): Promise<T> {
+async function fetchBackendJson<T>(
+  path: string,
+  options: FetchBackendJsonOptions = {},
+): Promise<T> {
+  const cacheMode = options.cacheMode ?? "revalidate";
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    next: { revalidate: REVALIDATE_SECONDS },
+    ...(cacheMode === "no-store"
+      ? { cache: "no-store" as const }
+      : { next: { revalidate: REVALIDATE_SECONDS } }),
   });
 
   if (!response.ok) {
@@ -406,26 +424,29 @@ function normalizeFirstPassEvidenceSnippet(
   };
 }
 
-function normalizeFirstPassItemDetail(
-  detail: RawFirstPassItemDetail,
-): FirstPassItemDetail {
+function normalizeFirstPassEntityDetail(
+  detail: RawFirstPassEntityDetail,
+): FirstPassEntityDetail {
   return {
     ...detail,
+    candidate_type: detail.candidate_type,
     aliases: detail.aliases ?? [],
     evidence_snippets: (detail.evidence_snippets ?? []).map(
       normalizeFirstPassEvidenceSnippet,
     ),
     source_documents: detail.source_documents ?? [],
     claims: detail.claims ?? [],
+    workflow_stage_observations: detail.workflow_stage_observations ?? [],
   };
 }
 
-function normalizeFirstPassItemSummary(
-  summary: RawFirstPassItemSummary,
-): FirstPassItemSummary {
+function normalizeFirstPassEntitySummary(
+  summary: RawFirstPassEntitySummary,
+): FirstPassEntitySummary {
   const evidencePreviews = summary.evidence_previews ?? [];
 
   return {
+    candidate_type: summary.candidate_type,
     slug: summary.slug,
     canonical_name: summary.canonical_name,
     item_type: summary.item_type ?? null,
@@ -489,26 +510,59 @@ export async function getWorkflows(): Promise<WorkflowTemplate[]> {
   }
 }
 
-export async function getFirstPassItems(): Promise<FirstPassItemSummary[]> {
+export async function getGaps(): Promise<GapDetail[]> {
   try {
-    const summaries = await fetchBackendJson<RawFirstPassItemSummary[]>(
-      "/api/v1/first-pass-items",
+    const summaries = await fetchBackendJson<BackendGapSummary[]>("/api/v1/gaps");
+    return await Promise.all(
+      summaries
+        .filter((summary) => summary.slug)
+        .map((summary) =>
+          fetchBackendJson<BackendGapDetail>(`/api/v1/gaps/${summary.slug}`),
+        ),
     );
-    return summaries.map(normalizeFirstPassItemSummary);
   } catch {
     return [];
   }
 }
 
-export async function getFirstPassItemBySlug(
-  slug: string,
-): Promise<FirstPassItemDetail | undefined> {
+export async function getFirstPassEntities(): Promise<FirstPassEntitySummary[]> {
   try {
-    const detail = await fetchBackendJson<RawFirstPassItemDetail>(
-      `/api/v1/first-pass-items/${slug}`,
+    const summaries = await fetchBackendJson<RawFirstPassEntitySummary[]>(
+      "/api/v1/first-pass-entities",
+      { cacheMode: "no-store" },
     );
-    return normalizeFirstPassItemDetail(detail);
+    return summaries.map(normalizeFirstPassEntitySummary);
+  } catch {
+    return [];
+  }
+}
+
+export async function getFirstPassEntityByKey(
+  candidateType: string,
+  slug: string,
+): Promise<FirstPassEntityDetail | undefined> {
+  try {
+    const detail = await fetchBackendJson<RawFirstPassEntityDetail>(
+      `/api/v1/first-pass-entities/${candidateType}/${slug}`,
+      { cacheMode: "no-store" },
+    );
+    return normalizeFirstPassEntityDetail(detail);
   } catch {
     return undefined;
   }
+}
+
+export async function getFirstPassItems(): Promise<FirstPassItemSummary[]> {
+  const entities = await getFirstPassEntities();
+  return entities.filter(
+    (entity): entity is FirstPassItemSummary =>
+      entity.candidate_type === "toolkit_item",
+  );
+}
+
+export async function getFirstPassItemBySlug(
+  slug: string,
+): Promise<FirstPassItemDetail | undefined> {
+  const detail = await getFirstPassEntityByKey("toolkit_item", slug);
+  return detail as FirstPassItemDetail | undefined;
 }

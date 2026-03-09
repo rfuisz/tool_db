@@ -15,6 +15,9 @@ Convert one literature source into a `primary_paper_extract_v1` packet.
 - Use only evidence present in the job payload, especially `title`, `abstract_text`, and any explicitly provided metadata.
 - Preserve the provided `source_document` metadata exactly when it is already present in the job payload, including IDs, `abstract_text`, license flags, and raw payload references.
 - Do not infer toolkit items, validation observations, or replication booleans from topic labels alone.
+- Emit `toolkit_item` candidates only for discrete tools, tool components, engineered constructs, delivery harnesses, or named methods/assays that could plausibly deserve a collection record.
+- Do not emit plain genes, endogenous proteins, receptors, enzymes, pathways, compounds, cell types, tissues, species, or diseases as `toolkit_item` candidates unless the source clearly presents them as the tool itself or as a named engineered construct/pattern.
+- If a broad class or topic still matters for interpretation but is not a collection-worthy item, emit it as `candidate_type: "concept_label"` instead of `toolkit_item`.
 - Do not invent stage counts, gating criteria, or counterselection logic if the source only implies that screening happened.
 - Leave `replication_signals` as `{}` unless a field is directly supported by the provided evidence.
 - If you set `item_type`, use only canonical-safe values such as `protein_domain`, `multi_component_switch`, `rna_element`, `construct_pattern`, `engineering_method`, `assay_method`, `computation_method`, or `delivery_harness`; otherwise omit `item_type`.
@@ -42,5 +45,6 @@ Validate against `schemas/extraction/primary_paper_extract.v1.schema.json`.
   - `unresolved_ambiguities`: one or more ambiguity objects that explain the evidence boundary
 - Metadata-only packets are valid extraction outputs, but they remain review-only until there is source-backed entity, claim, validation, or workflow evidence.
 - If a toolkit item is explicitly named in the title or abstract, emit an `entity_candidate` using the schema fields from `common.v1.schema.json`.
+- Prefer fewer, higher-precision `toolkit_item` candidates over broad biological nouns that are unlikely to survive canonicalization.
 - If a claim is explicit in the title or abstract, emit a `claim` with `subject_local_ids` pointing at the local IDs of the relevant extracted entities.
 - If the source explicitly describes a staged screening or selection funnel, emit one `workflow_stage_observation` per stage in the reported order, using only stage kinds and fields directly supported by the source text.

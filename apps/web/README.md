@@ -19,6 +19,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | `/`             | Dashboard with stats, type/mechanism/technique/family entry points |
 | `/items`        | Browse and filter toolkit items                                    |
 | `/items/[slug]` | Item detail — validation matrix, scores, citations                 |
+| `/gaps`         | Gap Map browser with normalized capabilities and resources         |
 | `/workflows`    | DBTL workflow templates with step timelines                        |
 
 ## API

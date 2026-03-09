@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { WorkflowPhaseBreakdown } from "@/components/workflow-phase-breakdown";
+import { WorkflowLoopMap } from "@/components/workflow-loop-map";
 import { WorkflowStageFunnel } from "@/components/workflow-stage-funnel";
 import { WorkflowTimeline } from "@/components/workflow-timeline";
 import type { WorkflowTemplate } from "@/lib/types";
@@ -136,6 +137,10 @@ export function WorkflowAccordion({
                     />
                   </div>
                 )}
+
+                <div className="mb-6">
+                  <WorkflowLoopMap steps={workflow.steps} />
+                </div>
 
                 <div className="mb-6">
                   <WorkflowPhaseBreakdown steps={workflow.steps} />

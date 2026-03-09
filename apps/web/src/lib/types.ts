@@ -264,6 +264,43 @@ export interface WorkflowTemplate {
   citations?: WorkflowReference[];
 }
 
+export interface GapFieldSummary {
+  external_gap_field_id: string;
+  slug: string | null;
+  name: string;
+}
+
+export interface GapResourceSummary {
+  external_gap_resource_id: string;
+  title: string;
+  url: string | null;
+  summary: string | null;
+  types: string[];
+}
+
+export interface GapCapabilityDetail {
+  external_gap_capability_id: string;
+  slug: string | null;
+  name: string;
+  description: string | null;
+  tags: string[];
+  resources: GapResourceSummary[];
+}
+
+export interface GapSummary {
+  external_gap_item_id: string;
+  slug: string | null;
+  title: string;
+  field: GapFieldSummary | null;
+  capability_count: number;
+}
+
+export interface GapDetail extends GapSummary {
+  description: string | null;
+  tags: string[];
+  capabilities: GapCapabilityDetail[];
+}
+
 export interface FirstPassSourceDocument {
   id: string;
   title: string;
@@ -289,7 +326,27 @@ export interface FirstPassClaim {
   source_document: FirstPassSourceDocument;
 }
 
-export interface FirstPassItemSummary {
+export interface FirstPassWorkflowStageObservation {
+  local_id: string;
+  workflow_local_id: string | null;
+  stage_name: string;
+  stage_kind: string;
+  stage_order: number;
+  search_modality: string | null;
+  selection_basis: string | null;
+  counterselection_basis: string | null;
+  enriches_for_axes: string[];
+  guards_against_axes: string[];
+  preserves_downstream_property_axes: string[];
+  advance_criteria: string | null;
+  bottleneck_risk: string | null;
+  higher_fidelity_than_previous: boolean | null;
+  source_locator: Record<string, unknown>;
+  source_document: FirstPassSourceDocument;
+}
+
+export interface FirstPassEntitySummary {
+  candidate_type: string;
   slug: string;
   canonical_name: string;
   item_type: string | null;
@@ -302,8 +359,13 @@ export interface FirstPassItemSummary {
   claim_previews: string[];
 }
 
-export interface FirstPassItemDetail extends FirstPassItemSummary {
+export interface FirstPassEntityDetail extends FirstPassEntitySummary {
   evidence_snippets: FirstPassEvidenceSnippet[];
   source_documents: FirstPassSourceDocument[];
   claims: FirstPassClaim[];
+  workflow_stage_observations: FirstPassWorkflowStageObservation[];
 }
+
+export type FirstPassItemSummary = FirstPassEntitySummary;
+
+export type FirstPassItemDetail = FirstPassEntityDetail;

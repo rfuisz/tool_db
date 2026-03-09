@@ -1,4 +1,5 @@
 import json
+import hashlib
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -103,7 +104,7 @@ class PacketIngestPipeline:
         execution: Dict[str, Any],
     ) -> Dict[str, str]:
         artifact_dir.mkdir(parents=True, exist_ok=True)
-        stem = packet_path.stem
+        stem = build_artifact_basename(packet_path)
         paths = {
             "normalized_packet": artifact_dir / f"{stem}.{packet_kind}.normalized.json",
             "load_plan": artifact_dir / f"{stem}.{packet_kind}.load-plan.json",
@@ -113,3 +114,13 @@ class PacketIngestPipeline:
         paths["load_plan"].write_text(json.dumps(load_plan, indent=2) + "\n")
         paths["execution_report"].write_text(json.dumps(execution, indent=2) + "\n")
         return {key: str(path) for key, path in paths.items()}
+
+
+def build_artifact_basename(packet_path: Path, max_length: int = 80) -> str:
+    stem = packet_path.stem
+    if len(stem) <= max_length:
+        return stem
+    digest = hashlib.sha1(stem.encode("utf-8")).hexdigest()[:12]
+    prefix_budget = max_length - len(digest) - 1
+    prefix = stem[: max(prefix_budget, 8)].rstrip("-_.")
+    return f"{prefix}-{digest}"

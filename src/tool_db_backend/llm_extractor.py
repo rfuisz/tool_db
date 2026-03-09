@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -170,7 +171,22 @@ class LLMExtractionRunner:
     def _default_output_path(self, job_path: Optional[Path], packet_kind: str) -> Optional[Path]:
         if job_path is None:
             return None
-        return self.settings.extraction_root / f"{job_path.stem}.{packet_kind}.json"
+        suffix = f".{packet_kind}.json"
+        safe_stem = self._safe_output_stem(job_path.stem, suffix)
+        return self.settings.extraction_root / f"{safe_stem}{suffix}"
+
+    @staticmethod
+    def _safe_output_stem(stem: str, suffix: str, max_name_length: int = 240) -> str:
+        candidate_name = f"{stem}{suffix}"
+        if len(candidate_name) <= max_name_length:
+            return stem
+
+        digest = hashlib.sha256(stem.encode("utf-8")).hexdigest()[:12]
+        max_stem_length = max(32, max_name_length - len(suffix) - len(digest) - 1)
+        trimmed = stem[:max_stem_length].rstrip("-._")
+        if not trimmed:
+            trimmed = "extraction"
+        return f"{trimmed}-{digest}"
 
     def _request_json_object(self, *, purpose: str, messages: List[Dict[str, str]]) -> Dict[str, Any]:
         try:

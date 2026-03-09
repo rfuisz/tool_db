@@ -10,6 +10,16 @@ class LoadPlanExecutionError(RuntimeError):
     pass
 
 
+def _strip_nul_bytes(value: Any) -> Any:
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, list):
+        return [_strip_nul_bytes(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _strip_nul_bytes(item) for key, item in value.items()}
+    return value
+
+
 class PostgresLoadPlanExecutor:
     def __init__(self, settings: Settings, connection: Any = None) -> None:
         self.settings = settings
@@ -61,6 +71,7 @@ class PostgresLoadPlanExecutor:
         apply: bool = False,
         review_output_path: Optional[Path] = None,
     ) -> Dict[str, Any]:
+        load_plan = _strip_nul_bytes(load_plan)
         summary = self.build_execution_summary(load_plan)
         review_tasks = self._collect_review_tasks(load_plan)
         review_queue_path = None
@@ -277,6 +288,40 @@ class PostgresLoadPlanExecutor:
         for action in actions:
             kind = action["action"]
             if kind in {"manual_resolution_required", "manual_candidate_review_required"}:
+                continue
+            if kind == "create_normalized_item":
+                target_slug = action["proposed_slug"]
+                slug_to_item_id[target_slug] = self._create_or_get_normalized_item(
+                    cursor,
+                    slug=target_slug,
+                    canonical_name=action["canonical_name"],
+                    item_type=action["item_type"],
+                    summary=action.get("summary"),
+                    external_ids=action.get("external_ids", {}),
+                    primary_input_modality=action.get("primary_input_modality"),
+                    primary_output_modality=action.get("primary_output_modality"),
+                )
+                self._upsert_synonyms(
+                    cursor,
+                    slug_to_item_id[target_slug],
+                    action.get("aliases", []),
+                    source_document_id,
+                )
+                self._upsert_item_mechanisms(
+                    cursor,
+                    slug_to_item_id[target_slug],
+                    action.get("mechanisms", []),
+                )
+                self._upsert_item_techniques(
+                    cursor,
+                    slug_to_item_id[target_slug],
+                    action.get("techniques", []),
+                )
+                self._upsert_item_target_processes(
+                    cursor,
+                    slug_to_item_id[target_slug],
+                    action.get("target_processes", []),
+                )
                 continue
             if kind == "attach_evidence_to_existing_item":
                 target_slug = action["target_slug"]
@@ -525,13 +570,14 @@ class PostgresLoadPlanExecutor:
         upserted_count = 0
 
         for action in actions:
-            gap_field_id = self._upsert_gap_field(cursor, action.get("database_fields", {}).get("field"))
+            database_fields = action.get("database_fields", {})
+            gap_field_id = self._upsert_gap_field(cursor, database_fields.get("field"))
             payload = {
                 "database_name": action.get("database_name"),
                 "entry_url": action.get("entry_url"),
                 "external_ids": action.get("external_ids", {}),
                 "evidence_text": action.get("evidence_text"),
-                "database_fields": action.get("database_fields", {}),
+                "database_fields": database_fields,
                 "claims": action.get("claims", []),
                 "unresolved_ambiguities": action.get("unresolved_ambiguities", []),
                 "source_document_id": str(source_document_id),
@@ -539,20 +585,34 @@ class PostgresLoadPlanExecutor:
             }
             cursor.execute(
                 """
-                insert into gap_item (external_gap_item_id, gap_field_id, title, payload)
-                values (%s, %s, %s, %s::jsonb)
+                insert into gap_item (external_gap_item_id, gap_field_id, slug, title, payload)
+                values (%s, %s, %s, %s, %s::jsonb)
                 on conflict (external_gap_item_id) do update
                 set
                   gap_field_id = coalesce(excluded.gap_field_id, gap_item.gap_field_id),
+                  slug = coalesce(excluded.slug, gap_item.slug),
                   title = excluded.title,
                   payload = excluded.payload
+                returning id
                 """,
                 (
                     action["external_gap_item_id"],
                     gap_field_id,
+                    action.get("external_ids", {}).get("gap_map_slug"),
                     action["canonical_name"],
                     json.dumps(payload),
                 ),
+            )
+            gap_item_id = cursor.fetchone()[0]
+            capability_ids = self._upsert_gap_capabilities(
+                cursor,
+                database_fields.get("capabilities", []),
+            )
+            self._replace_gap_item_capabilities(cursor, gap_item_id, capability_ids)
+            self._upsert_gap_resources(cursor, database_fields.get("resources", []))
+            self._replace_gap_capability_resources(
+                cursor,
+                database_fields.get("capabilities", []),
             )
             upserted_count += 1
 
@@ -568,6 +628,100 @@ class PostgresLoadPlanExecutor:
                 on conflict (item_id, synonym) do nothing
                 """,
                 (item_id, alias, source_document_id),
+            )
+
+    @staticmethod
+    def _create_or_get_normalized_item(
+        cursor: Any,
+        *,
+        slug: str,
+        canonical_name: str,
+        item_type: str,
+        summary: Optional[str],
+        external_ids: Dict[str, Any],
+        primary_input_modality: Optional[str],
+        primary_output_modality: Optional[str],
+    ) -> Any:
+        cursor.execute(
+            """
+            insert into toolkit_item (
+              slug, canonical_name, item_type, summary, status, external_ids,
+              primary_input_modality, primary_output_modality
+            )
+            values (%s, %s, %s, %s, %s, %s::jsonb, %s, %s)
+            on conflict (slug) do update
+            set
+              summary = coalesce(toolkit_item.summary, excluded.summary),
+              external_ids = toolkit_item.external_ids || excluded.external_ids,
+              primary_input_modality = coalesce(
+                toolkit_item.primary_input_modality,
+                excluded.primary_input_modality
+              ),
+              primary_output_modality = coalesce(
+                toolkit_item.primary_output_modality,
+                excluded.primary_output_modality
+              )
+            returning id
+            """,
+            (
+                slug,
+                canonical_name,
+                item_type,
+                summary,
+                "normalized",
+                json.dumps(external_ids or {}),
+                primary_input_modality,
+                primary_output_modality,
+            ),
+        )
+        return cursor.fetchone()[0]
+
+    @staticmethod
+    def _upsert_item_mechanisms(cursor: Any, item_id: Any, mechanisms: List[str]) -> None:
+        for mechanism in mechanisms:
+            cursor.execute(
+                """
+                insert into item_mechanism (item_id, mechanism_name)
+                select %s, %s
+                where not exists (
+                  select 1
+                  from item_mechanism
+                  where item_id = %s and mechanism_name = %s
+                )
+                """,
+                (item_id, mechanism, item_id, mechanism),
+            )
+
+    @staticmethod
+    def _upsert_item_techniques(cursor: Any, item_id: Any, techniques: List[str]) -> None:
+        for technique in techniques:
+            cursor.execute(
+                """
+                insert into item_technique (item_id, technique_name)
+                select %s, %s
+                where not exists (
+                  select 1
+                  from item_technique
+                  where item_id = %s and technique_name = %s
+                )
+                """,
+                (item_id, technique, item_id, technique),
+            )
+
+    @staticmethod
+    def _upsert_item_target_processes(cursor: Any, item_id: Any, target_processes: List[str]) -> None:
+        for target_process in target_processes:
+            cursor.execute(
+                """
+                insert into item_target_process (item_id, target_process)
+                select %s, %s
+                where not exists (
+                  select 1
+                  from item_target_process
+                  where item_id = %s and target_process = %s
+                )
+                """,
+                (item_id, target_process, item_id, target_process),
             )
 
     @staticmethod
@@ -759,19 +913,121 @@ class PostgresLoadPlanExecutor:
             return None
         cursor.execute(
             """
-            insert into gap_field (external_gap_field_id, name, payload)
-            values (%s, %s, %s::jsonb)
+            insert into gap_field (external_gap_field_id, slug, name, payload)
+            values (%s, %s, %s, %s::jsonb)
             on conflict (external_gap_field_id) do update
-            set name = excluded.name, payload = excluded.payload
+            set
+              slug = coalesce(excluded.slug, gap_field.slug),
+              name = excluded.name,
+              payload = excluded.payload
             returning id
             """,
             (
                 str(field_payload["id"]),
+                field_payload.get("slug"),
                 field_payload.get("name") or str(field_payload["id"]),
                 json.dumps(field_payload),
             ),
         )
         return cursor.fetchone()[0]
+
+    @staticmethod
+    def _upsert_gap_capabilities(cursor: Any, capability_payloads: List[Dict[str, Any]]) -> List[Any]:
+        capability_ids: List[Any] = []
+        for capability_payload in capability_payloads:
+            capability_id = capability_payload.get("id")
+            if not capability_id:
+                continue
+            cursor.execute(
+                """
+                insert into gap_capability (external_gap_capability_id, slug, name, payload)
+                values (%s, %s, %s, %s::jsonb)
+                on conflict (external_gap_capability_id) do update
+                set
+                  slug = coalesce(excluded.slug, gap_capability.slug),
+                  name = excluded.name,
+                  payload = excluded.payload
+                returning id
+                """,
+                (
+                    str(capability_id),
+                    capability_payload.get("slug"),
+                    capability_payload.get("name") or str(capability_id),
+                    json.dumps(capability_payload),
+                ),
+            )
+            capability_ids.append(cursor.fetchone()[0])
+        return capability_ids
+
+    @staticmethod
+    def _upsert_gap_resources(cursor: Any, resource_payloads: List[Dict[str, Any]]) -> None:
+        for resource_payload in resource_payloads:
+            resource_id = resource_payload.get("id")
+            if not resource_id:
+                continue
+            cursor.execute(
+                """
+                insert into gap_resource (external_gap_resource_id, title, payload)
+                values (%s, %s, %s::jsonb)
+                on conflict (external_gap_resource_id) do update
+                set
+                  title = excluded.title,
+                  payload = excluded.payload
+                """,
+                (
+                    str(resource_id),
+                    resource_payload.get("title") or str(resource_id),
+                    json.dumps(resource_payload),
+                ),
+            )
+
+    @staticmethod
+    def _replace_gap_item_capabilities(cursor: Any, gap_item_id: Any, capability_ids: List[Any]) -> None:
+        cursor.execute("delete from gap_item_capability where gap_item_id = %s", (gap_item_id,))
+        for capability_id in capability_ids:
+            cursor.execute(
+                """
+                insert into gap_item_capability (gap_item_id, gap_capability_id)
+                values (%s, %s)
+                on conflict do nothing
+                """,
+                (gap_item_id, capability_id),
+            )
+
+    @staticmethod
+    def _replace_gap_capability_resources(cursor: Any, capability_payloads: List[Dict[str, Any]]) -> None:
+        for capability_payload in capability_payloads:
+            capability_external_id = capability_payload.get("id")
+            if not capability_external_id:
+                continue
+            cursor.execute(
+                "select id from gap_capability where external_gap_capability_id = %s",
+                (str(capability_external_id),),
+            )
+            capability_row = cursor.fetchone()
+            if not capability_row:
+                continue
+            gap_capability_id = capability_row[0]
+            cursor.execute(
+                "delete from gap_capability_resource where gap_capability_id = %s",
+                (gap_capability_id,),
+            )
+            for resource_external_id in capability_payload.get("resources", []):
+                cursor.execute(
+                    "select id from gap_resource where external_gap_resource_id = %s",
+                    (str(resource_external_id),),
+                )
+                resource_row = cursor.fetchone()
+                if not resource_row:
+                    continue
+                cursor.execute(
+                    """
+                    insert into gap_capability_resource (gap_capability_id, gap_resource_id)
+                    values (%s, %s)
+                    on conflict do nothing
+                    """,
+                    (gap_capability_id, resource_row[0]),
+                )
 
     @staticmethod
     def _collect_review_tasks(load_plan: Dict[str, Any]) -> List[Dict[str, Any]]:

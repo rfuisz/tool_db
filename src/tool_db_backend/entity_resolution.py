@@ -132,19 +132,63 @@ class EntityResolver:
         return matches
 
     def _load_existing_items(self) -> List[Dict[str, Any]]:
-        items = []
+        items_by_slug: Dict[str, Dict[str, Any]] = {}
         items_root = self.settings.knowledge_root / "items"
         for structured_path in sorted(items_root.glob("*/structured.yaml")):
             data = yaml.safe_load(structured_path.read_text())
             if isinstance(data, dict):
-                items.append(
-                    {
-                        **data,
-                        "canonical_name": data.get("canonical_name", structured_path.parent.name),
-                        "aliases": data.get("aliases", []),
-                    }
-                )
-        return items
+                slug = data.get("slug", structured_path.parent.name)
+                items_by_slug[slug] = {
+                    **data,
+                    "slug": slug,
+                    "canonical_name": data.get("canonical_name", structured_path.parent.name),
+                    "aliases": data.get("aliases", []),
+                    "synonyms": data.get("synonyms", []),
+                }
+
+        if self.settings.database_url:
+            try:
+                import psycopg
+
+                with psycopg.connect(self.settings.database_url) as conn:
+                    with conn.cursor() as cursor:
+                        cursor.execute(
+                            """
+                            select
+                              ti.slug,
+                              ti.canonical_name,
+                              ti.item_type::text,
+                              ti.external_ids,
+                              coalesce(
+                                array_agg(distinct s.synonym)
+                                filter (where s.synonym is not null and s.synonym <> ''),
+                                '{}'::text[]
+                              ) as synonyms
+                            from toolkit_item ti
+                            left join item_synonym s on s.item_id = ti.id
+                            group by ti.id
+                            order by ti.slug asc
+                            """
+                        )
+                        for slug, canonical_name, item_type, external_ids, synonyms in cursor.fetchall():
+                            existing = items_by_slug.get(slug, {})
+                            items_by_slug[slug] = {
+                                **existing,
+                                "slug": slug,
+                                "canonical_name": canonical_name or existing.get("canonical_name") or slug,
+                                "item_type": item_type or existing.get("item_type"),
+                                "external_ids": external_ids or existing.get("external_ids", {}),
+                                "aliases": _dedupe_preserving_order(
+                                    list(existing.get("aliases", []))
+                                ),
+                                "synonyms": _dedupe_preserving_order(
+                                    list(existing.get("synonyms", [])) + list(synonyms or [])
+                                ),
+                            }
+            except Exception:
+                pass
+
+        return list(items_by_slug.values())
 
     def _load_existing_workflows(self) -> List[Dict[str, Any]]:
         workflows = []
@@ -169,3 +213,18 @@ def _normalize_external_ids(external_ids: Dict[str, Any]) -> Dict[str, str]:
             continue
         normalized[str(key)] = _norm(str(value))
     return normalized
+
+
+def _dedupe_preserving_order(values: List[str]) -> List[str]:
+    seen = set()
+    result = []
+    for value in values:
+        cleaned = str(value).strip()
+        if not cleaned:
+            continue
+        key = cleaned.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(cleaned)
+    return result

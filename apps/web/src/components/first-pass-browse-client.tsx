@@ -3,36 +3,77 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-import type { FirstPassItemSummary } from "@/lib/types";
+import { FirstPassLiveRefresh } from "@/components/first-pass-live-refresh";
+import { renderInlineTitle } from "@/lib/render-inline-title";
+import type { FirstPassEntitySummary } from "@/lib/types";
+
+type BrowseScope = "all" | "items" | "methods" | "workflows";
+
+const SCOPE_LABELS: Record<BrowseScope, string> = {
+  all: "All concepts",
+  items: "Items",
+  methods: "Methods",
+  workflows: "Workflows",
+};
+
+function formatLabel(value: string) {
+  return value.replace(/_/g, " ");
+}
+
+function isMethodLikeItemType(itemType: string | null) {
+  return Boolean(itemType && /(_method|_technique)$/.test(itemType));
+}
+
+function getEntityScope(entity: FirstPassEntitySummary): BrowseScope {
+  if (entity.candidate_type === "workflow_template") {
+    return "workflows";
+  }
+  if (isMethodLikeItemType(entity.item_type)) {
+    return "methods";
+  }
+  return "items";
+}
 
 export function FirstPassBrowseClient({
-  items,
+  entities,
+  title = "First-pass extracted concepts",
+  description = "These records are loaded directly from extracted packets so you can judge whether the system is pulling out useful entities, methods, and workflows before deeper canonical cleanup.",
+  defaultScope = "all",
 }: {
-  items: FirstPassItemSummary[];
+  entities: FirstPassEntitySummary[];
+  title?: string;
+  description?: string;
+  defaultScope?: BrowseScope;
 }) {
   const [query, setQuery] = useState("");
+  const [scope, setScope] = useState<BrowseScope>(defaultScope);
   const [sortBy, setSortBy] = useState<"sources" | "claims" | "name">(
     "sources",
   );
 
   const filtered = useMemo(() => {
     const lowered = query.trim().toLowerCase();
+    const scoped =
+      scope === "all"
+        ? entities
+        : entities.filter((entity) => getEntityScope(entity) === scope);
     const base = lowered
-      ? items.filter((item) => {
-          const evidencePreviews = item.evidence_previews ?? [];
-          const claimPreviews = item.claim_previews ?? [];
-          const aliases = item.aliases ?? [];
+      ? scoped.filter((entity) => {
+          const evidencePreviews = entity.evidence_previews ?? [];
+          const claimPreviews = entity.claim_previews ?? [];
+          const aliases = entity.aliases ?? [];
           const haystacks = [
-            item.canonical_name,
-            item.item_type ?? "",
-            item.evidence_preview ?? "",
+            entity.canonical_name,
+            entity.candidate_type,
+            entity.item_type ?? "",
+            entity.evidence_preview ?? "",
             ...evidencePreviews,
             ...claimPreviews,
             ...aliases,
           ].map((value) => value.toLowerCase());
           return haystacks.some((value) => value.includes(lowered));
         })
-      : items;
+      : scoped;
     return [...base].sort((a, b) => {
       if (sortBy === "claims") {
         return (
@@ -50,18 +91,42 @@ export function FirstPassBrowseClient({
         a.canonical_name.localeCompare(b.canonical_name)
       );
     });
-  }, [items, query, sortBy]);
+  }, [entities, query, scope, sortBy]);
+
+  const scopeCounts = useMemo(
+    () => ({
+      all: entities.length,
+      items: entities.filter((entity) => getEntityScope(entity) === "items")
+        .length,
+      methods: entities.filter((entity) => getEntityScope(entity) === "methods")
+        .length,
+      workflows: entities.filter(
+        (entity) => getEntityScope(entity) === "workflows",
+      ).length,
+    }),
+    [entities],
+  );
 
   return (
     <div>
       <header className="mb-10">
         <p className="small-caps mb-3">Bulk Extracted Review Layer</p>
-        <h1 className="mb-3">First-pass extracted items</h1>
-        <p className="max-w-3xl text-ink-secondary">
-          These records are loaded directly from extracted packets so you can
-          judge whether the system is pulling out useful entities and claims
-          before deeper canonical cleanup.
-        </p>
+        <h1 className="mb-3">{title}</h1>
+        <p className="max-w-3xl text-ink-secondary">{description}</p>
+        <div className="mt-4 flex flex-wrap gap-4 font-ui text-sm">
+          <Link href="/first-pass" className="text-brand hover:text-accent">
+            All concepts
+          </Link>
+          <Link href="/first-pass/methods" className="text-brand hover:text-accent">
+            Methods
+          </Link>
+          <Link href="/first-pass/workflows" className="text-brand hover:text-accent">
+            Workflows
+          </Link>
+        </div>
+        <div className="mt-4">
+          <FirstPassLiveRefresh />
+        </div>
       </header>
 
       <div className="mb-8 flex flex-wrap items-center gap-3 font-ui text-sm">
@@ -72,6 +137,22 @@ export function FirstPassBrowseClient({
           placeholder="Search extracted names, aliases, evidence..."
           className="h-9 w-80 border-b border-edge bg-transparent px-0 text-ink placeholder-ink-muted outline-none transition-colors focus:border-accent"
         />
+        <div className="flex flex-wrap gap-2">
+          {(Object.keys(SCOPE_LABELS) as BrowseScope[]).map((scopeOption) => (
+            <button
+              key={scopeOption}
+              type="button"
+              onClick={() => setScope(scopeOption)}
+              className={`rounded border px-3 py-1 font-ui text-xs uppercase tracking-wide transition-colors ${
+                scope === scopeOption
+                  ? "border-accent text-accent"
+                  : "border-edge text-ink-muted hover:border-accent/40 hover:text-ink-secondary"
+              }`}
+            >
+              {SCOPE_LABELS[scopeOption]} ({scopeCounts[scopeOption]})
+            </button>
+          ))}
+        </div>
         <select
           value={sortBy}
           onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
@@ -82,44 +163,46 @@ export function FirstPassBrowseClient({
           <option value="name">Name</option>
         </select>
         <span className="ml-auto text-ink-muted">
-          {filtered.length} extracted item{filtered.length === 1 ? "" : "s"}
+          {filtered.length} extracted concept{filtered.length === 1 ? "" : "s"}
         </span>
       </div>
 
       <div className="space-y-4">
-        {filtered.map((item) => {
-          const evidencePreviews = item.evidence_previews ?? [];
-          const claimPreviews = item.claim_previews ?? [];
-          const aliases = item.aliases ?? [];
+        {filtered.map((entity) => {
+          const evidencePreviews = entity.evidence_previews ?? [];
+          const claimPreviews = entity.claim_previews ?? [];
+          const aliases = entity.aliases ?? [];
+          const scopeLabel = SCOPE_LABELS[getEntityScope(entity)];
+          const detailHref = `/first-pass/entities/${entity.candidate_type}/${entity.slug}`;
 
           return (
             <article
-              key={item.slug}
+              key={`${entity.candidate_type}:${entity.slug}`}
               className="border border-edge bg-surface p-5"
             >
               <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <Link
-                    href={`/first-pass/${item.slug}`}
+                    href={detailHref}
                     className="text-lg text-ink hover:text-accent"
                   >
-                    {item.canonical_name}
+                    {renderInlineTitle(entity.canonical_name)}
                   </Link>
-                  {item.item_type ? (
-                    <p className="mt-1 font-ui text-xs uppercase tracking-wide text-ink-muted">
-                      {item.item_type.replace(/_/g, " ")}
-                    </p>
-                  ) : null}
+                  <div className="mt-1 flex flex-wrap gap-2 font-ui text-xs uppercase tracking-wide text-ink-muted">
+                    <span>{scopeLabel}</span>
+                    <span>{formatLabel(entity.candidate_type)}</span>
+                    {entity.item_type ? <span>{formatLabel(entity.item_type)}</span> : null}
+                  </div>
                 </div>
                 <div className="font-data text-xs tabular-nums text-ink-muted">
-                  <div>{item.source_document_count} sources</div>
-                  <div>{item.claim_count} claims</div>
+                  <div>{entity.source_document_count} sources</div>
+                  <div>{entity.claim_count} claims</div>
                 </div>
               </div>
 
-              {item.matched_slug ? (
+              {entity.matched_slug ? (
                 <p className="mb-2 font-ui text-xs text-valid">
-                  Canonical match suggestion: <code>{item.matched_slug}</code>
+                  Canonical match suggestion: <code>{entity.matched_slug}</code>
                 </p>
               ) : null}
 
@@ -135,9 +218,9 @@ export function FirstPassBrowseClient({
                     Evidence in collection view
                   </p>
                   <div className="space-y-2">
-                    {evidencePreviews.map((preview) => (
+                    {evidencePreviews.map((preview, index) => (
                       <p
-                        key={preview}
+                        key={`${entity.candidate_type}-${entity.slug}-evidence-preview-${index}`}
                         className="text-sm leading-relaxed text-ink-secondary"
                       >
                         {preview}
@@ -157,9 +240,9 @@ export function FirstPassBrowseClient({
                     Claim excerpts
                   </p>
                   <div className="space-y-2">
-                    {claimPreviews.map((preview) => (
+                    {claimPreviews.map((preview, index) => (
                       <blockquote
-                        key={preview}
+                        key={`${entity.candidate_type}-${entity.slug}-claim-preview-${index}`}
                         className="border-l-2 border-accent/30 pl-3 text-sm leading-relaxed text-ink-secondary"
                       >
                         {preview}
@@ -170,7 +253,7 @@ export function FirstPassBrowseClient({
               ) : null}
 
               <Link
-                href={`/first-pass/${item.slug}`}
+                href={detailHref}
                 className="font-ui text-sm text-brand hover:text-accent"
               >
                 Open provenance view →

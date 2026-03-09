@@ -23,6 +23,27 @@ Set:
 DATABASE_URL=postgresql://tooldb:tooldb@localhost:5432/tooldb
 ```
 
+To overwrite the hosted Render Postgres database from your local database, also set:
+
+```bash
+RENDER_DATABASE_URL=postgresql://...
+```
+
+Or let the sync script resolve the hosted connection string from the Render API:
+
+```bash
+RENDER_API_KEY=
+RENDER_POSTGRES_ID=
+# or:
+RENDER_POSTGRES_NAME=tool-db-postgres
+```
+
+Then run:
+
+```bash
+./scripts/sync_render_db.py
+```
+
 ## Current Utility
 
 Validate an extraction packet against the repo's JSON Schemas:
@@ -174,6 +195,7 @@ LLM extraction calls now go through one shared JSON-call harness with disk cache
 Relevant settings:
 
 - `LLM_CACHE_ENABLED` to disable cache reads and writes
+- `LLM_MAX_CONCURRENCY` to control how many extraction jobs can wait on the LLM in parallel
 - `LLM_RETRY_ATTEMPTS` to change total attempts
 - `LLM_RETRY_BASE_DELAY_SECONDS` and `LLM_RETRY_MAX_DELAY_SECONDS` to tune exponential backoff
 
@@ -199,6 +221,12 @@ Run all eligible jobs in a directory:
 
 ```bash
 .venv/bin/python -m apps.worker.main run-extraction-batch data/pipeline-artifacts/real-extraction-seed/openalex/jobs --limit 0
+```
+
+Push concurrency higher for network-bound extraction:
+
+```bash
+LLM_MAX_CONCURRENCY=64 .venv/bin/python -m apps.worker.main run-extraction-batch data/pipeline-artifacts/real-extraction-seed/openalex/jobs --limit 0
 ```
 
 Ingest a directory of checked-in packet files:

@@ -1,50 +1,5 @@
-import type { WorkflowStep, WorkflowStepType } from "@/lib/types";
-
-type PhaseKey = "design" | "build" | "test" | "learn";
-
-type PhaseBucket = {
-  key: PhaseKey;
-  label: string;
-  description: string;
-  stepTypes: WorkflowStepType[];
-};
-
-const PHASES: PhaseBucket[] = [
-  {
-    key: "design",
-    label: "Design",
-    description: "Define the construct, library, or study plan.",
-    stepTypes: ["design"],
-  },
-  {
-    key: "build",
-    label: "Build",
-    description: "Make or prepare the material you will evaluate.",
-    stepTypes: [
-      "dna_acquisition",
-      "assembly",
-      "transformation",
-      "colony_screen",
-      "sequence_verification",
-      "transfection",
-      "expression",
-      "packaging",
-      "delivery",
-    ],
-  },
-  {
-    key: "test",
-    label: "Test",
-    description: "Run the assay or selection that produces signal.",
-    stepTypes: ["selection_round", "assay"],
-  },
-  {
-    key: "learn",
-    label: "Learn",
-    description: "Interpret the result and decide what to do next.",
-    stepTypes: ["analysis", "decision"],
-  },
-];
+import type { WorkflowStep } from "@/lib/types";
+import { getWorkflowPhases } from "@/lib/workflow-phases";
 
 function formatHours(h: number): string {
   if (h <= 0) return "0h";
@@ -58,29 +13,8 @@ function formatCost(usd: number): string {
   return `$${usd.toLocaleString()}`;
 }
 
-function stepsForPhase(steps: WorkflowStep[], phase: PhaseBucket): WorkflowStep[] {
-  return steps.filter((step) => phase.stepTypes.includes(step.step_type));
-}
-
 export function WorkflowPhaseBreakdown({ steps }: { steps: WorkflowStep[] }) {
-  const phases = PHASES.map((phase) => {
-    const phaseSteps = stepsForPhase(steps, phase);
-    const totalHours = phaseSteps.reduce(
-      (sum, step) => sum + (step.duration_typical_hours ?? 0),
-      0,
-    );
-    const totalCost = phaseSteps.reduce(
-      (sum, step) => sum + (step.direct_cost_usd_typical ?? 0),
-      0,
-    );
-
-    return {
-      ...phase,
-      steps: phaseSteps,
-      totalHours,
-      totalCost,
-    };
-  }).filter((phase) => phase.steps.length > 0);
+  const phases = getWorkflowPhases(steps);
 
   if (phases.length === 0) {
     return null;

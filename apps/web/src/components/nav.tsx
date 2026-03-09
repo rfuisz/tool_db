@@ -1,17 +1,20 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
   { href: "/", label: "Home" },
   { href: "/items", label: "Collection" },
+  { href: "/gaps", label: "Gaps" },
   { href: "/workflows", label: "Workflows" },
   { href: "/api", label: "API" },
 ];
 
 export function Nav({ showFirstPass = false }: { showFirstPass?: boolean }) {
   const pathname = usePathname();
+  const [menuOpen, setMenuOpen] = useState(false);
   const navItems = showFirstPass
     ? [...NAV_ITEMS.slice(0, 2), { href: "/first-pass", label: "First Pass" }, ...NAV_ITEMS.slice(2)]
     : NAV_ITEMS;
@@ -26,7 +29,35 @@ export function Nav({ showFirstPass = false }: { showFirstPass?: boolean }) {
           BioControl<span className="text-accent">Toolkit</span>
         </Link>
 
-        <div className="flex items-center gap-6">
+        <button
+          type="button"
+          aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
+          aria-expanded={menuOpen}
+          aria-controls="site-nav-mobile"
+          onClick={() => setMenuOpen((open) => !open)}
+          className="flex h-10 w-10 items-center justify-center text-ink transition-colors hover:text-accent md:hidden"
+        >
+          <span className="sr-only">Menu</span>
+          <span className="relative block h-4 w-4">
+            <span
+              className={`absolute top-0 left-0 block h-px w-full bg-current transition-all ${
+                menuOpen ? "top-1/2 -translate-y-1/2 rotate-45" : ""
+              }`}
+            />
+            <span
+              className={`absolute top-1/2 left-0 block h-px w-full -translate-y-1/2 bg-current transition-opacity ${
+                menuOpen ? "opacity-0" : ""
+              }`}
+            />
+            <span
+              className={`absolute bottom-0 left-0 block h-px w-full bg-current transition-all ${
+                menuOpen ? "top-1/2 -translate-y-1/2 -rotate-45" : ""
+              }`}
+            />
+          </span>
+        </button>
+
+        <div className="hidden items-center gap-6 md:flex">
           {navItems.map((item) => {
             const active =
               item.href === "/"
@@ -48,6 +79,35 @@ export function Nav({ showFirstPass = false }: { showFirstPass?: boolean }) {
           })}
         </div>
       </div>
+      {menuOpen && (
+        <div
+          id="site-nav-mobile"
+          className="border-t border-edge bg-surface md:hidden"
+        >
+          <div className="mx-auto flex max-w-5xl flex-col px-6 py-4">
+            {navItems.map((item) => {
+              const active =
+                item.href === "/"
+                  ? pathname === "/"
+                  : pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMenuOpen(false)}
+                  className={`small-caps border-b border-edge py-3 transition-colors last:border-b-0 ${
+                    active
+                      ? "text-ink"
+                      : "text-ink-muted hover:text-ink-secondary"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <div className="rule-accent mx-auto h-px max-w-5xl" />
     </nav>
   );

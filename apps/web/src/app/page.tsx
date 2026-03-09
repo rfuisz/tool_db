@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { LocalRenderSyncButton } from "@/components/local-render-sync-button";
+import { isLocalAdminEnabled } from "@/lib/first-pass-access";
 import { getItems, getWorkflows } from "@/lib/backend-data";
 import { getAllFamilies, getAllMechanisms, getAllTechniques } from "@/lib/data";
 import {
@@ -10,6 +12,7 @@ import type { ItemType } from "@/lib/types";
 
 export default async function Home() {
   const [items, workflows] = await Promise.all([getItems(), getWorkflows()]);
+  const showLocalAdmin = await isLocalAdminEnabled();
   const typeCounts = items.reduce<Record<string, number>>((acc, item) => {
     acc[item.item_type] = (acc[item.item_type] || 0) + 1;
     return acc;
@@ -33,13 +36,40 @@ export default async function Home() {
     <div>
       {/* Masthead */}
       <header className="mb-16 pt-8">
-        <h1 className="mb-4">BioControl Toolkit DB</h1>
-        <p className="max-w-xl text-lg leading-relaxed text-ink-secondary">
-          An evidence-first engineering knowledge system for biological control
-          surfaces, engineering methods, assay methods, and
-          design&#x2013;build&#x2013;test&#x2013;learn workflows. Every claim is
-          traceable to source-backed evidence.
-        </p>
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-start">
+          <blockquote className="order-2 border-l-2 border-accent/30 pl-5 text-[22px] leading-relaxed text-ink lg:order-1">
+            <p className="whitespace-pre-line">
+              {`I live my life in circles that grow wide
+And endlessly unroll,
+I may not reach the last, but on I glide
+Strong pinioned toward my goal.
+
+About the old tower, dark against the sky,
+The beat of my wings hums,
+I circle about God, sweep far and high
+On through milleniums.
+
+Am I a bird that skims the clouds along,
+Or am I a wild storm, or a great song?`}
+            </p>
+            <p className="mt-3 font-ui text-sm tracking-wide text-ink-muted not-italic">
+              Rainer Maria Rilke,{" "}
+              <span className="italic">The Book of a Monk&apos;s Life</span>
+            </p>
+          </blockquote>
+
+          <div className="order-1 lg:order-2">
+            <p className="small-caps mb-4 text-accent">
+              Evidence-first engineering knowledge system
+            </p>
+            <p className="max-w-2xl text-lg leading-relaxed text-ink-secondary">
+              A structured reference for biological control surfaces,
+              engineering methods, assay methods, and
+              design&#x2013;build&#x2013;test&#x2013;learn workflows, built so
+              every claim remains traceable to source-backed evidence.
+            </p>
+          </div>
+        </div>
 
         {/* Stats as a quiet data line */}
         <div className="mt-8 flex flex-wrap gap-x-8 gap-y-2 font-data text-sm tracking-wide text-ink-muted">
@@ -66,6 +96,7 @@ export default async function Home() {
             </span>
           )}
         </div>
+        {showLocalAdmin && <LocalRenderSyncButton />}
       </header>
 
       <hr className="mb-16" />

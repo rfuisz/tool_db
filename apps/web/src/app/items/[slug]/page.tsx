@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getItemBySlug } from "@/lib/backend-data";
+import { renderInlineTitle, stripInlineTitleMarkup } from "@/lib/render-inline-title";
 import { ScoreBreakdown } from "@/components/score-bar";
 import { ValidationMatrix } from "@/components/validation-dots";
 import { CitationList } from "@/components/citation-list";
@@ -39,6 +40,7 @@ export default async function ItemDetailPage({
   if (!item) notFound();
 
   const rep = item.replication_summary;
+  const plainTitle = stripInlineTitleMarkup(item.canonical_name);
 
   return (
     <div>
@@ -48,12 +50,12 @@ export default async function ItemDetailPage({
           Collection
         </Link>
         <span className="mx-2 text-ink-faint">/</span>
-        <span className="text-ink-secondary">{item.canonical_name}</span>
+        <span className="text-ink-secondary">{plainTitle}</span>
       </p>
 
       {/* Header */}
       <header className="mb-12">
-        <h1 className="mb-3">{item.canonical_name}</h1>
+        <h1 className="mb-3">{renderInlineTitle(item.canonical_name)}</h1>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-ui text-sm text-ink-muted">
           <TypeBadge type={item.item_type} />
           {item.family && (
@@ -78,8 +80,14 @@ export default async function ItemDetailPage({
           <StatusBadge status={item.status} />
         </div>
         {item.synonyms.length > 0 && (
-          <p className="mt-1 font-ui text-sm italic text-ink-faint">
-            Also known as: {item.synonyms.join(", ")}
+          <p className="mt-2 font-ui text-sm text-ink-secondary">
+            Also known as:{" "}
+            {item.synonyms.map((synonym, index) => (
+              <span key={synonym}>
+                {index > 0 ? ", " : ""}
+                {renderInlineTitle(synonym)}
+              </span>
+            ))}
           </p>
         )}
       </header>

@@ -108,6 +108,7 @@
           "type": "string",
           "enum": [
             "toolkit_item",
+            "concept_label",
             "source_document",
             "workflow_template",
             "gap_item",

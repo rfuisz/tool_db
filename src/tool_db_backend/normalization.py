@@ -2,8 +2,9 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
+from tool_db_backend.candidate_filtering import assess_toolkit_item_candidate, load_controlled_vocabularies
 from tool_db_backend.config import Settings
 from tool_db_backend.schema_validation import validate_packet
 
@@ -54,6 +55,7 @@ def _compact_dict(value: Dict[str, Any]) -> Dict[str, Any]:
 class PacketNormalizer:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+        self._controlled_vocabularies = load_controlled_vocabularies(settings)
 
     def normalize_packet_file(self, packet_kind: str, packet_path: Path) -> Dict[str, Any]:
         payload = json.loads(packet_path.read_text())
@@ -83,7 +85,7 @@ class PacketNormalizer:
         return output_path
 
     def _normalize_review_packet(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        item_candidates = self._normalize_item_candidates(payload.get("entity_candidates", []))
+        item_candidates, rejected_item_candidates = self._normalize_item_candidates(payload.get("entity_candidates", []))
         workflow_candidates = self._normalize_workflow_candidates(payload.get("entity_candidates", []))
         claim_index = self._normalize_claims(payload.get("claims", []), item_candidates)
         workflow_stage_observations = self._normalize_workflow_stage_observations(
@@ -104,11 +106,12 @@ class PacketNormalizer:
                 payload.get("recommended_seed_item_local_ids", []),
                 item_candidates,
             ),
+            "rejected_item_candidates": rejected_item_candidates,
             "unresolved_ambiguities": payload.get("unresolved_ambiguities", []),
         }
 
     def _normalize_primary_paper_packet(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        item_candidates = self._normalize_item_candidates(payload.get("entity_candidates", []))
+        item_candidates, rejected_item_candidates = self._normalize_item_candidates(payload.get("entity_candidates", []))
         workflow_candidates = self._normalize_workflow_candidates(payload.get("entity_candidates", []))
         claims = self._normalize_claims(payload.get("claims", []), item_candidates)
         validations = []
@@ -138,6 +141,7 @@ class PacketNormalizer:
             "validation_observations": validations,
             "workflow_stage_observations": workflow_stage_observations,
             "replication_signals": self._normalize_replication_signals(payload.get("replication_signals", {})),
+            "rejected_item_candidates": rejected_item_candidates,
             "unresolved_ambiguities": payload.get("unresolved_ambiguities", []),
         }
 
@@ -178,10 +182,25 @@ class PacketNormalizer:
             }
         )
 
-    def _normalize_item_candidates(self, entity_candidates: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    def _normalize_item_candidates(
+        self,
+        entity_candidates: List[Dict[str, Any]],
+    ) -> Tuple[Dict[str, Dict[str, Any]], List[Dict[str, Any]]]:
         normalized = {}
+        rejected = []
+        allowed_item_types = set(self._controlled_vocabularies.get("item_types", []))
         for entity in entity_candidates:
             if entity.get("candidate_type") != "toolkit_item":
+                continue
+            assessment = assess_toolkit_item_candidate(entity, allowed_item_types=allowed_item_types)
+            if not assessment["keep"]:
+                rejected.append(
+                    {
+                        "local_id": entity.get("local_id"),
+                        "canonical_name": str(entity.get("canonical_name") or "").strip(),
+                        "reason": assessment["reason"],
+                    }
+                )
                 continue
             canonical_name = entity["canonical_name"].strip()
             slug = _slugify(canonical_name)
@@ -190,12 +209,12 @@ class PacketNormalizer:
                 "candidate_key": f"item/{slug}",
                 "slug": slug,
                 "canonical_name": canonical_name,
-                "item_type": entity.get("item_type"),
+                "item_type": assessment["item_type"],
                 "aliases": aliases,
                 "external_ids": entity.get("external_ids", {}),
                 "evidence_text": entity.get("evidence_text"),
             }
-        return normalized
+        return normalized, rejected
 
     def _normalize_gap_candidates(self, entity_candidates: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
         normalized = {}

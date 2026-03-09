@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from tool_db_backend.candidate_filtering import assess_toolkit_item_candidate, load_controlled_vocabularies
 from tool_db_backend.config import Settings
 from tool_db_backend.entity_resolution import EntityResolver
 from tool_db_backend.postgres_loader import LoadPlanExecutionError, PostgresLoadPlanExecutor
@@ -15,15 +16,26 @@ def _slugify(value: str) -> str:
     return slug or "unnamed"
 
 
+def _strip_nul_bytes(value: Any) -> Any:
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, list):
+        return [_strip_nul_bytes(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _strip_nul_bytes(item) for key, item in value.items()}
+    return value
+
+
 class FirstPassExtractionLoader:
     def __init__(self, settings: Settings, connection: Any = None) -> None:
         self.settings = settings
         self._connection = connection
         self.resolver = EntityResolver(settings)
         self.source_document_writer = PostgresLoadPlanExecutor(settings, connection=connection)
+        self._controlled_vocabularies = load_controlled_vocabularies(settings)
 
     def load_packet_file(self, packet_path: Path) -> Dict[str, Any]:
-        payload = json.loads(packet_path.read_text())
+        payload = _strip_nul_bytes(json.loads(packet_path.read_text()))
         packet_kind = payload.get("packet_type")
         if packet_kind not in PACKET_TO_SCHEMA:
             raise PacketValidationError(f"Unsupported packet kind in {packet_path}: {packet_kind}")
@@ -126,8 +138,9 @@ class FirstPassExtractionLoader:
         entity_candidates: List[Dict[str, Any]],
     ) -> None:
         cursor.execute("delete from extracted_item_candidate where packet_fingerprint = %s", (packet_fingerprint,))
-        resolved_items = self._resolve_item_candidates(entity_candidates)
-        for entity in entity_candidates:
+        filtered_entities = self._filter_item_candidates(entity_candidates)
+        resolved_items = self._resolve_item_candidates(filtered_entities)
+        for entity in filtered_entities:
             canonical_name = str(entity.get("canonical_name", "")).strip()
             slug = _slugify(canonical_name)
             matched_slug, matched_item_id = resolved_items.get(entity.get("local_id"), (None, None))
@@ -158,6 +171,21 @@ class FirstPassExtractionLoader:
                     json.dumps(entity),
                 ),
             )
+
+    def _filter_item_candidates(self, entity_candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        allowed_item_types = set(self._controlled_vocabularies.get("item_types", []))
+        filtered = []
+        for entity in entity_candidates:
+            if entity.get("candidate_type") != "toolkit_item":
+                filtered.append(entity)
+                continue
+            assessment = assess_toolkit_item_candidate(entity, allowed_item_types=allowed_item_types)
+            if not assessment["keep"]:
+                continue
+            normalized_entity = dict(entity)
+            normalized_entity["item_type"] = assessment["item_type"]
+            filtered.append(normalized_entity)
+        return filtered
 
     def _replace_claims(
         self,

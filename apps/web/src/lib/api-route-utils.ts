@@ -27,6 +27,7 @@ export function parseItemSearchFilters(searchParams: URLSearchParams): ItemSearc
     has_independent_replication: parseBooleanParam(searchParams.get("has_independent_replication")),
     has_mouse_in_vivo_validation: parseBooleanParam(searchParams.get("has_mouse_in_vivo_validation")),
     has_therapeutic_use: parseBooleanParam(searchParams.get("has_therapeutic_use")),
+    sort: (searchParams.get("sort") as ItemSearchFilters["sort"] | null) ?? undefined,
     limit: parseOptionalNumber(searchParams.get("limit")),
     offset: parseOptionalNumber(searchParams.get("offset")),
   };

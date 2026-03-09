@@ -1,5 +1,11 @@
 import type { ExtractedWorkflowSummary, ToolkitItem } from "./types";
-import { buildItemHierarchyAssignments } from "./item-hierarchy";
+import {
+  buildItemHierarchyAssignments,
+  buildMechanismConceptSummaries,
+  buildTechniqueConceptSummaries,
+  type MechanismConceptSummary,
+  type TechniqueConceptSummary,
+} from "./item-hierarchy";
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 500;
@@ -346,6 +352,106 @@ export function searchExtractedWorkflows(
 
   return paginate(
     sortExtractedWorkflows(filtered, filters.sort),
+    filters.limit,
+    filters.offset,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Mechanism & Technique concept search
+// ---------------------------------------------------------------------------
+
+type MechanismConceptSort = "name" | "items" | "architectures" | "components";
+type TechniqueConceptSort = "name" | "items" | "methods";
+
+export interface MechanismConceptSearchFilters {
+  q?: string;
+  sort?: MechanismConceptSort;
+  limit?: number;
+  offset?: number;
+}
+
+export interface TechniqueConceptSearchFilters {
+  q?: string;
+  sort?: TechniqueConceptSort;
+  limit?: number;
+  offset?: number;
+}
+
+function sortMechanismConcepts(
+  concepts: MechanismConceptSummary[],
+  sort: MechanismConceptSort | undefined,
+): MechanismConceptSummary[] {
+  const sorted = [...concepts];
+  switch (sort) {
+    case "items":
+      sorted.sort((a, b) => b.totalCount - a.totalCount);
+      break;
+    case "architectures":
+      sorted.sort((a, b) => b.architectureCount - a.architectureCount);
+      break;
+    case "components":
+      sorted.sort((a, b) => b.componentCount - a.componentCount);
+      break;
+    case "name":
+    default:
+      sorted.sort((a, b) => a.label.localeCompare(b.label));
+      break;
+  }
+  return sorted;
+}
+
+function sortTechniqueConcepts(
+  concepts: TechniqueConceptSummary[],
+  sort: TechniqueConceptSort | undefined,
+): TechniqueConceptSummary[] {
+  const sorted = [...concepts];
+  switch (sort) {
+    case "items":
+      sorted.sort((a, b) => b.totalCount - a.totalCount);
+      break;
+    case "methods":
+      sorted.sort((a, b) => b.methodCount - a.methodCount);
+      break;
+    case "name":
+    default:
+      sorted.sort((a, b) => a.label.localeCompare(b.label));
+      break;
+  }
+  return sorted;
+}
+
+export function searchMechanismConcepts(
+  items: ToolkitItem[],
+  filters: MechanismConceptSearchFilters,
+): SearchResult<MechanismConceptSummary> {
+  const concepts = buildMechanismConceptSummaries(items);
+  const filtered = concepts.filter((c) =>
+    matchesQuery(
+      [c.label, c.key, c.description, c.summary, ...c.capabilities, ...c.componentNames],
+      filters.q,
+    ),
+  );
+  return paginate(
+    sortMechanismConcepts(filtered, filters.sort),
+    filters.limit,
+    filters.offset,
+  );
+}
+
+export function searchTechniqueConcepts(
+  items: ToolkitItem[],
+  filters: TechniqueConceptSearchFilters,
+): SearchResult<TechniqueConceptSummary> {
+  const concepts = buildTechniqueConceptSummaries(items);
+  const filtered = concepts.filter((c) =>
+    matchesQuery(
+      [c.label, c.key, c.description, c.summary, ...c.capabilities],
+      filters.q,
+    ),
+  );
+  return paginate(
+    sortTechniqueConcepts(filtered, filters.sort),
     filters.limit,
     filters.offset,
   );

@@ -2,46 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getItems } from "@/lib/backend-data";
 import { getMechanismConceptSummary } from "@/lib/item-hierarchy";
-import { renderInlineTitle } from "@/lib/render-inline-title";
-
-function ItemList({
-  title,
-  items,
-}: {
-  title: string;
-  items: Array<{
-    slug: string;
-    canonical_name: string;
-    summary: string | null;
-  }>;
-}) {
-  if (items.length === 0) {
-    return null;
-  }
-
-  return (
-    <section className="mb-10">
-      <h2 className="mb-4">{title}</h2>
-      <div className="space-y-4">
-        {items.map((item) => (
-          <article key={item.slug} className="border border-edge p-5">
-            <Link
-              href={`/items/${item.slug}`}
-              className="text-lg text-brand hover:text-accent"
-            >
-              {renderInlineTitle(item.canonical_name)}
-            </Link>
-            {item.summary ? (
-              <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-                {renderInlineTitle(item.summary)}
-              </p>
-            ) : null}
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
+import { SearchableItemList } from "@/components/searchable-item-list";
 
 export default async function MechanismDetailPage({
   params,
@@ -96,8 +57,8 @@ export default async function MechanismDetailPage({
         </p>
       </header>
 
-      <ItemList title="Architectures" items={concept.architectureItems} />
-      <ItemList title="Components" items={concept.componentItems} />
+      <SearchableItemList title="Architectures" items={concept.architectureItems} />
+      <SearchableItemList title="Components" items={concept.componentItems} />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ItemCard } from "@/components/item-card";
 import { FilterSelect } from "@/components/filter-select";
@@ -11,6 +11,8 @@ import {
   getItemTaxonomyPosition,
   getOrderedItemTypes,
   TECHNIQUE_HIERARCHY_SECTIONS,
+  type MechanismConceptSummary,
+  type TechniqueConceptSummary,
 } from "@/lib/item-hierarchy";
 import {
   ITEM_TYPE_LABELS,
@@ -250,6 +252,32 @@ export function ItemsBrowseClient({
   const rangeEnd = Math.min(totalCount, offset + visibleItems.length);
   const mechanismConcepts = buildMechanismConceptSummaries(allItems);
   const techniqueConcepts = buildTechniqueConceptSummaries(allItems);
+  const [mechanismSearch, setMechanismSearch] = useState("");
+  const [techniqueSearch, setTechniqueSearch] = useState("");
+
+  const filteredMechanismConcepts = useMemo(() => {
+    if (!mechanismSearch) return mechanismConcepts;
+    const lower = mechanismSearch.toLowerCase();
+    return mechanismConcepts.filter(
+      (c: MechanismConceptSummary) =>
+        c.label.toLowerCase().includes(lower) ||
+        c.key.toLowerCase().includes(lower) ||
+        c.description.toLowerCase().includes(lower) ||
+        c.capabilities.some((cap) => cap.toLowerCase().includes(lower)),
+    );
+  }, [mechanismConcepts, mechanismSearch]);
+
+  const filteredTechniqueConcepts = useMemo(() => {
+    if (!techniqueSearch) return techniqueConcepts;
+    const lower = techniqueSearch.toLowerCase();
+    return techniqueConcepts.filter(
+      (c: TechniqueConceptSummary) =>
+        c.label.toLowerCase().includes(lower) ||
+        c.key.toLowerCase().includes(lower) ||
+        c.description.toLowerCase().includes(lower) ||
+        c.capabilities.some((cap) => cap.toLowerCase().includes(lower)),
+    );
+  }, [techniqueConcepts, techniqueSearch]);
 
   const typeOptions = [
     { value: "", label: "All item classes" },
@@ -365,45 +393,60 @@ export function ItemsBrowseClient({
                 </summary>
                 <div className="mt-3">
                   {section.id === "mechanism" ? (
-                    <div className="grid gap-3">
-                      {mechanismConcepts.map((concept) => {
-                        const active = mechanismFilter === concept.key;
-                        return (
-                          <button
-                            key={concept.key}
-                            type="button"
-                            onClick={() => {
-                              setMechanismFilter(active ? "" : concept.key);
-                              setOffset(0);
-                            }}
-                            className={`rounded border p-3 text-left transition-colors ${
-                              active
-                                ? "border-accent bg-brand-light"
-                                : "border-edge hover:border-accent"
-                            }`}
-                          >
-                            <div className="flex items-baseline justify-between gap-3">
-                              <span
-                                className={`font-display text-base ${
-                                  active ? "text-accent" : "text-ink"
+                    <div className="space-y-3">
+                      <input
+                        type="text"
+                        placeholder="Filter mechanisms\u2026"
+                        value={mechanismSearch}
+                        onChange={(e) => setMechanismSearch(e.target.value)}
+                        className="h-8 w-full border-b border-edge bg-transparent px-0 font-ui text-sm text-ink placeholder-ink-muted outline-none transition-colors focus:border-accent"
+                      />
+                      {filteredMechanismConcepts.length === 0 ? (
+                        <p className="py-4 text-center font-ui text-xs text-ink-muted">
+                          No mechanisms match
+                        </p>
+                      ) : (
+                        <div className="grid gap-3">
+                          {filteredMechanismConcepts.map((concept) => {
+                            const active = mechanismFilter === concept.key;
+                            return (
+                              <button
+                                key={concept.key}
+                                type="button"
+                                onClick={() => {
+                                  setMechanismFilter(active ? "" : concept.key);
+                                  setOffset(0);
+                                }}
+                                className={`rounded border p-3 text-left transition-colors ${
+                                  active
+                                    ? "border-accent bg-brand-light"
+                                    : "border-edge hover:border-accent"
                                 }`}
                               >
-                                {MECHANISM_LABELS[concept.key] ?? concept.label}
-                              </span>
-                              <span className="font-data text-xs text-ink-muted">
-                                {concept.totalCount}
-                              </span>
-                            </div>
-                            <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-                              {concept.summary}
-                            </p>
-                            <p className="mt-2 font-ui text-xs text-ink-muted">
-                              {concept.architectureCount} architectures ·{" "}
-                              {concept.componentCount} components
-                            </p>
-                          </button>
-                        );
-                      })}
+                                <div className="flex items-baseline justify-between gap-3">
+                                  <span
+                                    className={`font-display text-base ${
+                                      active ? "text-accent" : "text-ink"
+                                    }`}
+                                  >
+                                    {MECHANISM_LABELS[concept.key] ?? concept.label}
+                                  </span>
+                                  <span className="font-data text-xs text-ink-muted">
+                                    {concept.totalCount}
+                                  </span>
+                                </div>
+                                <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
+                                  {concept.summary}
+                                </p>
+                                <p className="mt-2 font-ui text-xs text-ink-muted">
+                                  {concept.architectureCount} architectures ·{" "}
+                                  {concept.componentCount} components
+                                </p>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="flex flex-wrap gap-2">
@@ -460,44 +503,59 @@ export function ItemsBrowseClient({
                 </summary>
                 <div className="mt-3">
                   {section.id === "technique" ? (
-                    <div className="grid gap-3">
-                      {techniqueConcepts.map((concept) => {
-                        const active = techniqueFilter === concept.key;
-                        return (
-                          <button
-                            key={concept.key}
-                            type="button"
-                            onClick={() => {
-                              setTechniqueFilter(active ? "" : concept.key);
-                              setOffset(0);
-                            }}
-                            className={`rounded border p-3 text-left transition-colors ${
-                              active
-                                ? "border-accent bg-brand-light"
-                                : "border-edge hover:border-accent"
-                            }`}
-                          >
-                            <div className="flex items-baseline justify-between gap-3">
-                              <span
-                                className={`font-display text-base ${
-                                  active ? "text-accent" : "text-ink"
+                    <div className="space-y-3">
+                      <input
+                        type="text"
+                        placeholder="Filter techniques\u2026"
+                        value={techniqueSearch}
+                        onChange={(e) => setTechniqueSearch(e.target.value)}
+                        className="h-8 w-full border-b border-edge bg-transparent px-0 font-ui text-sm text-ink placeholder-ink-muted outline-none transition-colors focus:border-accent"
+                      />
+                      {filteredTechniqueConcepts.length === 0 ? (
+                        <p className="py-4 text-center font-ui text-xs text-ink-muted">
+                          No techniques match
+                        </p>
+                      ) : (
+                        <div className="grid gap-3">
+                          {filteredTechniqueConcepts.map((concept) => {
+                            const active = techniqueFilter === concept.key;
+                            return (
+                              <button
+                                key={concept.key}
+                                type="button"
+                                onClick={() => {
+                                  setTechniqueFilter(active ? "" : concept.key);
+                                  setOffset(0);
+                                }}
+                                className={`rounded border p-3 text-left transition-colors ${
+                                  active
+                                    ? "border-accent bg-brand-light"
+                                    : "border-edge hover:border-accent"
                                 }`}
                               >
-                                {TECHNIQUE_LABELS[concept.key] ?? concept.label}
-                              </span>
-                              <span className="font-data text-xs text-ink-muted">
-                                {concept.totalCount}
-                              </span>
-                            </div>
-                            <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-                              {concept.summary}
-                            </p>
-                            <p className="mt-2 font-ui text-xs text-ink-muted">
-                              {concept.methodCount} methods
-                            </p>
-                          </button>
-                        );
-                      })}
+                                <div className="flex items-baseline justify-between gap-3">
+                                  <span
+                                    className={`font-display text-base ${
+                                      active ? "text-accent" : "text-ink"
+                                    }`}
+                                  >
+                                    {TECHNIQUE_LABELS[concept.key] ?? concept.label}
+                                  </span>
+                                  <span className="font-data text-xs text-ink-muted">
+                                    {concept.totalCount}
+                                  </span>
+                                </div>
+                                <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
+                                  {concept.summary}
+                                </p>
+                                <p className="mt-2 font-ui text-xs text-ink-muted">
+                                  {concept.methodCount} methods
+                                </p>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="flex flex-wrap gap-2">

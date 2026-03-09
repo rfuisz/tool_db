@@ -3,6 +3,9 @@
 Reads the ``sync_watermark`` on the remote, then for each table (in FK-safe
 order) upserts rows whose ``updated_at > watermark`` and deletes rows whose
 primary keys no longer exist locally.  Outputs a JSON report to stdout.
+
+Tables, primary keys, and topological order are discovered from the live
+schema at runtime so the sync adapts automatically to migrations.
 """
 
 from __future__ import annotations
@@ -11,8 +14,9 @@ import json
 import logging
 import sys
 import time
+from collections import defaultdict, deque
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Tuple
 
 import psycopg
 from psycopg.rows import dict_row
@@ -20,128 +24,150 @@ from psycopg.types.json import Jsonb
 
 logger = logging.getLogger(__name__)
 
+EXCLUDED_TABLES: frozenset[str] = frozenset({
+    "schema_migration",
+    "sync_watermark",
+    "spatial_ref_sys",
+})
+
 # ---------------------------------------------------------------------------
-# FK topology: tables ordered so parents come before children.
-# Built from the FK graph; verified against the live schema in the plan.
+# Schema introspection helpers
 # ---------------------------------------------------------------------------
 
-TABLES_TOPO_ORDER: list[str] = [
-    # Tier 0 – no FK parents
-    "toolkit_item",
-    "source_document",
-    "property_definition",
-    "gap_field",
-    "gap_resource",
-    "workflow_template",
-    "entity_match_cache",
-    # Tier 1
-    "extraction_run",
-    "source_chunk",
-    "gap_capability",
-    "gap_item",
-    "workflow_stage_template",
-    "item_citation",
-    "item_comparison",
-    "item_component",
-    "item_explainer",
-    "item_facet",
-    "item_mechanism",
-    "item_related_item",
-    "item_synonym",
-    "item_target_process",
-    "item_technique",
-    "assay_method_profile",
-    "computation_method_profile",
-    "engineering_method_profile",
-    "protein_domain_profile",
-    "replication_summary",
-    "switch_profile",
-    "validation_observation",
-    "workflow_mechanism",
-    "workflow_technique",
-    # Tier 2
-    "extracted_packet",
-    "workflow_step_template",
-    "gap_capability_resource",
-    "gap_item_capability",
-    "item_gap_link",
-    "item_problem_link",
-    "validation_metric_value",
-    "workflow_design_goal",
-    "workflow_item_role",
-    # Tier 3
-    "extracted_item_candidate",
-    "extracted_claim_candidate",
-    "workflow_edge",
-    "workflow_assumption",
-    "workflow_instance_observation",
-    # Tier 4
-    "extracted_claim",
-    "extracted_workflow_observation",
-    "extracted_workflow_stage_observation",
-    "extracted_workflow_step_observation",
-    "extracted_claim_subject_candidate",
-    # Tier 5
-    "claim_metric",
-    "claim_subject_link",
-    "item_property_value",
-]
 
-TABLE_PKS: dict[str, list[str]] = {
-    "assay_method_profile": ["item_id"],
-    "claim_metric": ["id"],
-    "entity_match_cache": ["id"],
-    "claim_subject_link": ["id"],
-    "computation_method_profile": ["item_id"],
-    "engineering_method_profile": ["item_id"],
-    "extracted_claim": ["id"],
-    "extracted_claim_candidate": ["id"],
-    "extracted_claim_subject_candidate": ["id"],
-    "extracted_item_candidate": ["id"],
-    "extracted_packet": ["id"],
-    "extracted_workflow_observation": ["id"],
-    "extracted_workflow_stage_observation": ["id"],
-    "extracted_workflow_step_observation": ["id"],
-    "extraction_run": ["id"],
-    "gap_capability": ["id"],
-    "gap_capability_resource": ["gap_capability_id", "gap_resource_id"],
-    "gap_field": ["id"],
-    "gap_item": ["id"],
-    "gap_item_capability": ["gap_item_id", "gap_capability_id"],
-    "gap_resource": ["id"],
-    "item_citation": ["id"],
-    "item_comparison": ["id"],
-    "item_component": ["id"],
-    "item_explainer": ["id"],
-    "item_facet": ["id"],
-    "item_gap_link": ["id"],
-    "item_mechanism": ["id"],
-    "item_problem_link": ["id"],
-    "item_property_value": ["id"],
-    "item_related_item": ["id"],
-    "item_synonym": ["id"],
-    "item_target_process": ["id"],
-    "item_technique": ["id"],
-    "property_definition": ["id"],
-    "protein_domain_profile": ["item_id"],
-    "replication_summary": ["item_id"],
-    "source_chunk": ["id"],
-    "source_document": ["id"],
-    "switch_profile": ["item_id"],
-    "toolkit_item": ["id"],
-    "validation_metric_value": ["id"],
-    "validation_observation": ["id"],
-    "workflow_assumption": ["id"],
-    "workflow_design_goal": ["id"],
-    "workflow_edge": ["id"],
-    "workflow_instance_observation": ["id"],
-    "workflow_item_role": ["id"],
-    "workflow_mechanism": ["workflow_template_id", "mechanism_name"],
-    "workflow_stage_template": ["id"],
-    "workflow_step_template": ["id"],
-    "workflow_technique": ["workflow_template_id", "technique_name"],
-    "workflow_template": ["id"],
-}
+def _get_public_tables(conn: Any) -> set[str]:
+    """Return all base-table names in the public schema."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema='public' AND table_type='BASE TABLE'"
+        )
+        return {row[0] for row in cur.fetchall()}
+
+
+def _get_all_pks(conn: Any, tables: set[str]) -> dict[str, list[str]]:
+    """Return ``{table: [pk_col, ...]}`` for every table in *tables*."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT tc.table_name, kcu.column_name "
+            "FROM information_schema.table_constraints tc "
+            "JOIN information_schema.key_column_usage kcu "
+            "  ON tc.constraint_name = kcu.constraint_name "
+            "  AND tc.table_schema = kcu.table_schema "
+            "WHERE tc.table_schema = 'public' "
+            "  AND tc.constraint_type = 'PRIMARY KEY' "
+            "ORDER BY tc.table_name, kcu.ordinal_position"
+        )
+        pk_map: dict[str, list[str]] = defaultdict(list)
+        for table_name, col_name in cur.fetchall():
+            if table_name in tables:
+                pk_map[table_name].append(col_name)
+    return dict(pk_map)
+
+
+def _tables_with_column(conn: Any, column: str) -> set[str]:
+    """Return table names that have column *column*."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT table_name FROM information_schema.columns "
+            "WHERE table_schema='public' AND column_name=%s",
+            (column,),
+        )
+        return {row[0] for row in cur.fetchall()}
+
+
+def _build_topo_order(conn: Any, tables: set[str]) -> list[str]:
+    """Topologically sort *tables* so FK parents come before children."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT tc.table_name, ccu.table_name "
+            "FROM information_schema.table_constraints tc "
+            "JOIN information_schema.constraint_column_usage ccu "
+            "  ON tc.constraint_name = ccu.constraint_name "
+            "  AND tc.constraint_schema = ccu.constraint_schema "
+            "WHERE tc.constraint_type = 'FOREIGN KEY' "
+            "  AND tc.table_schema = 'public'"
+        )
+        edges = cur.fetchall()
+
+    children: dict[str, set[str]] = defaultdict(set)
+    in_degree: dict[str, int] = {t: 0 for t in tables}
+
+    for child, parent in edges:
+        if child in tables and parent in tables and child != parent:
+            if child not in children[parent]:
+                children[parent].add(child)
+                in_degree[child] += 1
+
+    queue = deque(sorted(t for t in tables if in_degree[t] == 0))
+    result: list[str] = []
+    while queue:
+        node = queue.popleft()
+        result.append(node)
+        for kid in sorted(children.get(node, set())):
+            in_degree[kid] -= 1
+            if in_degree[kid] == 0:
+                queue.append(kid)
+
+    remaining = sorted(tables - set(result))
+    if remaining:
+        logger.warning(
+            "Tables unreachable in topo sort (possible FK cycle): %s",
+            remaining,
+        )
+        result.extend(remaining)
+
+    return result
+
+
+def _discover_sync_plan(
+    local: Any,
+    remote: Any,
+) -> Tuple[List[str], Dict[str, List[str]]]:
+    """Discover syncable tables, their PKs, and topological order.
+
+    Returns ``(topo_ordered_tables, pk_map)`` where only tables present on
+    *both* sides and having an ``updated_at`` column are included.
+    """
+    local_tables = _get_public_tables(local) - EXCLUDED_TABLES
+    remote_tables = _get_public_tables(remote) - EXCLUDED_TABLES
+
+    common = local_tables & remote_tables
+    local_only = local_tables - remote_tables
+    remote_only = remote_tables - local_tables
+
+    if local_only:
+        logger.warning("Tables only on local (won't sync): %s", sorted(local_only))
+    if remote_only:
+        logger.warning("Tables only on remote (untouched): %s", sorted(remote_only))
+
+    local_updated = _tables_with_column(local, "updated_at")
+    remote_updated = _tables_with_column(remote, "updated_at")
+    syncable = {t for t in common if t in local_updated and t in remote_updated}
+
+    skipped = common - syncable
+    if skipped:
+        logger.info(
+            "Tables without updated_at (skipped for incremental): %s",
+            sorted(skipped),
+        )
+
+    pk_map = _get_all_pks(local, syncable)
+
+    no_pk = syncable - set(pk_map)
+    if no_pk:
+        logger.warning("Tables with no PK (skipping): %s", sorted(no_pk))
+        syncable -= no_pk
+
+    topo = _build_topo_order(local, syncable)
+
+    logger.info("Sync plan: %d tables", len(topo))
+    return topo, pk_map
+
+
+# ---------------------------------------------------------------------------
+# Column / param helpers
+# ---------------------------------------------------------------------------
 
 
 def _get_columns(conn: Any, table: str) -> list[str]:
@@ -179,6 +205,11 @@ def _adapt_params(row: dict, cols: list[str], jsonb_cols: set[str]) -> dict:
     return params
 
 
+# ---------------------------------------------------------------------------
+# Watermark
+# ---------------------------------------------------------------------------
+
+
 def _read_watermark(remote: Any) -> datetime:
     with remote.cursor() as cur:
         cur.execute(
@@ -199,14 +230,19 @@ def _write_watermark(remote: Any, ts: datetime) -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# Upsert / delete per table
+# ---------------------------------------------------------------------------
+
+
 def _upsert_table(
     local: Any,
     remote: Any,
     table: str,
     watermark: datetime,
+    pk_cols: list[str],
 ) -> int:
     """Upsert rows changed since *watermark*. Returns rows upserted."""
-    pk_cols = TABLE_PKS[table]
     local_cols = _get_columns(local, table)
     remote_cols = _get_columns(remote, table)
     cols = [c for c in local_cols if c in remote_cols]
@@ -277,10 +313,9 @@ def _delete_removed_rows(
     local: Any,
     remote: Any,
     table: str,
+    pk_cols: list[str],
 ) -> int:
     """Delete rows from *remote* whose PKs don't exist in *local*."""
-    pk_cols = TABLE_PKS[table]
-
     with remote.cursor() as rcur:
         rcur.execute(
             psycopg.sql.SQL("SELECT {} FROM {}").format(
@@ -325,11 +360,19 @@ def _delete_removed_rows(
     return len(to_delete)
 
 
+# ---------------------------------------------------------------------------
+# Sync entry points
+# ---------------------------------------------------------------------------
+
+
 def run_incremental_sync(
     local_url: str,
     remote_url: str,
 ) -> Dict[str, Any]:
     """Run an incremental sync and return a JSON-serializable report.
+
+    Tables, PKs, and topological order are discovered from the live schema
+    so the sync adapts automatically when migrations add or remove tables.
 
     If the watermark is at epoch (no prior sync), automatically falls back
     to a full sync since upserting all rows individually is too slow.
@@ -353,21 +396,23 @@ def run_incremental_sync(
             report["message"] = "Initial full sync (no prior watermark)."
             return report
 
+        topo, pk_map = _discover_sync_plan(local, remote)
+
         upsert_counts: dict[str, int] = {}
         delete_counts: dict[str, int] = {}
 
-        # Delete rows that no longer exist locally BEFORE upserting.
-        # This avoids UniqueViolation when a row was re-created with a new
-        # PK but the same natural-key (secondary unique constraint) — the
-        # stale remote row must be gone before the new one arrives.
-        for table in reversed(TABLES_TOPO_ORDER):
-            n = _delete_removed_rows(local, remote, table)
+        # Phase 1: delete rows that no longer exist locally (reverse topo).
+        # Must run BEFORE upserts to avoid UniqueViolation when a row was
+        # re-created with a new PK but the same secondary unique key.
+        for table in reversed(topo):
+            n = _delete_removed_rows(local, remote, table, pk_map[table])
             if n:
                 delete_counts[table] = n
                 logger.info("Deleted %d rows from %s", n, table)
 
-        for table in TABLES_TOPO_ORDER:
-            n = _upsert_table(local, remote, table, watermark)
+        # Phase 2: upsert changed rows (forward topo).
+        for table in topo:
+            n = _upsert_table(local, remote, table, watermark, pk_map[table])
             if n:
                 upsert_counts[table] = n
                 logger.info("Upserted %d rows in %s", n, table)
@@ -387,6 +432,7 @@ def run_incremental_sync(
             "message": "Incremental sync complete.",
             "watermark_from": watermark.isoformat(),
             "watermark_to": sync_start_ts.isoformat(),
+            "tables_synced": len(topo),
             "total_upserted": total_upserted,
             "total_deleted": total_deleted,
             "upsert_counts": upsert_counts,

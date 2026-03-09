@@ -208,7 +208,8 @@ async function fetchBackendJson<T>(
   path: string,
   options: FetchBackendJsonOptions = {},
 ): Promise<T> {
-  const cacheMode = options.cacheMode ?? "revalidate";
+  const isDev = process.env.NODE_ENV === "development";
+  const cacheMode = options.cacheMode ?? (isDev ? "no-store" : "revalidate");
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...(cacheMode === "no-store"
       ? { cache: "no-store" as const }

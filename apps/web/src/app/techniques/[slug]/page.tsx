@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getItems } from "@/lib/backend-data";
 import { getTechniqueConceptSummary } from "@/lib/item-hierarchy";
-import { renderInlineTitle } from "@/lib/render-inline-title";
+import { SearchableItemList } from "@/components/searchable-item-list";
 
 export default async function TechniqueDetailPage({
   params,
@@ -55,26 +55,7 @@ export default async function TechniqueDetailPage({
         </p>
       </header>
 
-      <section className="mb-10">
-        <h2 className="mb-4">Methods</h2>
-        <div className="space-y-4">
-          {concept.methodItems.map((item) => (
-            <article key={item.slug} className="border border-edge p-5">
-              <Link
-                href={`/items/${item.slug}`}
-                className="text-lg text-brand hover:text-accent"
-              >
-                {renderInlineTitle(item.canonical_name)}
-              </Link>
-              {item.summary ? (
-                <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-                  {renderInlineTitle(item.summary)}
-                </p>
-              ) : null}
-            </article>
-          ))}
-        </div>
-      </section>
+      <SearchableItemList title="Methods" items={concept.methodItems} />
     </div>
   );
 }

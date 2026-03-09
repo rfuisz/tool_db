@@ -1,4 +1,9 @@
-import type { ExtractedWorkflowSearchFilters, ItemSearchFilters } from "./api-search";
+import type {
+  ExtractedWorkflowSearchFilters,
+  ItemSearchFilters,
+  MechanismConceptSearchFilters,
+  TechniqueConceptSearchFilters,
+} from "./api-search";
 import { parseBooleanParam, splitMultiValue } from "./api-search";
 
 function parseOptionalNumber(rawValue: string | null): number | undefined {
@@ -41,6 +46,24 @@ export function parseExtractedWorkflowSearchFilters(searchParams: URLSearchParam
     has_stages: parseBooleanParam(searchParams.get("has_stages")),
     has_steps: parseBooleanParam(searchParams.get("has_steps")),
     sort: (searchParams.get("sort") as ExtractedWorkflowSearchFilters["sort"] | null) ?? undefined,
+    limit: parseOptionalNumber(searchParams.get("limit")),
+    offset: parseOptionalNumber(searchParams.get("offset")),
+  };
+}
+
+export function parseMechanismConceptSearchFilters(searchParams: URLSearchParams): MechanismConceptSearchFilters {
+  return {
+    q: searchParams.get("q")?.trim() || undefined,
+    sort: (searchParams.get("sort") as MechanismConceptSearchFilters["sort"] | null) ?? undefined,
+    limit: parseOptionalNumber(searchParams.get("limit")),
+    offset: parseOptionalNumber(searchParams.get("offset")),
+  };
+}
+
+export function parseTechniqueConceptSearchFilters(searchParams: URLSearchParams): TechniqueConceptSearchFilters {
+  return {
+    q: searchParams.get("q")?.trim() || undefined,
+    sort: (searchParams.get("sort") as TechniqueConceptSearchFilters["sort"] | null) ?? undefined,
     limit: parseOptionalNumber(searchParams.get("limit")),
     offset: parseOptionalNumber(searchParams.get("offset")),
   };

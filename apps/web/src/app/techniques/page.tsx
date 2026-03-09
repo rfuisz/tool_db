@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { getItems } from "@/lib/backend-data";
 import { buildTechniqueConceptSummaries } from "@/lib/item-hierarchy";
+import { TechniquesBrowseClient } from "@/components/techniques-browse-client";
 
 export default async function TechniquesPage() {
   const items = await getItems();
@@ -17,30 +17,7 @@ export default async function TechniquesPage() {
         </p>
       </header>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {concepts.map((concept) => (
-          <Link
-            key={concept.key}
-            href={`/techniques/${encodeURIComponent(concept.key)}`}
-            className="group rounded border border-edge p-5 transition-colors hover:border-accent"
-          >
-            <div className="flex items-baseline justify-between gap-3">
-              <h2 className="text-xl text-ink group-hover:text-accent">
-                {concept.label}
-              </h2>
-              <span className="font-data text-xs text-ink-muted">
-                {concept.totalCount}
-              </span>
-            </div>
-            <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-              {concept.summary}
-            </p>
-            <p className="mt-3 font-ui text-xs text-ink-muted">
-              {concept.methodCount} methods
-            </p>
-          </Link>
-        ))}
-      </div>
+      <TechniquesBrowseClient concepts={concepts} />
     </div>
   );
 }

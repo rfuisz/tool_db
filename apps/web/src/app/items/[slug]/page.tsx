@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getItemBySlug } from "@/lib/backend-data";
+import { buildItemDetailFallbacks } from "@/lib/item-detail-fallbacks";
 import { getItemTaxonomyPosition } from "@/lib/item-hierarchy";
 import { renderInlineTitle, stripInlineTitleMarkup } from "@/lib/render-inline-title";
 import { isSupportedTechnique } from "@/lib/vocabularies";
@@ -54,6 +55,10 @@ export default async function ItemDetailPage({
     explainers.map((explainer) => [explainer.explainer_kind, explainer]),
   );
   const taxonomyPosition = getItemTaxonomyPosition(item.item_type);
+  const fallback = buildItemDetailFallbacks(item, {
+    axisTitle: taxonomyPosition.axisTitle,
+    layerTitle: taxonomyPosition.layerTitle,
+  });
   const visibleTechniques = item.techniques.filter(isSupportedTechnique);
   const approvalEvidence = item.approval_evidence;
 
@@ -124,26 +129,28 @@ export default async function ItemDetailPage({
 
           {(explainerByKind.get("usefulness") ||
             explainerByKind.get("problem_solved") ||
+            fallback.usefulness ||
+            fallback.problemSolved ||
             problemLinks.length > 0) && (
             <Section title="Usefulness & Problems">
               <div className="space-y-5">
-                {explainerByKind.get("usefulness") && (
+                {(explainerByKind.get("usefulness") || fallback.usefulness) && (
                   <div>
                     <p className="mb-1 text-xs uppercase tracking-wide text-ink-muted">
                       Why this is useful
                     </p>
                     <p className="text-sm leading-relaxed text-ink-secondary">
-                      {explainerByKind.get("usefulness")?.body}
+                      {explainerByKind.get("usefulness")?.body ?? fallback.usefulness}
                     </p>
                   </div>
                 )}
-                {explainerByKind.get("problem_solved") && (
+                {(explainerByKind.get("problem_solved") || fallback.problemSolved) && (
                   <div>
                     <p className="mb-1 text-xs uppercase tracking-wide text-ink-muted">
                       Problem solved
                     </p>
                     <p className="text-sm leading-relaxed text-ink-secondary">
-                      {explainerByKind.get("problem_solved")?.body}
+                      {explainerByKind.get("problem_solved")?.body ?? fallback.problemSolved}
                     </p>
                   </div>
                 )}
@@ -188,7 +195,9 @@ export default async function ItemDetailPage({
             </Section>
           )}
 
-          {workflowRecommendations.length > 0 && (
+          {(workflowRecommendations.length > 0 ||
+            fallback.workflowLikelyFit.length > 0 ||
+            fallback.workflowMissingEvidence.length > 0) && (
             <Section title="Workflow Fit">
               <div className="space-y-3">
                 {workflowRecommendations.map((recommendation) => (
@@ -219,6 +228,36 @@ export default async function ItemDetailPage({
                     </p>
                   </div>
                 ))}
+                {fallback.workflowLikelyFit.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs uppercase tracking-wide text-ink-muted">
+                      Likely fit
+                    </p>
+                    <ul className="space-y-2 text-sm leading-relaxed text-ink-secondary">
+                      {fallback.workflowLikelyFit.map((note) => (
+                        <li key={note} className="flex gap-2">
+                          <span className="shrink-0 text-ink-faint">&bull;</span>
+                          <span>{note}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {fallback.workflowMissingEvidence.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs uppercase tracking-wide text-ink-muted">
+                      Missing evidence
+                    </p>
+                    <ul className="space-y-2 text-sm leading-relaxed text-ink-muted">
+                      {fallback.workflowMissingEvidence.map((note) => (
+                        <li key={note} className="flex gap-2">
+                          <span className="shrink-0 text-ink-faint">&bull;</span>
+                          <span>{note}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             </Section>
           )}
@@ -495,12 +534,15 @@ export default async function ItemDetailPage({
               </Section>
             )}
 
-          {(explainerByKind.get("strengths") || comparisons.length > 0) && (
+          {(explainerByKind.get("strengths") ||
+            comparisons.length > 0 ||
+            fallback.comparisonGuidance) && (
             <Section title="Comparisons">
               <div className="space-y-5">
-                {explainerByKind.get("strengths") && (
+                {(explainerByKind.get("strengths") || fallback.comparisonGuidance) && (
                   <p className="text-sm leading-relaxed text-ink-secondary">
-                    {explainerByKind.get("strengths")?.body}
+                    {explainerByKind.get("strengths")?.body ??
+                      fallback.comparisonGuidance}
                   </p>
                 )}
                 {comparisons.map((comparison) => (
@@ -663,8 +705,7 @@ export default async function ItemDetailPage({
             <div>
               <p className="small-caps mb-4">Scores</p>
               <p className="font-ui text-sm italic text-ink-muted">
-                Scores not yet computed. Replication and evidence metrics will
-                appear once citation-graph ingestion is complete.
+                {fallback.scoreStatus}
               </p>
             </div>
           )}

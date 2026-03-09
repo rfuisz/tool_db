@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { LocalRenderSyncButton } from "@/components/local-render-sync-button";
 
 const NAV_ITEMS = [
   { href: "/", label: "Home" },
@@ -12,7 +14,13 @@ const NAV_ITEMS = [
   { href: "/api", label: "API" },
 ];
 
-export function Nav({ showFirstPass = false }: { showFirstPass?: boolean }) {
+export function Nav({
+  showFirstPass = false,
+  showLocalAdmin = false,
+}: {
+  showFirstPass?: boolean;
+  showLocalAdmin?: boolean;
+}) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const navItems = showFirstPass
@@ -24,9 +32,19 @@ export function Nav({ showFirstPass = false }: { showFirstPass?: boolean }) {
       <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-6">
         <Link
           href="/"
-          className="font-display text-xl font-bold tracking-tight text-ink"
+          className="flex items-center gap-3 text-ink"
         >
-          BioControl<span className="text-accent">Toolkit</span>
+          <Image
+            src="/logo.svg"
+            alt=""
+            aria-hidden="true"
+            width={36}
+            height={36}
+            className="h-9 w-9 shrink-0"
+          />
+          <span className="font-display text-xl font-bold tracking-tight">
+            BioControl<span className="text-accent">Toolkit</span>
+          </span>
         </Link>
 
         <button
@@ -57,7 +75,7 @@ export function Nav({ showFirstPass = false }: { showFirstPass?: boolean }) {
           </span>
         </button>
 
-        <div className="hidden items-center gap-6 md:flex">
+        <div className="hidden items-center gap-4 md:flex">
           {navItems.map((item) => {
             const active =
               item.href === "/"
@@ -77,6 +95,7 @@ export function Nav({ showFirstPass = false }: { showFirstPass?: boolean }) {
               </Link>
             );
           })}
+          {showLocalAdmin && <LocalRenderSyncButton variant="nav" />}
         </div>
       </div>
       {menuOpen && (
@@ -105,6 +124,11 @@ export function Nav({ showFirstPass = false }: { showFirstPass?: boolean }) {
                 </Link>
               );
             })}
+            {showLocalAdmin && (
+              <div className="pt-4">
+                <LocalRenderSyncButton variant="nav" />
+              </div>
+            )}
           </div>
         </div>
       )}

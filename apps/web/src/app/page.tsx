@@ -1,6 +1,4 @@
 import Link from "next/link";
-import { LocalRenderSyncButton } from "@/components/local-render-sync-button";
-import { isLocalAdminEnabled } from "@/lib/first-pass-access";
 import { getItems, getWorkflows } from "@/lib/backend-data";
 import { getAllFamilies } from "@/lib/data";
 import {
@@ -20,7 +18,6 @@ import type { ItemType } from "@/lib/types";
 
 export default async function Home() {
   const [items, workflows] = await Promise.all([getItems(), getWorkflows()]);
-  const showLocalAdmin = await isLocalAdminEnabled();
   const typeCounts = items.reduce<Record<string, number>>((acc, item) => {
     acc[item.item_type] = (acc[item.item_type] || 0) + 1;
     return acc;
@@ -104,7 +101,6 @@ Or am I a wild storm, or a great song?`}
             </span>
           )}
         </div>
-        {showLocalAdmin && <LocalRenderSyncButton />}
       </header>
 
       <hr className="mb-16" />

@@ -8,7 +8,7 @@ from urllib.request import Request, urlopen
 import json
 from pathlib import Path
 from typing import Any, Dict, List
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import psycopg
 
@@ -45,7 +45,7 @@ def sync_render_database(settings: Settings) -> Dict[str, Any]:
     if not settings.database_url:
         raise RenderDbSyncError("DATABASE_URL must point at the local source database.")
     target = _resolve_render_database_target(settings)
-    render_database_url = target["database_url"]
+    render_database_url = _normalize_database_url_for_connection(target["database_url"])
     if settings.database_url.strip() == render_database_url.strip():
         raise RenderDbSyncError("DATABASE_URL and RENDER_DATABASE_URL must not be identical.")
 
@@ -178,14 +178,22 @@ def _resolve_render_postgres(settings: Settings) -> Dict[str, str]:
 
 def _coerce_items(payload: Any) -> List[Dict[str, Any]]:
     if isinstance(payload, list):
-        return [item for item in payload if isinstance(item, dict)]
+        return [_unwrap_render_resource(item) for item in payload if isinstance(item, dict)]
     if isinstance(payload, dict):
         for key in ("items", "data", "postgres", "results"):
             value = payload.get(key)
             if isinstance(value, list):
-                return [item for item in value if isinstance(item, dict)]
-        return [payload]
+                return [_unwrap_render_resource(item) for item in value if isinstance(item, dict)]
+        return [_unwrap_render_resource(payload)]
     return []
+
+
+def _unwrap_render_resource(payload: Dict[str, Any]) -> Dict[str, Any]:
+    for key in ("postgres", "service"):
+        value = payload.get(key)
+        if isinstance(value, dict):
+            return value
+    return payload
 
 
 def _render_api_get(url: str, api_key: str) -> Dict[str, Any]:
@@ -220,7 +228,7 @@ def _build_display_database_url(database_url: str) -> str:
 
 
 def _read_database_summary(database_url: str) -> Dict[str, int]:
-    with psycopg.connect(database_url) as conn:
+    with psycopg.connect(_normalize_database_url_for_connection(database_url)) as conn:
         with conn.cursor() as cursor:
             cursor.execute("select count(*) from toolkit_item")
             toolkit_item_count = int(cursor.fetchone()[0])
@@ -239,7 +247,7 @@ def _read_database_summary(database_url: str) -> Dict[str, int]:
 
 
 def _build_truncate_statement(database_url: str) -> str:
-    with psycopg.connect(database_url) as conn:
+    with psycopg.connect(_normalize_database_url_for_connection(database_url)) as conn:
         with conn.cursor() as cursor:
             cursor.execute(
                 """
@@ -260,6 +268,19 @@ def _build_truncate_statement(database_url: str) -> str:
 
 def _quote_identifier(value: str) -> str:
     return '"' + value.replace('"', '""') + '"'
+
+
+def _normalize_database_url_for_connection(database_url: str) -> str:
+    parsed = urlparse(database_url)
+    if not parsed.hostname or "render.com" not in parsed.hostname:
+        return database_url
+
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    if query.get("sslmode"):
+        return database_url
+
+    query["sslmode"] = "require"
+    return urlunparse(parsed._replace(query=urlencode(query)))
 
 
 def _run_command(command: List[str], description: str) -> None:

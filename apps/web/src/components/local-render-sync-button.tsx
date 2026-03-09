@@ -27,7 +27,13 @@ type SyncResponse = {
   };
 };
 
-export function LocalRenderSyncButton() {
+type LocalRenderSyncButtonProps = {
+  variant?: "card" | "nav";
+};
+
+export function LocalRenderSyncButton({
+  variant = "card",
+}: LocalRenderSyncButtonProps) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isLoadingPreflight, setIsLoadingPreflight] = useState(true);
   const [preflight, setPreflight] = useState<SyncResponse | null>(null);
@@ -104,6 +110,45 @@ export function LocalRenderSyncButton() {
 
   const preflightError = preflight?.status === "error" ? preflight.error : null;
   const isError = result?.status === "error";
+  const buttonLabel = isSyncing ? "Syncing Render DB..." : "Sync Render DB";
+  const isDisabled = isSyncing || isLoadingPreflight || Boolean(preflightError);
+  const targetLabel =
+    preflight?.render_database?.postgres_name ||
+    preflight?.render_database?.display_url ||
+    "unknown";
+  const targetLocation = preflight?.render_database?.display_url || "unknown";
+  const preflightTitle = preflightError
+    ? preflightError
+    : `Target: ${targetLabel} (${targetLocation}). Local items: ${preflight?.source_summary?.toolkit_item_count ?? "?"}. Hosted items: ${preflight?.target_summary?.toolkit_item_count ?? "?"}.`;
+
+  if (variant === "nav") {
+    return (
+      <div className="flex flex-col gap-1">
+        <button
+          type="button"
+          onClick={handleClick}
+          title={preflightTitle}
+          disabled={isDisabled}
+          className="rounded-md border border-edge px-3 py-1.5 font-ui text-xs text-ink transition-colors hover:border-edge-strong hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {buttonLabel}
+        </button>
+        {preflightError ? (
+          <p className="max-w-56 font-ui text-xs text-danger">{preflightError}</p>
+        ) : result ? (
+          <p className={`max-w-56 font-ui text-xs ${isError ? "text-danger" : "text-valid"}`}>
+            {isError
+              ? result.error
+              : `Hosted items: ${result.target_after_summary?.toolkit_item_count ?? "?"}.`}
+          </p>
+        ) : (
+          <p className="font-ui text-[11px] text-ink-muted">
+            {isLoadingPreflight ? "Checking target..." : targetLabel}
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="mt-6 rounded-lg border border-edge bg-surface-alt p-4">
@@ -118,10 +163,10 @@ export function LocalRenderSyncButton() {
         <button
           type="button"
           onClick={handleClick}
-          disabled={isSyncing || isLoadingPreflight || Boolean(preflightError)}
+          disabled={isDisabled}
           className="rounded-md border border-edge px-4 py-2 font-ui text-sm text-ink transition-colors hover:border-edge-strong hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isSyncing ? "Syncing Render DB..." : "Sync Render DB"}
+          {buttonLabel}
         </button>
       </div>
       <div className="mt-3 font-ui text-sm text-ink-secondary">
@@ -134,15 +179,13 @@ export function LocalRenderSyncButton() {
             <p>
               Target:{" "}
               <span className="font-data text-ink">
-                {preflight?.render_database?.postgres_name ||
-                  preflight?.render_database?.display_url ||
-                  "unknown"}
+                {targetLabel}
               </span>
             </p>
             <p>
               Location:{" "}
               <span className="font-data text-ink">
-                {preflight?.render_database?.display_url || "unknown"}
+                {targetLocation}
               </span>
             </p>
             <p>

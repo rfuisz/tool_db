@@ -195,6 +195,10 @@ class ItemMaterializer:
                     derive_seconds = round(perf_counter() - derive_started_at, 3)
 
                     comparison_started_at = perf_counter()
+                    logger.info(
+                        "Replacing item comparisons for %s items.",
+                        len(comparison_item_id_list),
+                    )
                     self._replace_item_comparisons(
                         cursor,
                         comparison_item_ids,

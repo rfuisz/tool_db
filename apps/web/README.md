@@ -85,6 +85,7 @@ Important boundary:
 - Render syncs checked-in repo state, not ad hoc local-only database mutations.
 - If you changed data only in your local Postgres, export or check in the corresponding repo artifacts before pushing.
 - The footer now renders a small deployment badge with the active service, branch, short commit, and API target so stale or mismatched Render services are easier to spot.
+- When you run the web app on `localhost`, the top nav also exposes a `Sync Render DB` control that can overwrite the hosted Render Postgres database from your local Postgres after a confirmation prompt.
 
 **Manual Render settings if you do not use the blueprint:**
 

@@ -1,0 +1,15 @@
+<svg width="256" height="256" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="logo-copper" x1="28" y1="34" x2="103" y2="96" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D97706"/>
+      <stop offset="1" stop-color="#92400E"/>
+    </linearGradient>
+  </defs>
+  <rect x="10" y="10" width="108" height="108" rx="28" fill="#FFFDF7"/>
+  <rect x="10" y="10" width="108" height="108" rx="28" stroke="#D8CFC4" stroke-width="2"/>
+  <circle cx="64" cy="64" r="33" stroke="#1E3A5F" stroke-width="4.5"/>
+  <path d="M29 80C40 53 63 39 90 41C95 41 99 42 103 44" stroke="url(#logo-copper)" stroke-width="5" stroke-linecap="round"/>
+  <path d="M37 95C51 83 71 78 93 80" stroke="#B45309" stroke-opacity="0.42" stroke-width="3.5" stroke-linecap="round"/>
+  <circle cx="92" cy="35" r="5" fill="#B45309"/>
+  <path d="M50 34H64C76 34 84 40 84 50C84 58 79 63 71 65C81 67 87 73 87 83C87 94 79 101 65 101H50V34ZM60 44V61H64C71 61 75 58 75 52C75 47 71 44 64 44H60ZM60 70V91H66C74 91 78 87 78 80C78 73 73 70 65 70H60Z" fill="#1E3A5F"/>
+</svg>

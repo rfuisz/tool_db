@@ -56,6 +56,8 @@ Practical implication:
 - if the change exists in tracked repo artifacts and you push it, Render will pick it up
 - if the change exists only in your local Postgres, Render cannot see it until you export or check in the corresponding repo state
 
+For one-off curator syncs from localhost, the local web app now exposes a top-nav `Sync Render DB` control. It runs a preflight against the hosted Render Postgres target, then overwrites that hosted database from your local `DATABASE_URL` after confirmation.
+
 ## Core Modeling Rule
 
 The primary unit of truth is `claim + context + evidence`.

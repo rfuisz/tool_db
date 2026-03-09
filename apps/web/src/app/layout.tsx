@@ -3,7 +3,7 @@ import { EB_Garamond, Jost, Inter, JetBrains_Mono } from "next/font/google";
 import { DeploymentBadge } from "@/components/deployment-badge";
 import { Nav } from "@/components/nav";
 import { PaperModalProvider } from "@/components/paper-modal";
-import { isFirstPassEnabled } from "@/lib/first-pass-access";
+import { isFirstPassEnabled, isLocalAdminEnabled } from "@/lib/first-pass-access";
 import "./globals.css";
 
 const ebGaramond = EB_Garamond({
@@ -34,6 +34,10 @@ export const metadata: Metadata = {
   title: "BioControl Toolkit DB",
   description:
     "Evidence-first engineering knowledge system for biological control surfaces, methods, and DBTL workflows.",
+  icons: {
+    icon: "/logo.svg",
+    shortcut: "/logo.svg",
+  },
 };
 
 export default async function RootLayout({
@@ -41,7 +45,10 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const showFirstPass = await isFirstPassEnabled();
+  const [showFirstPass, showLocalAdmin] = await Promise.all([
+    isFirstPassEnabled(),
+    isLocalAdminEnabled(),
+  ]);
 
   return (
     <html
@@ -50,7 +57,7 @@ export default async function RootLayout({
     >
       <body className="min-h-screen">
         <PaperModalProvider>
-          <Nav showFirstPass={showFirstPass} />
+          <Nav showFirstPass={showFirstPass} showLocalAdmin={showLocalAdmin} />
           <main className="mx-auto max-w-5xl px-6 pt-24 pb-24">{children}</main>
           <footer className="border-t border-edge bg-surface/40">
             <div className="mx-auto max-w-5xl px-6 py-12">

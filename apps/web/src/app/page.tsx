@@ -153,7 +153,7 @@ Or am I a wild storm, or a great song?`}
                           return (
                             <Link
                               key={concept.key}
-                              href={`/mechanisms/${concept.key}`}
+                              href={`/mechanisms/${encodeURIComponent(concept.key)}`}
                               className="group rounded border border-edge p-4 transition-colors hover:border-accent"
                             >
                               <div className="flex items-baseline justify-between gap-3">
@@ -232,7 +232,7 @@ Or am I a wild storm, or a great song?`}
                           return (
                             <Link
                               key={concept.key}
-                              href={`/techniques/${concept.key}`}
+                              href={`/techniques/${encodeURIComponent(concept.key)}`}
                               className="group rounded border border-edge p-4 transition-colors hover:border-accent"
                             >
                               <div className="flex items-baseline justify-between gap-3">
@@ -291,7 +291,7 @@ Or am I a wild storm, or a great song?`}
                 return (
                   <Link
                     key={f}
-                    href={`/items?family=${f}`}
+                    href={`/items?family=${encodeURIComponent(f)}`}
                     className="group font-body text-base text-ink-secondary transition-colors hover:text-accent"
                   >
                     {f}

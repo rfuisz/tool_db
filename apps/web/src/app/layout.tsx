@@ -96,12 +96,12 @@ export default async function RootLayout({
                 </a>
               </div>
               <div className="mt-8 max-w-2xl border-t border-edge pt-6">
-                <p className="font-data text-sm text-ink-muted">
-                  <span className="text-ink">1e26</span> &mdash; 10<sup>26</sup>{" "}
-                  is the rough parameter count above which an AI system is
-                  complex enough to do hard, potentially dangerous things.
-                  1e26 is a pet domain for weird AI projects that live at that
-                  frontier.
+                <p className="font-data text-sm leading-relaxed text-ink-muted">
+                  <span className="text-ink">1e26</span> &mdash; A human body
+                  turns over roughly 50&ndash;70&thinsp;kg of ATP every day,
+                  about 10<sup>26</sup> hydrolysis reactions: the metabolic
+                  pulse of an entire organism. 1e26 is a pet domain for weird
+                  projects that live at that scale.
                 </p>
               </div>
               <div className="mt-6">

@@ -80,7 +80,7 @@ export function MechanismTag({ mechanism }: { mechanism: string }) {
   return (
     <Tooltip content={description ?? `View mechanism concept: ${label}`} position="bottom">
       <Link
-        href={`/mechanisms/${mechanism}`}
+        href={`/mechanisms/${encodeURIComponent(mechanism)}`}
         className="mr-2 cursor-help border-b border-dotted border-ink-faint text-ink-secondary transition-colors hover:text-accent hover:border-accent"
       >
         {label}
@@ -95,7 +95,7 @@ export function TechniqueTag({ technique }: { technique: string }) {
   return (
     <Tooltip content={description ?? `View technique concept: ${label}`} position="bottom">
       <Link
-        href={`/techniques/${technique}`}
+        href={`/techniques/${encodeURIComponent(technique)}`}
         className="mr-2 cursor-help border-b border-dotted border-ink-faint text-ink-secondary transition-colors hover:text-accent hover:border-accent"
       >
         {label}

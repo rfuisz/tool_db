@@ -220,8 +220,14 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail=f"Unknown workflow slug: {slug}") from exc
 
     @app.get("/api/v1/extracted-workflows", response_model=list[ExtractedWorkflowSummary])
-    def list_extracted_workflows(repo: KnowledgeRepository = Depends(get_repository)) -> list[ExtractedWorkflowSummary]:
-        return repo.list_extracted_workflows()
+    def list_extracted_workflows(
+        limit: Optional[int] = Query(None, ge=1, le=500),
+        repo: KnowledgeRepository = Depends(get_repository),
+    ) -> list[ExtractedWorkflowSummary]:
+        workflows = repo.list_extracted_workflows()
+        if limit is not None:
+            workflows = workflows[:limit]
+        return workflows
 
     @app.post("/api/v1/admin/sync-render-db")
     def sync_render_db(request: Request, settings: Settings = Depends(get_settings)) -> dict:

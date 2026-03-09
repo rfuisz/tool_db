@@ -174,7 +174,7 @@ type RawFirstPassEntitySummary = Partial<
 };
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
-const REVALIDATE_SECONDS = 30;
+const REVALIDATE_SECONDS = 300;
 const ALLOW_SEED_FALLBACK = process.env.TOOL_DB_ALLOW_SEED_FALLBACK === "true";
 
 class BackendNotFoundError extends Error {
@@ -731,10 +731,13 @@ export async function getItemBySlug(
   }
 }
 
-export async function getExtractedWorkflows(): Promise<ExtractedWorkflowSummary[]> {
+export async function getExtractedWorkflows(
+  options?: { limit?: number },
+): Promise<ExtractedWorkflowSummary[]> {
   try {
+    const params = options?.limit ? `?limit=${options.limit}` : "";
     return await fetchBackendJson<ExtractedWorkflowSummary[]>(
-      "/api/v1/extracted-workflows",
+      `/api/v1/extracted-workflows${params}`,
     );
   } catch {
     return [];

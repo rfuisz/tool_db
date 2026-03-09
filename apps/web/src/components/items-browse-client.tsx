@@ -6,14 +6,14 @@ import { ItemCard } from "@/components/item-card";
 import { FilterSelect } from "@/components/filter-select";
 import {
   MECHANISM_HIERARCHY_SECTIONS,
-  buildMechanismConceptSummaries,
-  buildTechniqueConceptSummaries,
   getItemTaxonomyPosition,
   getOrderedItemTypes,
   TECHNIQUE_HIERARCHY_SECTIONS,
-  type MechanismConceptSummary,
-  type TechniqueConceptSummary,
 } from "@/lib/item-hierarchy";
+import {
+  MECHANISM_DESCRIPTIONS,
+  TECHNIQUE_DESCRIPTIONS,
+} from "@/lib/explanations";
 import {
   ITEM_TYPE_LABELS,
   MECHANISM_LABELS,
@@ -35,6 +35,8 @@ type FilterOptionsData = {
   mechanisms: string[];
   techniques: string[];
   families: string[];
+  mechanismCounts: Record<string, number>;
+  techniqueCounts: Record<string, number>;
 };
 
 type ItemSearchResponse = {
@@ -69,13 +71,11 @@ function buildItemSearchParams(filters: {
 }
 
 export function ItemsBrowseClient({
-  allItems,
   initialItems,
   initialTotal,
   initialFilters,
   filterOptions,
 }: {
-  allItems: ToolkitItem[];
   initialItems: ToolkitItem[];
   initialTotal: number;
   initialFilters: InitialFilters;
@@ -250,20 +250,43 @@ export function ItemsBrowseClient({
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const rangeStart = totalCount === 0 ? 0 : offset + 1;
   const rangeEnd = Math.min(totalCount, offset + visibleItems.length);
-  const mechanismConcepts = buildMechanismConceptSummaries(allItems);
-  const techniqueConcepts = buildTechniqueConceptSummaries(allItems);
   const [mechanismSearch, setMechanismSearch] = useState("");
   const [techniqueSearch, setTechniqueSearch] = useState("");
+
+  const mechanismConcepts = useMemo(
+    () =>
+      filterOptions.mechanisms.map((key) => ({
+        key,
+        label: MECHANISM_LABELS[key] ?? key.replace(/_/g, " "),
+        description:
+          MECHANISM_DESCRIPTIONS[key] ??
+          "A mechanism-level grouping derived from the current toolkit evidence.",
+        totalCount: filterOptions.mechanismCounts[key] ?? 0,
+      })),
+    [filterOptions.mechanisms, filterOptions.mechanismCounts],
+  );
+
+  const techniqueConcepts = useMemo(
+    () =>
+      filterOptions.techniques.map((key) => ({
+        key,
+        label: TECHNIQUE_LABELS[key] ?? key.replace(/_/g, " "),
+        description:
+          TECHNIQUE_DESCRIPTIONS[key] ??
+          "A technique-level grouping derived from the current toolkit evidence.",
+        totalCount: filterOptions.techniqueCounts[key] ?? 0,
+      })),
+    [filterOptions.techniques, filterOptions.techniqueCounts],
+  );
 
   const filteredMechanismConcepts = useMemo(() => {
     if (!mechanismSearch) return mechanismConcepts;
     const lower = mechanismSearch.toLowerCase();
     return mechanismConcepts.filter(
-      (c: MechanismConceptSummary) =>
+      (c) =>
         c.label.toLowerCase().includes(lower) ||
         c.key.toLowerCase().includes(lower) ||
-        c.description.toLowerCase().includes(lower) ||
-        c.capabilities.some((cap) => cap.toLowerCase().includes(lower)),
+        c.description.toLowerCase().includes(lower),
     );
   }, [mechanismConcepts, mechanismSearch]);
 
@@ -271,11 +294,10 @@ export function ItemsBrowseClient({
     if (!techniqueSearch) return techniqueConcepts;
     const lower = techniqueSearch.toLowerCase();
     return techniqueConcepts.filter(
-      (c: TechniqueConceptSummary) =>
+      (c) =>
         c.label.toLowerCase().includes(lower) ||
         c.key.toLowerCase().includes(lower) ||
-        c.description.toLowerCase().includes(lower) ||
-        c.capabilities.some((cap) => cap.toLowerCase().includes(lower)),
+        c.description.toLowerCase().includes(lower),
     );
   }, [techniqueConcepts, techniqueSearch]);
 
@@ -430,18 +452,14 @@ export function ItemsBrowseClient({
                                       active ? "text-accent" : "text-ink"
                                     }`}
                                   >
-                                    {MECHANISM_LABELS[concept.key] ?? concept.label}
+                                    {concept.label}
                                   </span>
                                   <span className="font-data text-xs text-ink-muted">
-                                    {concept.totalCount}
+                                    {concept.totalCount} items
                                   </span>
                                 </div>
                                 <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-                                  {concept.summary}
-                                </p>
-                                <p className="mt-2 font-ui text-xs text-ink-muted">
-                                  {concept.architectureCount} architectures ·{" "}
-                                  {concept.componentCount} components
+                                  {concept.description}
                                 </p>
                               </button>
                             );
@@ -540,17 +558,14 @@ export function ItemsBrowseClient({
                                       active ? "text-accent" : "text-ink"
                                     }`}
                                   >
-                                    {TECHNIQUE_LABELS[concept.key] ?? concept.label}
+                                    {concept.label}
                                   </span>
                                   <span className="font-data text-xs text-ink-muted">
-                                    {concept.totalCount}
+                                    {concept.totalCount} items
                                   </span>
                                 </div>
                                 <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-                                  {concept.summary}
-                                </p>
-                                <p className="mt-2 font-ui text-xs text-ink-muted">
-                                  {concept.methodCount} methods
+                                  {concept.description}
                                 </p>
                               </button>
                             );

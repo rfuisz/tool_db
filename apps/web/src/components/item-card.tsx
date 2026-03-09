@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import type { ToolkitItem } from "@/lib/types";
 import { renderInlineTitle, stripInlineTitleMarkup } from "@/lib/render-inline-title";
@@ -46,9 +47,27 @@ function Tag({
 export function ItemCard({ item }: { item: ToolkitItem }) {
   const router = useRouter();
   const plainTitle = stripInlineTitleMarkup(item.canonical_name);
+  const cardRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          router.prefetch(`/items/${item.slug}`);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [item.slug, router]);
 
   return (
     <article
+      ref={cardRef}
       role="link"
       tabIndex={0}
       aria-label={`Open ${plainTitle}`}

@@ -1188,15 +1188,15 @@ class KnowledgeRepository:
 
                 if filters.mechanisms:
                     where_clauses.append(
-                        "EXISTS (SELECT 1 FROM item_mechanism m WHERE m.item_id = ti.id AND LOWER(m.mechanism_name) = ANY(%s))"
+                        "EXISTS (SELECT 1 FROM item_mechanism m WHERE m.item_id = ti.id AND LOWER(REPLACE(m.mechanism_name, ' ', '_')) = ANY(%s))"
                     )
-                    params.append([v.lower() for v in filters.mechanisms])
+                    params.append([v.lower().replace(" ", "_") for v in filters.mechanisms])
 
                 if filters.techniques:
                     where_clauses.append(
-                        "EXISTS (SELECT 1 FROM item_technique t WHERE t.item_id = ti.id AND LOWER(t.technique_name) = ANY(%s))"
+                        "EXISTS (SELECT 1 FROM item_technique t WHERE t.item_id = ti.id AND LOWER(REPLACE(t.technique_name, ' ', '_')) = ANY(%s))"
                     )
-                    params.append([v.lower() for v in filters.techniques])
+                    params.append([v.lower().replace(" ", "_") for v in filters.techniques])
 
                 if filters.families:
                     where_clauses.append("LOWER(ti.family) = ANY(%s)")
@@ -1377,6 +1377,16 @@ class KnowledgeRepository:
                     explanation=row[15] or {},
                 )
 
+    _MECHANISM_FAMILIES = [
+        "heterodimerization", "oligomerization", "conformational_uncaging",
+        "membrane_recruitment", "photocleavage", "dna_binding", "rna_binding",
+        "degradation", "translation_control",
+    ]
+    _TECHNIQUE_FAMILIES = [
+        "computational_design", "selection_enrichment", "directed_evolution",
+        "sequence_verification", "functional_assay", "structural_characterization",
+    ]
+
     def _get_item_aggregates_from_database(self) -> ItemAggregateResponse:
         with self._connect() as conn:
             with conn.cursor() as cursor:
@@ -1397,10 +1407,22 @@ class KnowledgeRepository:
                 cursor.execute("SELECT item_type::text, COUNT(*) FROM toolkit_item GROUP BY item_type ORDER BY COUNT(*) DESC")
                 by_type = [ItemAggregateTypeBucket(value=r[0], count=r[1]) for r in cursor.fetchall()]
 
-                cursor.execute("SELECT mechanism_name, COUNT(DISTINCT item_id) FROM item_mechanism GROUP BY mechanism_name ORDER BY COUNT(DISTINCT item_id) DESC")
+                cursor.execute(
+                    "SELECT REPLACE(mechanism_name, ' ', '_') AS norm, COUNT(DISTINCT item_id) "
+                    "FROM item_mechanism "
+                    "WHERE REPLACE(mechanism_name, ' ', '_') = ANY(%s) "
+                    "GROUP BY norm ORDER BY COUNT(DISTINCT item_id) DESC",
+                    (self._MECHANISM_FAMILIES,),
+                )
                 by_mechanism = [ItemAggregateTypeBucket(value=r[0], count=r[1]) for r in cursor.fetchall()]
 
-                cursor.execute("SELECT technique_name, COUNT(DISTINCT item_id) FROM item_technique GROUP BY technique_name ORDER BY COUNT(DISTINCT item_id) DESC")
+                cursor.execute(
+                    "SELECT REPLACE(technique_name, ' ', '_') AS norm, COUNT(DISTINCT item_id) "
+                    "FROM item_technique "
+                    "WHERE REPLACE(technique_name, ' ', '_') = ANY(%s) "
+                    "GROUP BY norm ORDER BY COUNT(DISTINCT item_id) DESC",
+                    (self._TECHNIQUE_FAMILIES,),
+                )
                 by_technique = [ItemAggregateTypeBucket(value=r[0], count=r[1]) for r in cursor.fetchall()]
 
                 cursor.execute("SELECT family, COUNT(*) FROM toolkit_item WHERE family IS NOT NULL AND family != '' GROUP BY family HAVING COUNT(*) >= 3 ORDER BY COUNT(*) DESC")
@@ -1416,20 +1438,26 @@ class KnowledgeRepository:
                     by_family=by_family,
                 )
 
-    @staticmethod
-    def _compute_aggregates_from_items(items: List[ItemBrowse]) -> ItemAggregateResponse:
+    @classmethod
+    def _compute_aggregates_from_items(cls, items: List[ItemBrowse]) -> ItemAggregateResponse:
         from collections import Counter
         type_counts: Counter[str] = Counter()
         mech_counts: Counter[str] = Counter()
         tech_counts: Counter[str] = Counter()
         family_counts: Counter[str] = Counter()
         evidence_scores: List[float] = []
+        mech_set = set(cls._MECHANISM_FAMILIES)
+        tech_set = set(cls._TECHNIQUE_FAMILIES)
         for item in items:
             type_counts[item.item_type] += 1
             for m in item.mechanisms:
-                mech_counts[m] += 1
+                norm = m.replace(" ", "_")
+                if norm in mech_set:
+                    mech_counts[norm] += 1
             for t in item.techniques:
-                tech_counts[t] += 1
+                norm = t.replace(" ", "_")
+                if norm in tech_set:
+                    tech_counts[norm] += 1
             if item.family:
                 family_counts[item.family] += 1
             rs = item.replication_summary

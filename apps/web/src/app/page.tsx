@@ -25,7 +25,7 @@ function bucketMap(buckets: ItemAggregateTypeBucket[]): Record<string, number> {
 export default async function Home() {
   const [aggregates, extractedWorkflows] = await Promise.all([
     getItemAggregates(),
-    getExtractedWorkflows(),
+    getExtractedWorkflows({ limit: 8 }),
   ]);
 
   const typeCounts = bucketMap(aggregates.by_item_type);
@@ -324,7 +324,7 @@ Or am I a wild storm, or a great song?`}
         </p>
         {extractedWorkflows.length > 0 ? (
           <div>
-            {extractedWorkflows.slice(0, 8).map((wf) => {
+            {extractedWorkflows.map((wf) => {
               const doc = wf.source_document;
               return (
                 <Link
@@ -363,11 +363,9 @@ Or am I a wild storm, or a great song?`}
                 </Link>
               );
             })}
-            {extractedWorkflows.length > 8 && (
-              <p className="mt-4 font-data text-sm text-ink-muted">
-                + {extractedWorkflows.length - 8} more workflows
-              </p>
-            )}
+            <p className="mt-4 font-data text-sm text-ink-muted">
+              Showing first {extractedWorkflows.length} workflows
+            </p>
           </div>
         ) : (
           <p className="text-ink-muted">

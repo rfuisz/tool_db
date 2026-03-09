@@ -1,8 +1,9 @@
 import hashlib
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from tool_db_backend.clients.europe_pmc import EuropePMCClient
 from tool_db_backend.clients.pmc import PMCClient
@@ -123,6 +124,14 @@ class RealExtractionArtifactBuilder:
             output_dir=output_dir / "optobase",
         )
 
+        all_job_paths = (
+            europe_pmc_outputs["jobs"]
+            + openalex_outputs["jobs"]
+            + semantic_scholar_outputs["jobs"]
+        )
+        if self.web_research_client is not None and all_job_paths:
+            self._enrich_jobs_with_web_research_batch(all_job_paths)
+
         result = {
             "artifact_type": "real_extraction_seed_v1",
             "gap_map_packet_count": len(gap_packets),
@@ -148,6 +157,42 @@ class RealExtractionArtifactBuilder:
         manifest_out.write_text(json.dumps(result, indent=2) + "\n")
         result["manifest_path"] = str(manifest_out)
         return result
+
+    def _enrich_single_job_with_web_research(self, job_path: Path) -> Optional[Path]:
+        try:
+            job = json.loads(job_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return None
+        input_context = job.get("input_context", {})
+        if "web_research_summary" in input_context:
+            return None
+        source_document = job.get("source_document", {})
+        abstract_text = input_context.get("abstract_text") or source_document.get("abstract_text") or ""
+        try:
+            web_research_summary = self.web_research_client.research_source_document(
+                source_document=source_document,
+                abstract_text=abstract_text,
+            )
+        except LLMWebResearchError:
+            return None
+        if not web_research_summary:
+            return None
+        job["input_context"] = {**input_context, "web_research_summary": web_research_summary}
+        job_path.write_text(json.dumps(job, indent=2) + "\n")
+        return job_path
+
+    def _enrich_jobs_with_web_research_batch(self, job_paths: List[Path]) -> int:
+        enriched = 0
+        with ThreadPoolExecutor(max_workers=self.settings.llm_max_concurrency) as pool:
+            futures = {
+                pool.submit(self._enrich_single_job_with_web_research, jp): jp
+                for jp in job_paths
+            }
+            for future in as_completed(futures):
+                result = future.result()
+                if result is not None:
+                    enriched += 1
+        return enriched
 
     def _build_gap_packets(
         self,
@@ -308,11 +353,10 @@ class RealExtractionArtifactBuilder:
         self._clear_json_outputs(packets_dir)
         self._clear_json_outputs(jobs_dir)
 
-        seen_ids = set()
+        seen_ids: set = set()
         seen_document_keys = seen_document_keys if seen_document_keys is not None else set()
-        packet_paths: List[Path] = []
-        job_paths: List[Path] = []
 
+        pending_works: List[Tuple[Dict[str, Any], Path]] = []
         for raw_path in raw_search_paths:
             raw_wrapper = json.loads(raw_path.read_text())
             for work in raw_wrapper["payload"].get("results", []):
@@ -320,84 +364,109 @@ class RealExtractionArtifactBuilder:
                 if not work_id or work_id in seen_ids:
                     continue
                 seen_ids.add(work_id)
-                if len(packet_paths) >= limit:
+                if len(pending_works) >= limit:
                     break
+                pending_works.append((work, raw_path))
+            if len(pending_works) >= limit:
+                break
 
-                openalex_id = work_id
-                doi = self._normalize_doi(work.get("doi"))
-                pmid = self._extract_pmid(work.get("ids", {}))
-                abstract_text = _reconstruct_openalex_abstract(work.get("abstract_inverted_index"))
-                title = work.get("display_name") or work.get("title") or openalex_id
-                enrichment: Dict[str, Any] = {"source": "openalex_enrichment_skipped"}
-                if doi or pmid or len(abstract_text.strip()) < 400:
-                    enrichment = self._enrich_openalex_work(
-                        title=title,
-                        doi=doi,
-                        pmid=pmid,
-                    )
-                    if enrichment.get("abstract_text") and len(
-                        str(enrichment.get("abstract_text") or "").strip()
-                    ) >= len(abstract_text.strip()):
-                        abstract_text = enrichment["abstract_text"]
-                slug = _slugify(work.get("display_name") or work.get("title") or openalex_id)
-                work_type = (work.get("type") or "").strip().lower()
-                is_review = work_type == "review"
-                source_type = "review" if is_review else "primary_paper"
-                source_document = _compact_dict({
-                    "source_type": source_type,
-                    "title": title,
-                    "doi": doi,
-                    "openalex_id": openalex_id,
-                    "pmid": pmid,
-                    "semantic_scholar_id": enrichment.get("semantic_scholar_id"),
-                    "publication_year": work.get("publication_year"),
-                    "journal_or_source": self._extract_source_name(work),
-                    "abstract_text": abstract_text or None,
-                    "fulltext_license_status": self._license_status(enrichment),
-                    "is_retracted": False,
-                    "retraction_metadata": {},
-                    "raw_payload_ref": str(raw_path),
-                })
-                document_key = self._document_key_from_fields(
-                    title=source_document["title"],
-                    doi=doi,
-                    pmid=pmid,
-                    provider_id=openalex_id,
-                    provider_name="openalex",
-                )
-                if document_key in seen_document_keys:
-                    continue
-                seen_document_keys.add(document_key)
+        enrichment_keys: List[Tuple[str, Optional[str], Optional[str], bool]] = []
+        for work, _ in pending_works:
+            doi = self._normalize_doi(work.get("doi"))
+            pmid = self._extract_pmid(work.get("ids", {}))
+            abstract_text = _reconstruct_openalex_abstract(work.get("abstract_inverted_index"))
+            title = work.get("display_name") or work.get("title") or work.get("id", "")
+            needs_enrichment = bool(doi or pmid or len(abstract_text.strip()) < 400)
+            enrichment_keys.append((title, doi, pmid, needs_enrichment))
 
-                packet_path, job_path = self._write_literature_packet_and_job(
-                    packets_dir=packets_dir,
-                    jobs_dir=jobs_dir,
-                    slug=slug,
-                    external_id=openalex_id,
-                    source_document=source_document,
-                    abstract_text=abstract_text,
-                    is_review=is_review,
-                    unresolved_detail="Prepared from OpenAlex search results for later LLM extraction.",
-                    input_context={
-                        "title": source_document["title"],
-                        "abstract_text": abstract_text,
-                        "openalex_metadata": {
-                            "type": work.get("type"),
-                            "cited_by_count": work.get("cited_by_count"),
-                            "concepts": work.get("concepts", []),
-                        },
+        enrichments: List[Dict[str, Any]] = [{"source": "openalex_enrichment_skipped"}] * len(pending_works)
+        enrich_indices = [i for i, (_, _, _, needs) in enumerate(enrichment_keys) if needs]
+        with ThreadPoolExecutor(max_workers=self.settings.llm_max_concurrency) as pool:
+            futures = {
+                pool.submit(
+                    self._enrich_openalex_work,
+                    title=enrichment_keys[i][0],
+                    doi=enrichment_keys[i][1],
+                    pmid=enrichment_keys[i][2],
+                ): i
+                for i in enrich_indices
+            }
+            for future in as_completed(futures):
+                idx = futures[future]
+                try:
+                    enrichments[idx] = future.result()
+                except Exception:
+                    enrichments[idx] = {"source": "openalex_enrichment_error"}
+
+        packet_paths: List[Path] = []
+        job_paths: List[Path] = []
+        for idx, (work, raw_path) in enumerate(pending_works):
+            enrichment = enrichments[idx]
+            openalex_id = work.get("id")
+            doi = self._normalize_doi(work.get("doi"))
+            pmid = self._extract_pmid(work.get("ids", {}))
+            abstract_text = _reconstruct_openalex_abstract(work.get("abstract_inverted_index"))
+            title = work.get("display_name") or work.get("title") or openalex_id
+            if enrichment.get("abstract_text") and len(
+                str(enrichment.get("abstract_text") or "").strip()
+            ) >= len(abstract_text.strip()):
+                abstract_text = enrichment["abstract_text"]
+            slug = _slugify(work.get("display_name") or work.get("title") or openalex_id)
+            work_type = (work.get("type") or "").strip().lower()
+            is_review = work_type == "review"
+            source_type = "review" if is_review else "primary_paper"
+            source_document = _compact_dict({
+                "source_type": source_type,
+                "title": title,
+                "doi": doi,
+                "openalex_id": openalex_id,
+                "pmid": pmid,
+                "semantic_scholar_id": enrichment.get("semantic_scholar_id"),
+                "publication_year": work.get("publication_year"),
+                "journal_or_source": self._extract_source_name(work),
+                "abstract_text": abstract_text or None,
+                "fulltext_license_status": self._license_status(enrichment),
+                "is_retracted": False,
+                "retraction_metadata": {},
+                "raw_payload_ref": str(raw_path),
+            })
+            document_key = self._document_key_from_fields(
+                title=source_document["title"],
+                doi=doi,
+                pmid=pmid,
+                provider_id=openalex_id,
+                provider_name="openalex",
+            )
+            if document_key in seen_document_keys:
+                continue
+            seen_document_keys.add(document_key)
+
+            packet_path, job_path = self._write_literature_packet_and_job(
+                packets_dir=packets_dir,
+                jobs_dir=jobs_dir,
+                slug=slug,
+                external_id=openalex_id,
+                source_document=source_document,
+                abstract_text=abstract_text,
+                is_review=is_review,
+                unresolved_detail="Prepared from OpenAlex search results for later LLM extraction.",
+                input_context={
+                    "title": source_document["title"],
+                    "abstract_text": abstract_text,
+                    "openalex_metadata": {
+                        "type": work.get("type"),
+                        "cited_by_count": work.get("cited_by_count"),
+                        "concepts": work.get("concepts", []),
+                    },
                     "europe_pmc_metadata": enrichment.get("europe_pmc_metadata"),
                     "pmc_bioc_preview_text": enrichment.get("pmc_bioc_preview_text"),
                     "pmc_bioc_available": enrichment.get("pmc_bioc_available"),
-                        "semantic_scholar_metadata": enrichment.get("semantic_scholar"),
-                        "enrichment_metadata": enrichment,
-                    },
-                )
-                packet_paths.append(packet_path)
-                job_paths.append(job_path)
-
-            if len(packet_paths) >= limit:
-                break
+                    "semantic_scholar_metadata": enrichment.get("semantic_scholar"),
+                    "enrichment_metadata": enrichment,
+                },
+            )
+            packet_paths.append(packet_path)
+            job_paths.append(job_path)
 
         return {"packets": packet_paths, "jobs": job_paths}
 
@@ -837,20 +906,6 @@ class RealExtractionArtifactBuilder:
             external_id=external_id,
         )
         packet_path.write_text(json.dumps(packet, indent=2) + "\n")
-
-        if self.web_research_client is not None and "web_research_summary" not in input_context:
-            try:
-                web_research_summary = self.web_research_client.research_source_document(
-                    source_document=source_document,
-                    abstract_text=abstract_text,
-                )
-            except LLMWebResearchError:
-                web_research_summary = {}
-            if web_research_summary:
-                input_context = {
-                    **input_context,
-                    "web_research_summary": web_research_summary,
-                }
 
         job = {
             "job_type": "llm_extraction_job_v1",

@@ -370,6 +370,10 @@ class PostgresLoadPlanExecutor:
                     slug_to_item_id[target_slug],
                     action.get("item_facets", []),
                 )
+                if source_document_id:
+                    self._ensure_source_citation(
+                        cursor, slug_to_item_id[target_slug], source_document_id,
+                    )
                 continue
             if kind == "attach_evidence_to_existing_item":
                 target_slug = action["target_slug"]
@@ -412,7 +416,27 @@ class PostgresLoadPlanExecutor:
                     slug_to_item_id[target_slug],
                     action.get("item_facets", []),
                 )
+                if source_document_id:
+                    self._ensure_source_citation(
+                        cursor, slug_to_item_id[target_slug], source_document_id,
+                    )
                 continue
+
+    @staticmethod
+    def _ensure_source_citation(
+        cursor: Any, item_id: Any, source_document_id: Any,
+    ) -> None:
+        """Create a baseline 'mentioned_in' citation linking item to source paper."""
+        cursor.execute(
+            """
+            insert into item_citation (
+              item_id, source_document_id, citation_role, importance_rank, why_this_matters
+            )
+            values (%s, %s, 'structural', 999, 'Extracted from this source document.')
+            on conflict (item_id, source_document_id, citation_role) do nothing
+            """,
+            (item_id, source_document_id),
+        )
 
     @staticmethod
     def _maybe_update_existing_item_type(

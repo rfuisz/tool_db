@@ -23,7 +23,11 @@ class Settings(BaseSettings):
     database_url: str = ""
     render_database_url: str = Field(
         default="",
-        validation_alias=AliasChoices("RENDER_DATABASE_URL", "RENDER_POSTGRES_URL"),
+        validation_alias=AliasChoices(
+            "RENDER_DATABASE_URL",
+            "RENDER_POSTGRES_EXTERNAL_URL",
+            "RENDER_POSTGRES_URL",
+        ),
     )
     admin_sync_key: str = Field(
         default="",
@@ -60,6 +64,7 @@ class Settings(BaseSettings):
     pmc_bioc_base_url: str = "https://www.ncbi.nlm.nih.gov/research/bionlp/RESTful"
     openalex_base_url: str = "https://api.openalex.org"
     openalex_mailto: str = ""
+    openalex_max_concurrency: int = 3
     semantic_scholar_base_url: str = "https://api.semanticscholar.org/graph/v1"
     semantic_scholar_api_key: str = ""
     clinicaltrials_base_url: str = "https://clinicaltrials.gov/api/v2"

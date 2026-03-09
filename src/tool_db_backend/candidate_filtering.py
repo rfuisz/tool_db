@@ -108,6 +108,16 @@ _DISCRETE_ITEM_TYPES = {
     "delivery_harness",
 }
 
+_TITLE_FUNCTION_WORDS = {
+    "a", "an", "the", "for", "of", "in", "by", "with", "using", "via",
+    "toward", "towards", "from", "between", "through", "and", "or", "to",
+    "that", "which", "its", "their", "on", "into", "upon", "during",
+}
+
+_MAX_TOOL_NAME_TOKENS = 10
+_TITLE_HEURISTIC_MIN_TOKENS = 6
+_TITLE_HEURISTIC_MIN_FUNCTION_WORDS = 2
+
 
 def load_controlled_vocabularies(settings: Settings) -> Dict[str, Any]:
     vocab_path = settings.schema_root / "canonical" / "controlled_vocabularies.v1.json"
@@ -139,6 +149,8 @@ def assess_toolkit_item_candidate(
         return {"keep": False, "reason": "placeholder_name", "item_type": item_type}
     if _looks_like_generic_class_name(canonical_name, tokens, item_type, aliases, external_ids):
         return {"keep": False, "reason": "generic_class", "item_type": item_type}
+    if _looks_like_paper_title_or_description(tokens):
+        return {"keep": False, "reason": "paper_title_or_description", "item_type": item_type}
     if _looks_like_background_biology_entity(tokens, item_type):
         return {"keep": False, "reason": "background_biology_entity", "item_type": item_type}
     if (
@@ -216,6 +228,16 @@ def _looks_like_generic_class_name(
         return False
     if tokens and tokens[-1] in _GENERIC_PLURAL_HEADS:
         return True
+    return False
+
+
+def _looks_like_paper_title_or_description(tokens: List[str]) -> bool:
+    if len(tokens) > _MAX_TOOL_NAME_TOKENS:
+        return True
+    if len(tokens) >= _TITLE_HEURISTIC_MIN_TOKENS:
+        function_word_count = sum(1 for t in tokens if t in _TITLE_FUNCTION_WORDS)
+        if function_word_count >= _TITLE_HEURISTIC_MIN_FUNCTION_WORDS:
+            return True
     return False
 
 

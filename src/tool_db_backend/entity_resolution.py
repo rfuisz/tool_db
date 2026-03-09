@@ -1,10 +1,14 @@
+import hashlib
+import logging
 import re
 import unicodedata
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
 from tool_db_backend.config import Settings
+
+logger = logging.getLogger(__name__)
 
 
 def _norm(value: str) -> str:
@@ -13,35 +17,61 @@ def _norm(value: str) -> str:
     return " ".join(normalized.split())
 
 
+def _aliases_hash(aliases: List[str]) -> str:
+    """Deterministic hash of sorted normalized aliases for cache keying."""
+    normalized = sorted({_norm(a) for a in aliases if a.strip()})
+    return hashlib.sha256("|".join(normalized).encode()).hexdigest()[:16]
+
+
 class EntityResolver:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self._existing_items = self._load_existing_items()
         self._existing_workflows = self._load_existing_workflows()
+        self._match_cache: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+        self._items_count = len(self._existing_items)
+        self._load_match_cache()
 
     def resolve_item_candidates(
         self,
         canonical_item_candidates: Dict[str, Dict[str, Any]],
     ) -> Dict[str, Dict[str, Any]]:
         resolutions = {}
+        cache_misses = 0
         for local_id, candidate in canonical_item_candidates.items():
+            cached = self._check_match_cache(candidate)
+            if cached is not None:
+                resolutions[local_id] = cached
+                continue
+
+            cache_misses += 1
             matches = self._match_item_candidate(candidate)
             if len(matches) == 1:
-                resolutions[local_id] = {
+                resolution = {
                     "resolution_status": "matched_existing",
                     "matched_slug": matches[0]["slug"],
                     "matched_by": matches[0]["matched_by"],
                 }
             elif len(matches) > 1:
-                resolutions[local_id] = {
+                resolution = {
                     "resolution_status": "ambiguous_existing",
                     "candidate_matches": matches,
                 }
             else:
-                resolutions[local_id] = {
+                resolution = {
                     "resolution_status": "new_candidate",
                     "proposed_slug": candidate["slug"],
                 }
+
+            resolutions[local_id] = resolution
+            self._store_match_cache(candidate, resolution)
+
+        if cache_misses:
+            logger.debug(
+                "Entity resolution: %d candidates, %d cache misses",
+                len(canonical_item_candidates),
+                cache_misses,
+            )
         return resolutions
 
     def resolve_workflow_candidates(
@@ -214,6 +244,148 @@ class EntityResolver:
                     }
                 )
         return workflows
+
+    # ------------------------------------------------------------------
+    # Match cache — avoids re-scanning all items for repeated candidates
+    # ------------------------------------------------------------------
+
+    def _cache_key(self, candidate: Dict[str, Any]) -> Tuple[str, str, str]:
+        return (
+            _norm(candidate.get("slug", "")),
+            _norm(candidate.get("canonical_name", "")),
+            _aliases_hash(candidate.get("aliases", [])),
+        )
+
+    def _check_match_cache(self, candidate: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        key = self._cache_key(candidate)
+        cached = self._match_cache.get(key)
+        if cached is None:
+            return None
+        if cached.get("_items_count") != self._items_count:
+            return None
+        result = dict(cached)
+        result.pop("_items_count", None)
+        return result
+
+    def _store_match_cache(self, candidate: Dict[str, Any], resolution: Dict[str, Any]) -> None:
+        key = self._cache_key(candidate)
+        entry = {**resolution, "_items_count": self._items_count}
+        self._match_cache[key] = entry
+        self._persist_match_cache_entry(key, resolution)
+
+    def _load_match_cache(self) -> None:
+        """Load persisted match cache from the database."""
+        if not self.settings.database_url:
+            return
+        try:
+            import psycopg
+            with psycopg.connect(self.settings.database_url) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        SELECT candidate_slug, candidate_name_norm, candidate_aliases_hash,
+                               resolution_status, matched_slug, match_method,
+                               items_snapshot_count
+                        FROM entity_match_cache
+                        WHERE invalidated_at IS NULL
+                        """
+                    )
+                    loaded = 0
+                    for row in cursor.fetchall():
+                        slug, name_norm, ah, status, matched_slug, method, snapshot_count = row
+                        if snapshot_count != self._items_count:
+                            continue
+                        key = (slug, name_norm, ah)
+                        entry: Dict[str, Any] = {
+                            "resolution_status": status,
+                            "_items_count": snapshot_count,
+                        }
+                        if status == "matched_existing" and matched_slug:
+                            entry["matched_slug"] = matched_slug
+                            entry["matched_by"] = method or "cached"
+                        elif status == "new_candidate":
+                            entry["proposed_slug"] = slug
+                        self._match_cache[key] = entry
+                        loaded += 1
+                    if loaded:
+                        logger.info("Loaded %d cached entity match results.", loaded)
+        except Exception:
+            pass
+
+    def _persist_match_cache_entry(
+        self, key: Tuple[str, str, str], resolution: Dict[str, Any],
+    ) -> None:
+        """Write a single match result to the database cache."""
+        if not self.settings.database_url:
+            return
+        slug, name_norm, ah = key
+        try:
+            import psycopg
+            with psycopg.connect(self.settings.database_url) as conn:
+                with conn.cursor() as cursor:
+                    matched_slug = resolution.get("matched_slug")
+                    matched_item_id = None
+                    if matched_slug:
+                        cursor.execute(
+                            "SELECT id FROM toolkit_item WHERE slug = %s",
+                            (matched_slug,),
+                        )
+                        row = cursor.fetchone()
+                        if row:
+                            matched_item_id = row[0]
+                    cursor.execute(
+                        """
+                        INSERT INTO entity_match_cache (
+                          candidate_slug, candidate_name_norm, candidate_aliases_hash,
+                          resolution_status, matched_item_id, matched_slug,
+                          match_method, items_snapshot_count
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (candidate_slug, candidate_name_norm, candidate_aliases_hash)
+                        DO UPDATE SET
+                          resolution_status = EXCLUDED.resolution_status,
+                          matched_item_id = EXCLUDED.matched_item_id,
+                          matched_slug = EXCLUDED.matched_slug,
+                          match_method = EXCLUDED.match_method,
+                          items_snapshot_count = EXCLUDED.items_snapshot_count,
+                          invalidated_at = NULL
+                        """,
+                        (
+                            slug,
+                            name_norm,
+                            ah,
+                            resolution.get("resolution_status", "new_candidate"),
+                            matched_item_id,
+                            matched_slug,
+                            resolution.get("matched_by"),
+                            self._items_count,
+                        ),
+                    )
+                conn.commit()
+        except Exception:
+            pass
+
+    @staticmethod
+    def invalidate_match_cache(settings: Settings) -> int:
+        """Mark all cache entries as stale. Call when toolkit_item names or
+        synonyms change. Returns the number of entries invalidated."""
+        if not settings.database_url:
+            return 0
+        try:
+            import psycopg
+            with psycopg.connect(settings.database_url) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "UPDATE entity_match_cache SET invalidated_at = now() "
+                        "WHERE invalidated_at IS NULL"
+                    )
+                    count = cursor.rowcount
+                conn.commit()
+                if count:
+                    logger.info("Invalidated %d entity match cache entries.", count)
+                return count
+        except Exception:
+            return 0
 
 
 def _normalize_external_ids(external_ids: Dict[str, Any]) -> Dict[str, str]:

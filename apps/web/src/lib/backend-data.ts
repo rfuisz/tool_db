@@ -251,6 +251,13 @@ const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
 const REVALIDATE_SECONDS = 30;
 const ALLOW_SEED_FALLBACK = process.env.TOOL_DB_ALLOW_SEED_FALLBACK === "true";
 
+class BackendNotFoundError extends Error {
+  constructor(path: string) {
+    super(`Backend returned 404 for ${path}`);
+    this.name = "BackendNotFoundError";
+  }
+}
+
 type FetchBackendJsonOptions = {
   cacheMode?: "revalidate" | "no-store";
 };
@@ -284,6 +291,9 @@ async function fetchBackendJson<T>(
       : { next: { revalidate: REVALIDATE_SECONDS } }),
   });
 
+  if (response.status === 404) {
+    throw new BackendNotFoundError(path);
+  }
   if (!response.ok) {
     throw new Error(`Backend request failed for ${path}: ${response.status}`);
   }
@@ -806,6 +816,9 @@ export async function getItemBySlug(
     );
     return mapBackendItem(detail);
   } catch (error) {
+    if (error instanceof BackendNotFoundError) {
+      return undefined;
+    }
     if (ALLOW_SEED_FALLBACK) {
       return getSeedItems().find((item) => item.slug === slug);
     }
@@ -872,6 +885,9 @@ export async function getFirstPassEntityByKey(
     );
     return normalizeFirstPassEntityDetail(detail);
   } catch (error) {
+    if (error instanceof BackendNotFoundError) {
+      return undefined;
+    }
     throw backendUnavailableError(
       `first-pass entity detail for ${candidateType}/${slug}`,
       error,

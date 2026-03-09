@@ -111,6 +111,9 @@ def sync_render_database(settings: Settings) -> Dict[str, Any]:
     if not pg_dump or not psql:
         raise RenderDbSyncError("Both pg_dump and psql must be installed to sync databases.")
 
+    target_settings = settings.model_copy(update={"database_url": render_database_url})
+    MigrationRunner(target_settings).apply_all()
+
     started_at = time.time()
     source_summary = _read_database_summary(settings.database_url)
     target_before_summary = _read_database_summary(render_database_url)

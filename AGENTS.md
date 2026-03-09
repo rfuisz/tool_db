@@ -29,6 +29,25 @@
 - Keep sequencing, verification, assay, and delivery choices explicit rather than collapsing them into generic booleans.
 - Record the rationale and source for timing and cost assumptions.
 
+## Concurrency and I/O
+
+- Always parallelize I/O-bound calls. Never loop serially over network fetches when they can be fanned out with `ThreadPoolExecutor`.
+- OpenAI API calls can handle very high parallelism; use `llm_max_concurrency` (default 64) as the worker pool size for LLM and web-research calls.
+- OpenAlex has a low request-per-minute limit. Gate live API calls through `openalex_max_concurrency` (default 3) using a `threading.Semaphore`, but let cached reads bypass the semaphore so reruns stay fast.
+- Other literature providers (Europe PMC, PMC BioC, Semantic Scholar, OptoBase) can use the full `llm_max_concurrency` pool width.
+- Raw upstream payloads are cached in `data/raw/`; the harvester and artifact builder check for a cached payload before making any API call, so repeated corpus runs are mostly local file reads.
+
+## Pipeline Versioning and Staleness
+
+- Extraction and materialization outputs are version-stamped. Current versions live in `src/tool_db_backend/pipeline_versions.py`.
+- Bump `EXTRACTION_VERSION` when prompts, extraction schemas, or first-pass loader normalization logic changes.
+- Bump `MATERIALIZATION_VERSION` when `ItemMaterializer` derivation logic, scoring formulas, or explainer templates change.
+- Rows with a version below the current constant are stale and eligible for re-processing.
+- Use `python apps/worker/main.py staleness-report` to see how many items need re-extraction or re-materialization.
+- Use `python apps/worker/main.py rematerialize-stale` to re-derive content for stale items.
+- Entity resolution results are cached in `entity_match_cache`. The cache auto-invalidates when the item count changes; call `EntityResolver.invalidate_match_cache()` after bulk item additions or name changes.
+- When adding a new extraction field or prompt version, update `EXTRACTION_VERSION` and the migration backfill pattern so existing rows get correctly classified as legacy.
+
 ## Editing Guidance
 
 - Prefer additive changes over speculative rewrites.

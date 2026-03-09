@@ -38,6 +38,27 @@ def _load_schema(settings_repo_root: Path, schema_name: str) -> Dict[str, Any]:
     return json.loads(schema_path.read_text())
 
 
+def _backfill_required_arrays(schema: Dict[str, Any], payload: Dict[str, Any]) -> None:
+    """Fill missing required array/object properties with empty defaults.
+
+    LLM outputs sometimes omit required fields that legitimately have no
+    content (e.g. ``workflow_observations`` for a paper with no workflow
+    data).  Rather than rejecting or re-extracting, we backfill harmless
+    empty defaults so older packets and LLM omissions pass validation.
+    """
+    required = set(schema.get("required", []))
+    properties = schema.get("properties", {})
+    for key in required:
+        if key in payload:
+            continue
+        prop = properties.get(key, {})
+        prop_type = prop.get("type")
+        if prop_type == "array":
+            payload[key] = []
+        elif prop_type == "object":
+            payload[key] = {}
+
+
 def validate_packet(packet_kind: str, payload: Dict[str, Any], settings: Settings) -> None:
     schema_name = PACKET_TO_SCHEMA.get(packet_kind)
     if schema_name is None:
@@ -45,6 +66,7 @@ def validate_packet(packet_kind: str, payload: Dict[str, Any], settings: Setting
 
     registry = _build_registry(settings.schema_root)
     schema = _load_schema(settings.repo_root, schema_name)
+    _backfill_required_arrays(schema, payload)
     validator = Draft202012Validator(schema, registry=registry)
     try:
         validator.validate(payload)

@@ -8,6 +8,7 @@ from tool_db_backend.candidate_filtering import assess_toolkit_item_candidate, l
 from tool_db_backend.config import Settings
 from tool_db_backend.entity_resolution import EntityResolver
 from tool_db_backend.errors import LoadPlanExecutionError
+from tool_db_backend.pipeline_versions import EXTRACTION_VERSION
 from tool_db_backend.postgres_loader import PostgresLoadPlanExecutor
 from tool_db_backend.schema_validation import PACKET_TO_SCHEMA, PacketValidationError, validate_packet
 
@@ -208,9 +209,10 @@ class FirstPassExtractionLoader:
                 insert into extracted_item_candidate (
                   packet_fingerprint, source_document_id, extraction_run_id, packet_kind,
                   local_id, candidate_type, slug, canonical_name, item_type, aliases,
-                  external_ids, evidence_text, matched_item_id, matched_slug, raw_payload
+                  external_ids, evidence_text, matched_item_id, matched_slug, raw_payload,
+                  extraction_version
                 )
-                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::text[], %s::jsonb, %s, %s, %s, %s::jsonb)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::text[], %s::jsonb, %s, %s, %s, %s::jsonb, %s)
                 """,
                 (
                     packet_fingerprint,
@@ -228,6 +230,7 @@ class FirstPassExtractionLoader:
                     matched_item_id,
                     matched_slug,
                     json.dumps(entity),
+                    EXTRACTION_VERSION,
                 ),
             )
 
@@ -265,9 +268,10 @@ class FirstPassExtractionLoader:
                 insert into extracted_claim_candidate (
                   packet_fingerprint, source_document_id, extraction_run_id, packet_kind,
                   local_id, claim_type, claim_text_normalized, polarity, context, metrics,
-                  source_locator, unresolved_ambiguities, raw_payload
+                  source_locator, unresolved_ambiguities, raw_payload,
+                  extraction_version
                 )
-                values (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s)
                 returning id
                 """,
                 (
@@ -284,6 +288,7 @@ class FirstPassExtractionLoader:
                     json.dumps(claim.get("source_locator", {})),
                     json.dumps(claim.get("unresolved_ambiguities", [])),
                     json.dumps(claim),
+                    EXTRACTION_VERSION,
                 ),
             )
             claim_id = cursor.fetchone()[0]

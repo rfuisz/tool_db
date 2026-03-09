@@ -239,11 +239,21 @@ Optional browsing-backed web research can now enrich extraction job context befo
 - the artifact builder injects a structured `web_research_summary` into `input_context` when available
 - that summary is meant to surface additional high-signal source leads and adjacent tool names with explicit provenance, not to bypass the evidence-first packet model
 - the harvest query builder can also use the same browsing-capable model to fan out from strong seed tools into adjacent tool/component names and additional literature queries before OpenAlex / Europe PMC / Semantic Scholar fetches run
+- raw upstream harvest payloads are now reused from `data/raw/` on rerun when the same source/query/page/fulltext key already exists, so repeated corpus harvests do not keep re-hitting OpenAlex / Europe PMC / PMC / Semantic Scholar / OptoBase for identical fetches
+
+Concurrency rules:
+
+- Always parallelize I/O-bound calls. Never loop serially over network fetches. Use `ThreadPoolExecutor` with `llm_max_concurrency` as the default pool width.
+- OpenAI API calls can handle very high parallelism. Use the full `llm_max_concurrency` (default 64) pool for LLM extraction, web-research, and repair calls.
+- OpenAlex has a low RPM limit. Live API calls are gated by a `threading.Semaphore(openalex_max_concurrency)` (default 3), but cached reads bypass the semaphore so reruns stay fast.
+- Europe PMC, PMC BioC, Semantic Scholar, and OptoBase can use the full pool width.
+- The `--limit` flag on `run-extraction-batch` defaults to `0` (run all eligible jobs). There is no secondary cap beyond `llm_max_concurrency`.
 
 Relevant settings:
 
 - `LLM_CACHE_ENABLED` to disable cache reads and writes
-- `LLM_MAX_CONCURRENCY` to control how many extraction jobs can wait on the LLM in parallel
+- `LLM_MAX_CONCURRENCY` to control how many extraction/enrichment/web-research workers run in parallel (default 64)
+- `OPENALEX_MAX_CONCURRENCY` to cap simultaneous live OpenAlex API calls (default 3; cached reads are not gated)
 - `LLM_RETRY_ATTEMPTS` to change total attempts
 - `LLM_RETRY_BASE_DELAY_SECONDS` and `LLM_RETRY_MAX_DELAY_SECONDS` to tune exponential backoff
 - `LLM_WEB_RESEARCH_ENABLED` to turn on the optional browsing-backed source-compilation step

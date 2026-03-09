@@ -14,7 +14,9 @@ alwaysApply: true
 # Operating Defaults
 
 - Prefer derived rollups over hand-maintained summary booleans.
-- Keep scoring explainable and versioned.
+- Keep scoring explainable and versioned. Pipeline version constants live in `src/tool_db_backend/pipeline_versions.py`.
 - If evidence is missing, leave a clear `TODO` instead of inventing a fact.
+- Bump `EXTRACTION_VERSION` when prompts/schemas change; bump `MATERIALIZATION_VERSION` when derivation logic changes.
 - Keep Markdown harness files up to date when behavior changes. Update the relevant agent, prompt, README, or design/spec `.md` files in the same change so instructions stay accurate.
 - Mechanisms are biophysical (how molecular tools work); techniques are engineering methodologies (what category of method). See ADR 0002.
+- Always parallelize I/O-bound calls (`ThreadPoolExecutor`). OpenAI API calls handle high concurrency (`llm_max_concurrency`). OpenAlex has a low RPM limit and needs a `Semaphore` gate on live calls only (`openalex_max_concurrency`).

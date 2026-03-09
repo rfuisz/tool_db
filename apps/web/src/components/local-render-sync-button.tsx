@@ -6,25 +6,12 @@ type SyncResponse = {
   status?: string;
   message?: string;
   error?: string;
+  local_items?: number;
+  render_items?: number;
+  render_items_after?: number;
+  total_upserted?: number;
+  total_deleted?: number;
   duration_seconds?: number;
-  source_summary?: {
-    toolkit_item_count?: number;
-    first_pass_distinct_slug_count?: number;
-  };
-  target_summary?: {
-    toolkit_item_count?: number;
-    first_pass_distinct_slug_count?: number;
-  };
-  target_after_summary?: {
-    toolkit_item_count?: number;
-    first_pass_distinct_slug_count?: number;
-  };
-  render_database_source?: string;
-  render_database?: {
-    postgres_id?: string | null;
-    postgres_name?: string | null;
-    display_url?: string | null;
-  };
 };
 
 type LocalRenderSyncButtonProps = {
@@ -51,25 +38,19 @@ export function LocalRenderSyncButton({
         });
         const payload = (await response.json()) as SyncResponse;
         if (!response.ok) {
-          throw new Error(payload.error || "Render DB sync preflight failed.");
+          throw new Error(payload.error || "Preflight failed.");
         }
-        if (isMounted) {
-          setPreflight(payload);
-        }
+        if (isMounted) setPreflight(payload);
       } catch (error) {
         if (isMounted) {
           setPreflight({
             status: "error",
             error:
-              error instanceof Error
-                ? error.message
-                : "Render DB sync preflight failed.",
+              error instanceof Error ? error.message : "Preflight failed.",
           });
         }
       } finally {
-        if (isMounted) {
-          setIsLoadingPreflight(false);
-        }
+        if (isMounted) setIsLoadingPreflight(false);
       }
     }
 
@@ -79,29 +60,29 @@ export function LocalRenderSyncButton({
     };
   }, []);
 
-  async function handleClick() {
-    const confirmed = window.confirm(
-      "This will overwrite the hosted Render Postgres database with your local database. Continue?",
-    );
-    if (!confirmed) {
-      return;
-    }
+  async function handleSync(mode: "incremental" | "full") {
+    const label =
+      mode === "full"
+        ? "This will TRUNCATE all Render tables and do a full restore. Continue?"
+        : "This will push changed rows to Render. Continue?";
+    if (!window.confirm(label)) return;
 
     setIsSyncing(true);
     setResult(null);
     try {
-      const response = await fetch("/api/admin/sync-render-db", {
-        method: "POST",
-      });
+      const response = await fetch(
+        `/api/admin/sync-render-db?mode=${mode}`,
+        { method: "POST" },
+      );
       const payload = (await response.json()) as SyncResponse;
       if (!response.ok) {
-        throw new Error(payload.error || "Render DB sync failed.");
+        throw new Error(payload.error || "Sync failed.");
       }
       setResult(payload);
     } catch (error) {
       setResult({
         status: "error",
-        error: error instanceof Error ? error.message : "Render DB sync failed.",
+        error: error instanceof Error ? error.message : "Sync failed.",
       });
     } finally {
       setIsSyncing(false);
@@ -110,40 +91,48 @@ export function LocalRenderSyncButton({
 
   const preflightError = preflight?.status === "error" ? preflight.error : null;
   const isError = result?.status === "error";
-  const buttonLabel = isSyncing ? "Syncing Render DB..." : "Sync Render DB";
+  const buttonLabel = isSyncing ? "Syncing..." : "Sync Render DB";
   const isDisabled = isSyncing || isLoadingPreflight || Boolean(preflightError);
-  const targetLabel =
-    preflight?.render_database?.postgres_name ||
-    preflight?.render_database?.display_url ||
-    "unknown";
-  const targetLocation = preflight?.render_database?.display_url || "unknown";
-  const preflightTitle = preflightError
-    ? preflightError
-    : `Target: ${targetLabel} (${targetLocation}). Local items: ${preflight?.source_summary?.toolkit_item_count ?? "?"}. Hosted items: ${preflight?.target_summary?.toolkit_item_count ?? "?"}.`;
+
+  const summaryLine = preflight
+    ? `Local: ${preflight.local_items ?? "?"} / Render: ${preflight.render_items ?? "?"}`
+    : "";
+
+  function formatResult(r: SyncResponse): string {
+    if (r.total_upserted !== undefined) {
+      const parts = [`${r.total_upserted} upserted`];
+      if (r.total_deleted) parts.push(`${r.total_deleted} deleted`);
+      parts.push(`${r.duration_seconds}s`);
+      return parts.join(", ");
+    }
+    return `Render: ${r.render_items_after ?? "?"} items, ${r.duration_seconds}s`;
+  }
 
   if (variant === "nav") {
     return (
       <div className="flex flex-col gap-1">
         <button
           type="button"
-          onClick={handleClick}
-          title={preflightTitle}
+          onClick={() => handleSync("incremental")}
+          title={preflightError ?? summaryLine}
           disabled={isDisabled}
           className="rounded-md border border-edge px-3 py-1.5 font-ui text-xs text-ink transition-colors hover:border-edge-strong hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
         >
           {buttonLabel}
         </button>
         {preflightError ? (
-          <p className="max-w-56 font-ui text-xs text-danger">{preflightError}</p>
+          <p className="max-w-56 font-ui text-xs text-danger">
+            {preflightError}
+          </p>
         ) : result ? (
-          <p className={`max-w-56 font-ui text-xs ${isError ? "text-danger" : "text-valid"}`}>
-            {isError
-              ? result.error
-              : `Hosted items: ${result.target_after_summary?.toolkit_item_count ?? "?"}.`}
+          <p
+            className={`max-w-56 font-ui text-xs ${isError ? "text-danger" : "text-valid"}`}
+          >
+            {isError ? result.error : formatResult(result)}
           </p>
         ) : (
           <p className="font-ui text-[11px] text-ink-muted">
-            {isLoadingPreflight ? "Checking target..." : targetLabel}
+            {isLoadingPreflight ? "Checking..." : summaryLine}
           </p>
         )}
       </div>
@@ -156,63 +145,51 @@ export function LocalRenderSyncButton({
         <div>
           <p className="small-caps text-caution">Local Admin</p>
           <p className="mt-1 font-ui text-sm text-ink-secondary">
-            Overwrite the hosted Render Postgres database with the current local
-            database.
+            Push local database changes to hosted Render Postgres.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleClick}
-          disabled={isDisabled}
-          className="rounded-md border border-edge px-4 py-2 font-ui text-sm text-ink transition-colors hover:border-edge-strong hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {buttonLabel}
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => handleSync("incremental")}
+            disabled={isDisabled}
+            className="rounded-md border border-edge px-4 py-2 font-ui text-sm text-ink transition-colors hover:border-edge-strong hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSyncing ? "Syncing..." : "Incremental Sync"}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSync("full")}
+            disabled={isDisabled}
+            className="rounded-md border border-edge px-4 py-2 font-ui text-sm text-ink-muted transition-colors hover:border-edge-strong hover:text-caution disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Full Sync
+          </button>
+        </div>
       </div>
       <div className="mt-3 font-ui text-sm text-ink-secondary">
         {isLoadingPreflight ? (
-          <p>Checking Render DB target...</p>
+          <p>Checking Render DB...</p>
         ) : preflightError ? (
           <p className="text-danger">{preflightError}</p>
         ) : (
-          <>
-            <p>
-              Target:{" "}
-              <span className="font-data text-ink">
-                {targetLabel}
-              </span>
-            </p>
-            <p>
-              Location:{" "}
-              <span className="font-data text-ink">
-                {targetLocation}
-              </span>
-            </p>
-            <p>
-              Resolution:{" "}
-              <span className="font-data text-ink">
-                {preflight?.render_database_source === "render_api"
-                  ? "Render API"
-                  : "Direct env var"}
-              </span>
-            </p>
-            <p>
-              Local items / hosted items:{" "}
-              <span className="font-data text-ink">
-                {preflight?.source_summary?.toolkit_item_count ?? "?"} /{" "}
-                {preflight?.target_summary?.toolkit_item_count ?? "?"}
-              </span>
-            </p>
-          </>
+          <p>
+            Local items:{" "}
+            <span className="font-data text-ink">
+              {preflight?.local_items ?? "?"}
+            </span>{" "}
+            / Render items:{" "}
+            <span className="font-data text-ink">
+              {preflight?.render_items ?? "?"}
+            </span>
+          </p>
         )}
       </div>
       {result && (
         <p
           className={`mt-3 font-ui text-sm ${isError ? "text-danger" : "text-valid"}`}
         >
-          {isError
-            ? result.error
-            : `${result.message} Local items: ${result.source_summary?.toolkit_item_count ?? "?"}. Hosted items: ${result.target_after_summary?.toolkit_item_count ?? "?"}. Duration: ${result.duration_seconds ?? "?"}s.`}
+          {isError ? result.error : `${result.message} ${formatResult(result)}`}
         </p>
       )}
     </div>

@@ -1,10 +1,13 @@
 import json
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
 
 from tool_db_backend.config import Settings
+
+logger = logging.getLogger(__name__)
 from tool_db_backend.gap_linking import GAP_LINK_SCORE_VERSION
 from tool_db_backend.models import (
     ApprovedItemClaim,
@@ -73,7 +76,7 @@ class KnowledgeRepository:
             try:
                 return self._list_item_browse_from_database()
             except Exception:
-                pass
+                logger.exception("Database item-browse listing failed, falling back to files")
         return [self._item_browse_from_detail(self._get_item_from_files(summary.slug)) for summary in self.list_items()]
 
     def list_items(self) -> List[ItemSummary]:
@@ -81,7 +84,7 @@ class KnowledgeRepository:
             try:
                 return self._list_items_from_database()
             except Exception:
-                pass
+                logger.exception("Database item listing failed, falling back to files")
         return self._list_items_from_files()
 
     def get_item(self, slug: str) -> ItemDetail:
@@ -91,7 +94,7 @@ class KnowledgeRepository:
                 if item is not None:
                     return item
             except Exception:
-                pass
+                logger.exception("Database item detail failed for slug=%s, falling back to files", slug)
         return self._get_item_from_files(slug)
 
     def list_gaps(self) -> List[GapSummary]:
@@ -99,7 +102,7 @@ class KnowledgeRepository:
             try:
                 return self._list_gaps_from_database()
             except Exception:
-                pass
+                logger.exception("Database gap listing failed")
         return []
 
     def get_gap(self, slug: str) -> GapDetail:
@@ -109,7 +112,7 @@ class KnowledgeRepository:
                 if gap is not None:
                     return gap
             except Exception:
-                pass
+                logger.exception("Database gap detail failed for slug=%s", slug)
         raise FileNotFoundError(slug)
 
     def list_workflows(self) -> List[WorkflowSummary]:
@@ -117,7 +120,7 @@ class KnowledgeRepository:
             try:
                 return self._list_workflows_from_database()
             except Exception:
-                pass
+                logger.exception("Database workflow listing failed, falling back to files")
         return self._list_workflows_from_files()
 
     def get_workflow(self, slug: str) -> WorkflowDetail:
@@ -127,7 +130,7 @@ class KnowledgeRepository:
                 if workflow is not None:
                     return workflow
             except Exception:
-                pass
+                logger.exception("Database workflow detail failed for slug=%s, falling back to files", slug)
         return self._get_workflow_from_files(slug)
 
     def get_vocabularies(self) -> VocabularyPayload:

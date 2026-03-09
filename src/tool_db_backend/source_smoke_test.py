@@ -1,5 +1,7 @@
 import json
 import re
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -223,42 +225,55 @@ class RealDataHarvester:
     ) -> Dict[str, Any]:
         artifact_root = artifact_dir or (self.settings.pipeline_artifact_root / "real-data-harvest")
         artifact_root.mkdir(parents=True, exist_ok=True)
+        max_workers = self.settings.llm_max_concurrency
 
-        gap_map_summary = self._safe_fetch(self._fetch_gap_map, "gap_map")
-        europe_pmc_summary = self._safe_fetch(
-            lambda: self._fetch_europe_pmc(
-                queries=europe_pmc_queries,
-                page_size=europe_pmc_page_size,
-                pages=europe_pmc_pages,
-            ),
-            "europe_pmc",
-        )
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            gap_map_future = pool.submit(self._safe_fetch, self._fetch_gap_map, "gap_map")
+            europe_pmc_future = pool.submit(
+                self._safe_fetch,
+                lambda: self._fetch_europe_pmc(
+                    queries=europe_pmc_queries,
+                    page_size=europe_pmc_page_size,
+                    pages=europe_pmc_pages,
+                ),
+                "europe_pmc",
+            )
+            openalex_future = pool.submit(
+                self._safe_fetch,
+                lambda: self._fetch_openalex(
+                    queries=openalex_queries,
+                    per_page=openalex_per_page,
+                    pages=openalex_pages,
+                ),
+                "openalex",
+            )
+            semantic_scholar_future = pool.submit(
+                self._safe_fetch,
+                lambda: self._fetch_semantic_scholar(
+                    queries=semantic_scholar_queries,
+                    limit=semantic_scholar_limit,
+                    pages=semantic_scholar_pages,
+                ),
+                "semantic_scholar",
+            )
+            optobase_future = pool.submit(
+                self._safe_fetch,
+                lambda: self._fetch_optobase(optobase_queries),
+                "optobase",
+            )
+
+            gap_map_summary = gap_map_future.result()
+            europe_pmc_summary = europe_pmc_future.result()
+            openalex_summary = openalex_future.result()
+            semantic_scholar_summary = semantic_scholar_future.result()
+            optobase_summary = optobase_future.result()
+
         pmc_summary = self._safe_fetch(
             lambda: self._fetch_pmc_fulltexts(
                 europe_pmc_summary.get("raw_paths", {}),
                 limit=pmc_fulltext_limit,
             ),
             "pmc",
-        )
-        openalex_summary = self._safe_fetch(
-            lambda: self._fetch_openalex(
-                queries=openalex_queries,
-                per_page=openalex_per_page,
-                pages=openalex_pages,
-            ),
-            "openalex",
-        )
-        semantic_scholar_summary = self._safe_fetch(
-            lambda: self._fetch_semantic_scholar(
-                queries=semantic_scholar_queries,
-                limit=semantic_scholar_limit,
-                pages=semantic_scholar_pages,
-            ),
-            "semantic_scholar",
-        )
-        optobase_summary = self._safe_fetch(
-            lambda: self._fetch_optobase(optobase_queries),
-            "optobase",
         )
 
         total_entries = (
@@ -318,12 +333,11 @@ class RealDataHarvester:
         source_key: str,
         resource_type: str,
         external_id: str,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[Any]:
         reader = getattr(self.raw_store, "read_json_payload", None)
         if reader is None:
             return None
-        payload = reader(source_key, resource_type, external_id)
-        return payload if isinstance(payload, dict) else None
+        return reader(source_key, resource_type, external_id)
 
     def _read_cached_text_payload(
         self,
@@ -371,52 +385,69 @@ class RealDataHarvester:
             "cache_hits": cache_hits,
         }
 
+    def _fetch_single_europe_pmc_page(self, query: str, page_size: int, page: int) -> Dict[str, Any]:
+        external_id = f"{_slugify(query)}-page-{page}"
+        payload = self._read_cached_json_payload(
+            source_key="europe_pmc", resource_type="search", external_id=external_id,
+        )
+        cached = payload is not None
+        if payload is None:
+            payload = self.europe_pmc_client.search(
+                query=query, page_size=page_size, page=page, result_type="core",
+            )
+        results = ((payload.get("resultList") or {}).get("result") or [])
+        raw_path = self.raw_store.write_json_payload(
+            source_key="europe_pmc", resource_type="search", external_id=external_id, payload=payload,
+        )
+        result_ids = [
+            str(r.get("id") or r.get("pmid") or r.get("doi"))
+            for r in results if r.get("id") or r.get("pmid") or r.get("doi")
+        ]
+        return {"query": query, "page": page, "count": len(results), "ids": result_ids,
+                "raw_path": str(raw_path), "cached": cached}
+
     def _fetch_europe_pmc(self, queries: List[str], page_size: int, pages: int) -> Dict[str, Any]:
-        seen_ids = set()
+        seen_ids: set = set()
         counts: Dict[str, int] = {}
         raw_paths: Dict[str, str] = {}
         cache_hits = 0
-        for query in queries:
-            query_total = 0
-            for page in range(1, pages + 1):
-                external_id = f"{_slugify(query)}-page-{page}"
-                payload = self._read_cached_json_payload(
-                    source_key="europe_pmc",
-                    resource_type="search",
-                    external_id=external_id,
-                )
-                if payload is None:
-                    payload = self.europe_pmc_client.search(
-                        query=query,
-                        page_size=page_size,
-                        page=page,
-                        result_type="core",
-                    )
-                else:
+        tasks = [(q, p) for q in queries for p in range(1, pages + 1)]
+        with ThreadPoolExecutor(max_workers=self.settings.llm_max_concurrency) as pool:
+            futures = {
+                pool.submit(self._fetch_single_europe_pmc_page, q, page_size, p): (q, p)
+                for q, p in tasks
+            }
+            for future in as_completed(futures):
+                result = future.result()
+                q, p = result["query"], result["page"]
+                counts[f"{q} [page {p}]"] = result["count"]
+                seen_ids.update(result["ids"])
+                raw_paths[f"{q} [page {p}]"] = result["raw_path"]
+                if result["cached"]:
                     cache_hits += 1
-                results = ((payload.get("resultList") or {}).get("result") or [])
-                counts[f"{query} [page {page}]"] = len(results)
-                query_total += len(results)
-                for result in results:
-                    result_id = result.get("id") or result.get("pmid") or result.get("doi")
-                    if result_id:
-                        seen_ids.add(str(result_id))
-                raw_path = self.raw_store.write_json_payload(
-                    source_key="europe_pmc",
-                    resource_type="search",
-                    external_id=external_id,
-                    payload=payload,
-                )
-                raw_paths[f"{query} [page {page}]"] = str(raw_path)
-                if not results:
-                    break
-            counts[query] = query_total
+        for query in queries:
+            counts[query] = sum(counts.get(f"{query} [page {p}]", 0) for p in range(1, pages + 1))
         return {
             "queries": counts,
             "entry_count": len(seen_ids),
             "raw_paths": raw_paths,
             "cache_hits": cache_hits,
         }
+
+    def _fetch_single_pmc_fulltext(self, pmcid: str) -> Dict[str, Any]:
+        payload = self._read_cached_json_payload(
+            source_key="pmc", resource_type="bioc_fulltext", external_id=pmcid,
+        )
+        cached = payload is not None
+        if payload is None:
+            try:
+                payload = self.pmc_client.fetch_bioc_fulltext(pmcid)
+            except (httpx.HTTPError, ValueError) as exc:
+                return {"pmcid": pmcid, "error": str(exc), "cached": False}
+        raw_path = self.raw_store.write_json_payload(
+            source_key="pmc", resource_type="bioc_fulltext", external_id=pmcid, payload=payload,
+        )
+        return {"pmcid": pmcid, "raw_path": str(raw_path), "cached": cached}
 
     def _fetch_pmc_fulltexts(self, europe_pmc_raw_paths: Dict[str, str], limit: int) -> Dict[str, Any]:
         raw_paths: Dict[str, str] = {}
@@ -439,27 +470,16 @@ class RealDataHarvester:
             if limit > 0 and len(pmcids) >= limit:
                 break
 
-        for pmcid in pmcids:
-            payload = self._read_cached_json_payload(
-                source_key="pmc",
-                resource_type="bioc_fulltext",
-                external_id=pmcid,
-            )
-            if payload is None:
-                try:
-                    payload = self.pmc_client.fetch_bioc_fulltext(pmcid)
-                except (httpx.HTTPError, ValueError) as exc:
-                    errors[pmcid] = str(exc)
-                    continue
-            else:
-                cache_hits += 1
-            raw_path = self.raw_store.write_json_payload(
-                source_key="pmc",
-                resource_type="bioc_fulltext",
-                external_id=pmcid,
-                payload=payload,
-            )
-            raw_paths[pmcid] = str(raw_path)
+        with ThreadPoolExecutor(max_workers=self.settings.llm_max_concurrency) as pool:
+            futures = {pool.submit(self._fetch_single_pmc_fulltext, pmcid): pmcid for pmcid in pmcids}
+            for future in as_completed(futures):
+                result = future.result()
+                if "error" in result:
+                    errors[result["pmcid"]] = result["error"]
+                else:
+                    raw_paths[result["pmcid"]] = result["raw_path"]
+                    if result["cached"]:
+                        cache_hits += 1
         return {
             "entry_count": len(raw_paths),
             "requested_pmcids": pmcids,
@@ -468,41 +488,47 @@ class RealDataHarvester:
             "cache_hits": cache_hits,
         }
 
+    def _fetch_single_openalex_page(
+        self, query: str, per_page: int, page: int, api_semaphore: threading.Semaphore,
+    ) -> Dict[str, Any]:
+        external_id = f"{_slugify(query)}-page-{page}"
+        payload = self._read_cached_json_payload(
+            source_key="openalex", resource_type="work_search", external_id=external_id,
+        )
+        cached = payload is not None
+        if payload is None:
+            with api_semaphore:
+                payload = self.openalex_client.search_works(query=query, per_page=per_page, page=page)
+        results = payload.get("results", [])
+        raw_path = self.raw_store.write_json_payload(
+            source_key="openalex", resource_type="work_search", external_id=external_id, payload=payload,
+        )
+        result_ids = [r.get("id") for r in results if r.get("id")]
+        return {"query": query, "page": page, "count": len(results), "ids": result_ids,
+                "raw_path": str(raw_path), "cached": cached}
+
     def _fetch_openalex(self, queries: List[str], per_page: int, pages: int) -> Dict[str, Any]:
-        seen_ids = set()
+        seen_ids: set = set()
         counts: Dict[str, int] = {}
         raw_paths: Dict[str, str] = {}
         cache_hits = 0
-        for query in queries:
-            query_total = 0
-            for page in range(1, pages + 1):
-                external_id = f"{_slugify(query)}-page-{page}"
-                payload = self._read_cached_json_payload(
-                    source_key="openalex",
-                    resource_type="work_search",
-                    external_id=external_id,
-                )
-                if payload is None:
-                    payload = self.openalex_client.search_works(query=query, per_page=per_page, page=page)
-                else:
+        api_semaphore = threading.Semaphore(self.settings.openalex_max_concurrency)
+        tasks = [(q, p) for q in queries for p in range(1, pages + 1)]
+        with ThreadPoolExecutor(max_workers=self.settings.llm_max_concurrency) as pool:
+            futures = {
+                pool.submit(self._fetch_single_openalex_page, q, per_page, p, api_semaphore): (q, p)
+                for q, p in tasks
+            }
+            for future in as_completed(futures):
+                result = future.result()
+                q, p = result["query"], result["page"]
+                counts[f"{q} [page {p}]"] = result["count"]
+                seen_ids.update(result["ids"])
+                raw_paths[f"{q} [page {p}]"] = result["raw_path"]
+                if result["cached"]:
                     cache_hits += 1
-                results = payload.get("results", [])
-                counts[f"{query} [page {page}]"] = len(results)
-                query_total += len(results)
-                for result in results:
-                    result_id = result.get("id")
-                    if result_id:
-                        seen_ids.add(result_id)
-                raw_path = self.raw_store.write_json_payload(
-                    source_key="openalex",
-                    resource_type="work_search",
-                    external_id=external_id,
-                    payload=payload,
-                )
-                raw_paths[f"{query} [page {page}]"] = str(raw_path)
-                if not results:
-                    break
-            counts[query] = query_total
+        for query in queries:
+            counts[query] = sum(counts.get(f"{query} [page {p}]", 0) for p in range(1, pages + 1))
         return {
             "queries": counts,
             "entry_count": len(seen_ids),
@@ -510,81 +536,80 @@ class RealDataHarvester:
             "cache_hits": cache_hits,
         }
 
+    def _fetch_single_semantic_scholar_page(self, query: str, limit: int, page: int) -> Dict[str, Any]:
+        offset = page * limit
+        external_id = f"{_slugify(query)}-page-{page + 1}"
+        payload = self._read_cached_json_payload(
+            source_key="semantic_scholar", resource_type="paper_search", external_id=external_id,
+        )
+        cached = payload is not None
+        if payload is None:
+            payload = self.semantic_scholar_client.search_papers(
+                query=query, limit=limit, offset=offset, fields=self.DEFAULT_SEMANTIC_SCHOLAR_FIELDS,
+            )
+        results = payload.get("data", [])
+        raw_path = self.raw_store.write_json_payload(
+            source_key="semantic_scholar", resource_type="paper_search", external_id=external_id, payload=payload,
+        )
+        paper_ids = [r.get("paperId") for r in results if r.get("paperId")]
+        return {"query": query, "page": page, "count": len(results), "ids": paper_ids,
+                "raw_path": str(raw_path), "cached": cached}
+
     def _fetch_semantic_scholar(self, queries: List[str], limit: int, pages: int) -> Dict[str, Any]:
         counts: Dict[str, int] = {}
         raw_paths: Dict[str, str] = {}
-        seen_ids = set()
+        seen_ids: set = set()
         cache_hits = 0
-        for query in queries:
-            query_total = 0
-            for page in range(pages):
-                offset = page * limit
-                external_id = f"{_slugify(query)}-page-{page + 1}"
-                payload = self._read_cached_json_payload(
-                    source_key="semantic_scholar",
-                    resource_type="paper_search",
-                    external_id=external_id,
-                )
-                if payload is None:
-                    payload = self.semantic_scholar_client.search_papers(
-                        query=query,
-                        limit=limit,
-                        offset=offset,
-                        fields=self.DEFAULT_SEMANTIC_SCHOLAR_FIELDS,
-                    )
-                else:
+        tasks = [(q, p) for q in queries for p in range(pages)]
+        with ThreadPoolExecutor(max_workers=self.settings.llm_max_concurrency) as pool:
+            futures = {
+                pool.submit(self._fetch_single_semantic_scholar_page, q, limit, p): (q, p)
+                for q, p in tasks
+            }
+            for future in as_completed(futures):
+                result = future.result()
+                q, p = result["query"], result["page"]
+                counts[f"{q} [page {p + 1}]"] = result["count"]
+                seen_ids.update(result["ids"])
+                raw_paths[f"{q} [page {p + 1}]"] = result["raw_path"]
+                if result["cached"]:
                     cache_hits += 1
-                results = payload.get("data", [])
-                counts[f"{query} [page {page + 1}]"] = len(results)
-                query_total += len(results)
-                for result in results:
-                    paper_id = result.get("paperId")
-                    if paper_id:
-                        seen_ids.add(paper_id)
-                raw_path = self.raw_store.write_json_payload(
-                    source_key="semantic_scholar",
-                    resource_type="paper_search",
-                    external_id=external_id,
-                    payload=payload,
-                )
-                raw_paths[f"{query} [page {page + 1}]"] = str(raw_path)
-                if len(results) < limit:
-                    break
-            counts[query] = query_total
+        for query in queries:
+            counts[query] = sum(counts.get(f"{query} [page {p + 1}]", 0) for p in range(pages))
         return {
             "queries": counts,
             "entry_count": len(seen_ids),
             "raw_paths": raw_paths,
             "cache_hits": cache_hits,
         }
+
+    def _fetch_single_optobase(self, query: str) -> Dict[str, Any]:
+        external_id = _slugify(query)
+        payload_text = self._read_cached_text_payload(
+            source_key="optobase", resource_type="search_html", external_id=external_id,
+        )
+        cached = payload_text is not None
+        if payload_text is None:
+            payload_text = self.optobase_client.fetch_search_page(query=query)
+        raw_path = self.raw_store.write_text_payload(
+            source_key="optobase", resource_type="search_html", external_id=external_id,
+            payload_text=payload_text, content_type="text/html",
+        )
+        count = self.optobase_parser.parse_html(payload_text, query=query).get("result_count", 0)
+        return {"query": query, "raw_path": str(raw_path), "count": count, "cached": cached}
 
     def _fetch_optobase(self, queries: List[str]) -> Dict[str, Any]:
         raw_paths: Dict[str, str] = {}
         parsed_result_counts: Dict[str, int] = {}
         cache_hits = 0
-        for query in queries:
-            external_id = _slugify(query)
-            payload_text = self._read_cached_text_payload(
-                source_key="optobase",
-                resource_type="search_html",
-                external_id=external_id,
-            )
-            if payload_text is None:
-                payload_text = self.optobase_client.fetch_search_page(query=query)
-            else:
-                cache_hits += 1
-            raw_path = self.raw_store.write_text_payload(
-                source_key="optobase",
-                resource_type="search_html",
-                external_id=external_id,
-                payload_text=payload_text,
-                content_type="text/html",
-            )
-            raw_paths[query] = str(raw_path)
-            parsed_result_counts[query] = self.optobase_parser.parse_html(payload_text, query=query).get(
-                "result_count",
-                0,
-            )
+        with ThreadPoolExecutor(max_workers=self.settings.llm_max_concurrency) as pool:
+            futures = {pool.submit(self._fetch_single_optobase, q): q for q in queries}
+            for future in as_completed(futures):
+                result = future.result()
+                raw_paths[result["query"]] = result["raw_path"]
+                parsed_result_counts[result["query"]] = result["count"]
+                if result["cached"]:
+                    cache_hits += 1
         return {
             "queries": queries,
             "entry_count": sum(parsed_result_counts.values()),

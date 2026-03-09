@@ -2,7 +2,7 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from tool_db_backend.config import Settings
 
@@ -86,7 +86,7 @@ class RawPayloadStore:
         source_key: str,
         resource_type: str,
         external_id: str,
-    ) -> Dict[str, Any] | None:
+    ) -> Optional[Any]:
         target_path = self.json_payload_path(source_key, resource_type, external_id)
         if not target_path.exists():
             return None
@@ -94,15 +94,14 @@ class RawPayloadStore:
             wrapped_payload = json.loads(target_path.read_text())
         except (OSError, json.JSONDecodeError):
             return None
-        payload = wrapped_payload.get("payload")
-        return payload if isinstance(payload, dict) else None
+        return wrapped_payload.get("payload")
 
     def read_text_payload(
         self,
         source_key: str,
         resource_type: str,
         external_id: str,
-    ) -> str | None:
+    ) -> Optional[str]:
         target_path = self.text_payload_path(source_key, resource_type, external_id)
         if not target_path.exists():
             return None

@@ -13,6 +13,13 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from tool_db_backend.config import get_settings
+from tool_db_backend.pipeline_versions import (
+    EXTRACTION_VERSION,
+    MATERIALIZATION_VERSION,
+    find_stale_extraction_items,
+    find_stale_materialization_items,
+    staleness_report as build_staleness_report,
+)
 from tool_db_backend.clients.clinicaltrials import ClinicalTrialsClient
 from tool_db_backend.clients.europe_pmc import EuropePMCClient
 from tool_db_backend.clients.gap_map import GapMapClient
@@ -581,7 +588,7 @@ def _run_extraction_job_path(settings, job_path: Path) -> Dict[str, str]:
 
 def run_extraction_batch(
     job_dir: str,
-    limit: Optional[int] = 50,
+    limit: Optional[int] = 0,
     include_terms: Optional[List[str]] = None,
     exclude_terms: Optional[List[str]] = None,
     skip_existing: bool = True,
@@ -655,6 +662,67 @@ def run_extraction_batch(
 
     print(json.dumps(report, indent=2))
     return 0 if not failures else 1
+
+
+def report_staleness(output_path: Optional[str] = None) -> int:
+    """Print a staleness report showing items needing re-extraction or re-materialization."""
+    import psycopg
+
+    settings = get_settings()
+    if not settings.database_url:
+        print("DATABASE_URL is required.", file=sys.stderr)
+        return 1
+
+    with psycopg.connect(settings.database_url) as conn:
+        with conn.cursor() as cursor:
+            report = build_staleness_report(cursor)
+            stale_extraction = find_stale_extraction_items(cursor, limit=20)
+            stale_materialization = find_stale_materialization_items(cursor, limit=20)
+
+    report["sample_stale_extraction_items"] = [
+        {"slug": item["slug"], "best_version": item["best_extraction_version"]}
+        for item in stale_extraction
+    ]
+    report["sample_stale_materialization_items"] = [
+        {"slug": item["slug"], "best_version": item["best_derived_version"]}
+        for item in stale_materialization
+    ]
+
+    output = json.dumps(report, indent=2, default=str)
+    print(output)
+    if output_path:
+        path = Path(output_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(output + "\n")
+    return 0
+
+
+def rematerialize_stale(item_limit: Optional[int] = None) -> int:
+    """Re-materialize items whose derived content is below the current version."""
+    import psycopg
+
+    settings = get_settings()
+    if not settings.database_url:
+        print("DATABASE_URL is required.", file=sys.stderr)
+        return 1
+
+    with psycopg.connect(settings.database_url) as conn:
+        with conn.cursor() as cursor:
+            stale = find_stale_materialization_items(cursor, limit=item_limit)
+
+    if not stale:
+        print(json.dumps({"message": "No stale items to re-materialize.", "count": 0}))
+        return 0
+
+    slugs = [item["slug"] for item in stale]
+    logger.info("Re-materializing %d stale items.", len(slugs))
+
+    materializer = ItemMaterializer(settings)
+    report = materializer.refresh(item_slugs=slugs)
+    report["trigger"] = "rematerialize_stale"
+    report["stale_item_count"] = len(slugs)
+    print(json.dumps(report, indent=2, default=str))
+    return 0
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -887,8 +955,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     extraction_batch_parser.add_argument(
         "--limit",
         type=int,
-        default=50,
-        help="Maximum jobs to run; pass 0 to run all eligible jobs.",
+        default=0,
+        help="Maximum jobs to run; 0 means run all eligible jobs.",
     )
     extraction_batch_parser.add_argument(
         "--max-workers",
@@ -915,6 +983,23 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     extraction_batch_parser.set_defaults(skip_existing=True)
     extraction_batch_parser.add_argument("--manifest-path")
+
+    staleness_parser = subparsers.add_parser(
+        "staleness-report",
+        help="Show how many items need re-extraction or re-materialization.",
+    )
+    staleness_parser.add_argument("--output-path")
+
+    rematerialize_parser = subparsers.add_parser(
+        "rematerialize-stale",
+        help="Re-materialize items whose derived content is below the current pipeline version.",
+    )
+    rematerialize_parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum items to re-materialize; omit to process all stale items.",
+    )
 
     parsed = parser.parse_args(args)
 
@@ -1031,6 +1116,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             parsed.manifest_path,
             parsed.max_workers,
         )
+    if parsed.command == "staleness-report":
+        return report_staleness(parsed.output_path)
+    if parsed.command == "rematerialize-stale":
+        return rematerialize_stale(parsed.limit)
 
     parser.print_help()
     return 2

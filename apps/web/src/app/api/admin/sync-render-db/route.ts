@@ -1,231 +1,148 @@
-import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { execSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { gzipSync } from "node:zlib";
 
 import { NextResponse } from "next/server";
 
-import { getApiBaseUrl } from "@/lib/backend-data";
 import { isLocalAdminEnabled } from "@/lib/first-pass-access";
 
 export const runtime = "nodejs";
 
 const MAX_BUFFER_BYTES = 256 * 1024 * 1024;
 
-type SyncPayload = Record<string, unknown> & {
-  source_summary?: {
-    toolkit_item_count?: number;
-    first_pass_distinct_slug_count?: number;
-  };
-};
-
-function getHostedSyncConfig():
-  | { targetUrl: string; adminSyncKey: string }
-  | null {
-  const targetUrl = (process.env.TOOL_DB_SYNC_TARGET_URL ?? "")
-    .trim()
-    .replace(/\/$/, "");
-  const adminSyncKey = (process.env.TOOL_DB_ADMIN_SYNC_KEY ?? "").trim();
-  if (targetUrl && adminSyncKey) {
-    return { targetUrl, adminSyncKey };
+function loadRepoEnv(): Record<string, string> {
+  const candidates = [
+    path.resolve(process.cwd(), ".env"),
+    path.resolve(process.cwd(), "..", "..", ".env"),
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      const vars: Record<string, string> = {};
+      for (const line of readFileSync(candidate, "utf8").split("\n")) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) continue;
+        const eqIdx = trimmed.indexOf("=");
+        if (eqIdx < 1) continue;
+        vars[trimmed.slice(0, eqIdx).trim()] = trimmed.slice(eqIdx + 1).trim();
+      }
+      return vars;
+    }
   }
+  return {};
+}
 
-  if (targetUrl || adminSyncKey) {
-    throw new Error(
-      "Set both TOOL_DB_SYNC_TARGET_URL and TOOL_DB_ADMIN_SYNC_KEY to enable hosted import sync.",
-    );
-  }
-
-  return null;
+function envVar(key: string): string {
+  const value = (process.env[key] ?? "").trim();
+  if (value) return value;
+  const repoEnv = loadRepoEnv();
+  return (repoEnv[key] ?? "").trim();
 }
 
 function getRepoRoot(): string {
   const cwd = process.cwd();
-  if (existsSync(path.join(cwd, "apps", "web"))) {
-    return cwd;
-  }
+  if (existsSync(path.join(cwd, "apps", "web"))) return cwd;
   return path.resolve(cwd, "..", "..");
 }
 
-function getPythonPath(repoRoot: string): string {
-  const venvPython = path.join(repoRoot, ".venv", "bin", "python");
-  return existsSync(venvPython) ? venvPython : "python3";
+function getPythonPath(): string {
+  const venv = path.join(getRepoRoot(), ".venv", "bin", "python");
+  return existsSync(venv) ? venv : "python3";
 }
 
-function getPgDumpPath(): string {
-  const configuredPath = (process.env.PG_DUMP_PATH ?? "").trim();
-  if (configuredPath) {
-    return configuredPath;
-  }
-
-  const homebrewPath = "/opt/homebrew/opt/libpq/bin/pg_dump";
-  return existsSync(homebrewPath) ? homebrewPath : "pg_dump";
+function getPgBinDir(): string {
+  if (existsSync("/opt/homebrew/opt/libpq/bin")) return "/opt/homebrew/opt/libpq/bin";
+  if (existsSync("/usr/local/opt/libpq/bin")) return "/usr/local/opt/libpq/bin";
+  return "";
 }
 
 function getLocalDatabaseUrl(): string {
-  const databaseUrl = (process.env.DATABASE_URL ?? "").trim();
-  if (!databaseUrl) {
-    throw new Error("DATABASE_URL must be set before syncing.");
-  }
-
-  return databaseUrl;
+  const url = envVar("DATABASE_URL");
+  if (!url) throw new Error("DATABASE_URL is not set.");
+  return url;
 }
 
-function readLocalDatabaseSummary(): SyncPayload["source_summary"] {
+function getRenderExternalUrl(): string {
+  const url = envVar("RENDER_POSTGRES_EXTERNAL_URL");
+  if (!url) throw new Error("RENDER_POSTGRES_EXTERNAL_URL is not set.");
+  return url;
+}
+
+function shellEnv(): NodeJS.ProcessEnv {
+  const pgBin = getPgBinDir();
   const repoRoot = getRepoRoot();
-  const pythonPath = getPythonPath(repoRoot);
-  const stdout = execFileSync(
-    pythonPath,
-    [
-      "-c",
-      [
-        "import json",
-        "from tool_db_backend.config import get_settings",
-        "from tool_db_backend.render_db_sync import _read_database_summary",
-        "settings = get_settings()",
-        "print(json.dumps(_read_database_summary(settings.database_url)))",
-      ].join("; "),
-    ],
-    {
-      cwd: repoRoot,
-      env: {
-        ...process.env,
-        PYTHONPATH: [process.env.PYTHONPATH, "src"].filter(Boolean).join(":"),
-      },
-      encoding: "utf8",
-      maxBuffer: MAX_BUFFER_BYTES,
-    },
+  return {
+    ...process.env,
+    ...(pgBin ? { PATH: `${pgBin}:${process.env.PATH ?? ""}` } : {}),
+    PYTHONPATH: [process.env.PYTHONPATH, path.join(repoRoot, "src")]
+      .filter(Boolean)
+      .join(":"),
+  };
+}
+
+function queryCount(databaseUrl: string, table: string): number {
+  const out = execSync(
+    `psql "${databaseUrl}" -t -A -c "SELECT count(*) FROM ${table};"`,
+    { env: shellEnv(), encoding: "utf8", maxBuffer: MAX_BUFFER_BYTES },
   );
-  return JSON.parse(stdout) as SyncPayload["source_summary"];
+  return parseInt(out.trim(), 10);
 }
 
-function dumpLocalDatabaseSql(): Buffer {
-  const dumpOutput = execFileSync(
-    getPgDumpPath(),
-    [
-      "--data-only",
-      "--inserts",
-      "--no-owner",
-      "--no-privileges",
-      "--dbname",
-      getLocalDatabaseUrl(),
-    ],
-    {
-      cwd: getRepoRoot(),
-      env: process.env,
-      maxBuffer: MAX_BUFFER_BYTES,
-    },
-  );
-  return Buffer.isBuffer(dumpOutput)
-    ? dumpOutput
-    : Buffer.from(dumpOutput, "utf8");
-}
-
-async function readJsonPayload(
-  response: Response,
-  fallbackError: string,
-): Promise<SyncPayload> {
-  const payload = await response.json().catch(() => ({ error: fallbackError }));
-  return (payload ?? { error: fallbackError }) as SyncPayload;
-}
-
-function respond(payload: SyncPayload, status: number): NextResponse {
-  return NextResponse.json(payload, { status });
+function respond(body: Record<string, unknown>, status = 200) {
+  return NextResponse.json(body, { status });
 }
 
 export async function GET() {
   if (!(await isLocalAdminEnabled())) {
-    return respond(
-      { error: "Render DB sync is only available from localhost." },
-      403,
-    );
+    return respond({ error: "Only available from localhost." }, 403);
   }
 
   try {
-    const hostedSyncConfig = getHostedSyncConfig();
-    if (hostedSyncConfig) {
-      const [sourceSummary, response] = await Promise.all([
-        Promise.resolve().then(readLocalDatabaseSummary),
-        fetch(`${hostedSyncConfig.targetUrl}/api/admin/import-db`, {
-          method: "GET",
-          cache: "no-store",
-          headers: { "x-api-key": hostedSyncConfig.adminSyncKey },
-        }),
-      ]);
-      const payload = await readJsonPayload(
-        response,
-        "Hosted database import preflight failed with a non-JSON response.",
-      );
-      return respond({ ...payload, source_summary: sourceSummary }, response.status);
-    }
-
-    const response = await fetch(`${getApiBaseUrl()}/api/v1/admin/sync-render-db`, {
-      method: "GET",
-      cache: "no-store",
+    const localUrl = getLocalDatabaseUrl();
+    const renderUrl = getRenderExternalUrl();
+    const localItems = queryCount(localUrl, "toolkit_item");
+    const renderItems = queryCount(renderUrl, "toolkit_item");
+    return respond({
+      status: "ready",
+      local_items: localItems,
+      render_items: renderItems,
     });
-    const payload = await readJsonPayload(
-      response,
-      "Render DB sync preflight failed with a non-JSON response.",
-    );
-    return respond(payload, response.status);
   } catch (error) {
     return respond(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Render DB sync preflight failed.",
-      },
+      { error: error instanceof Error ? error.message : "Preflight failed." },
       500,
     );
   }
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   if (!(await isLocalAdminEnabled())) {
-    return respond(
-      { error: "Render DB sync is only available from localhost." },
-      403,
-    );
+    return respond({ error: "Only available from localhost." }, 403);
   }
 
   try {
-    const hostedSyncConfig = getHostedSyncConfig();
-    if (hostedSyncConfig) {
-      const sourceSummary = readLocalDatabaseSummary();
-      const compressedDump = gzipSync(dumpLocalDatabaseSql());
-      const response = await fetch(`${hostedSyncConfig.targetUrl}/api/admin/import-db`, {
-        method: "POST",
-        cache: "no-store",
-        headers: {
-          "content-encoding": "gzip",
-          "content-type": "application/sql; charset=utf-8",
-          "x-api-key": hostedSyncConfig.adminSyncKey,
-        },
-        body: compressedDump,
-      });
-      const payload = await readJsonPayload(
-        response,
-        "Hosted database import failed with a non-JSON response.",
-      );
-      return respond({ ...payload, source_summary: sourceSummary }, response.status);
-    }
+    const localUrl = getLocalDatabaseUrl();
+    const renderUrl = getRenderExternalUrl();
+    const url = new URL(request.url);
+    const mode = url.searchParams.get("mode") ?? "incremental";
+    const fullFlag = mode === "full" ? " --full" : "";
 
-    const response = await fetch(`${getApiBaseUrl()}/api/v1/admin/sync-render-db`, {
-      method: "POST",
-      cache: "no-store",
-    });
-    const payload = await readJsonPayload(
-      response,
-      "Render DB sync failed with a non-JSON response.",
+    const pythonPath = getPythonPath();
+    const stdout = execSync(
+      `${pythonPath} -m tool_db_backend.incremental_sync "${localUrl}" "${renderUrl}"${fullFlag}`,
+      {
+        cwd: getRepoRoot(),
+        env: shellEnv(),
+        encoding: "utf8",
+        maxBuffer: MAX_BUFFER_BYTES,
+        timeout: 300_000,
+      },
     );
-    return respond(payload, response.status);
+
+    const report = JSON.parse(stdout) as Record<string, unknown>;
+    return respond(report);
   } catch (error) {
     return respond(
-      {
-        error:
-          error instanceof Error ? error.message : "Render DB sync failed.",
-      },
+      { error: error instanceof Error ? error.message : "Sync failed." },
       500,
     );
   }

@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from tool_db_backend.config import Settings
 from tool_db_backend.errors import LoadPlanExecutionError
+from tool_db_backend.pipeline_versions import MATERIALIZATION_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -164,8 +165,8 @@ class ItemContext:
 
 
 class ItemMaterializer:
-    SCORE_VERSION = "v1"
-    DERIVATION_VERSION = "v1"
+    SCORE_VERSION = MATERIALIZATION_VERSION
+    DERIVATION_VERSION = MATERIALIZATION_VERSION
     PROGRESS_LOG_INTERVAL = 100
 
     def __init__(self, settings: Settings, connection: Any = None) -> None:
@@ -221,6 +222,13 @@ class ItemMaterializer:
                         len(item_rows),
                         len(target_item_ids),
                     )
+
+                    backfill_count = self._backfill_candidate_matched_ids(cursor)
+                    if backfill_count:
+                        logger.info("Backfilled matched_item_id for %s extracted candidates.", backfill_count)
+                    claim_link_count = self._backfill_claim_subject_links(cursor)
+                    if claim_link_count:
+                        logger.info("Backfilled %s claim_subject_link rows from citations.", claim_link_count)
 
                     fetch_started_at = perf_counter()
                     item_contexts: Dict[Any, ItemContext] = {}
@@ -330,6 +338,38 @@ class ItemMaterializer:
         import psycopg
 
         return psycopg.connect(self.settings.database_url), True
+
+    @staticmethod
+    def _backfill_candidate_matched_ids(cursor: Any) -> int:
+        """Link extracted_item_candidate rows to toolkit_item by slug and synonym match."""
+        cursor.execute("""
+            update extracted_item_candidate eic
+            set matched_item_id = ti.id
+            from toolkit_item ti
+            where eic.slug = ti.slug
+              and eic.matched_item_id is null
+        """)
+        slug_count = cursor.rowcount
+        cursor.execute("""
+            update extracted_item_candidate eic
+            set matched_item_id = syn.item_id
+            from item_synonym syn
+            where lower(replace(eic.slug, '-', ' ')) = lower(syn.synonym)
+              and eic.matched_item_id is null
+        """)
+        return slug_count + cursor.rowcount
+
+    @staticmethod
+    def _backfill_claim_subject_links(cursor: Any) -> int:
+        """Ensure every claim from a cited source document is linked to the item."""
+        cursor.execute("""
+            insert into claim_subject_link (id, claim_id, item_id, subject_role)
+            select gen_random_uuid(), ec.id, ic.item_id, 'subject'
+            from item_citation ic
+            join extracted_claim ec on ec.source_document_id = ic.source_document_id
+            on conflict do nothing
+        """)
+        return cursor.rowcount
 
     @staticmethod
     def _load_item_rows(cursor: Any) -> List[Dict[str, Any]]:
@@ -1043,24 +1083,40 @@ class ItemMaterializer:
         context: ItemContext,
         *,
         claim_types: Optional[Sequence[str]] = None,
+        claim_type_prefixes: Optional[Sequence[str]] = None,
         keywords: Optional[Sequence[str]] = None,
     ) -> List[Dict[str, Any]]:
         statements: List[Dict[str, Any]] = []
         seen = set()
         allowed_claim_types = set(claim_types or [])
+        prefix_tokens = tuple(claim_type_prefixes or ())
         keyword_tokens = [keyword.casefold() for keyword in (keywords or [])]
+        has_type_filter = bool(allowed_claim_types or prefix_tokens)
+        has_kw_filter = bool(keyword_tokens)
         for claim in context.claims:
             claim_type = str(claim.get("claim_type") or "")
-            if allowed_claim_types and claim_type not in allowed_claim_types:
-                continue
+            type_match = False
+            if has_type_filter:
+                type_match = claim_type in allowed_claim_types if allowed_claim_types else False
+                if not type_match and prefix_tokens:
+                    type_match = claim_type.startswith(prefix_tokens)
             quoted_text = str((claim.get("source_locator") or {}).get("quoted_text") or "").strip()
             claim_text = str(claim.get("claim_text_normalized") or "").strip()
             support_text = quoted_text or claim_text
             if not support_text:
                 continue
-            if keyword_tokens:
+            kw_match = False
+            if has_kw_filter:
                 haystack = f"{claim_text} {quoted_text}".casefold()
-                if not any(token in haystack for token in keyword_tokens):
+                kw_match = any(token in haystack for token in keyword_tokens)
+            if has_type_filter and has_kw_filter:
+                if not (type_match or kw_match):
+                    continue
+            elif has_type_filter:
+                if not type_match:
+                    continue
+            elif has_kw_filter:
+                if not kw_match:
                     continue
             source_document = claim.get("source_document") or {}
             source_id = str(source_document.get("id") or "")
@@ -1357,28 +1413,44 @@ class ItemMaterializer:
                 title="Why this is useful",
                 statements=self._collect_claim_statements(
                     context,
-                    claim_types=(
-                        "application_result",
-                        "application_potential",
-                        "engineering_result",
-                        "mechanism_summary",
+                    claim_type_prefixes=(
+                        "application", "capability", "use_case", "tool_",
+                        "method_capability", "function", "utility", "therapeutic",
+                        "in_vivo", "resource",
                     ),
-                )[:3],
+                )[:4],
             ),
             self._build_claim_explainer(
                 explainer_kind="problem_solved",
                 title="What problem this helps solve",
                 statements=self._collect_claim_statements(
                     context,
-                    claim_types=("application_result", "application_potential"),
-                )[:3],
+                    claim_type_prefixes=(
+                        "application", "problem", "therapeutic", "use_case",
+                        "tool_development", "resource",
+                    ),
+                )[:4],
             ),
             self._build_claim_explainer(
                 explainer_kind="strengths",
                 title="Strengths",
                 statements=self._collect_claim_statements(
                     context,
-                    claim_types=("engineering_result", "application_result", "application_potential"),
+                    claim_type_prefixes=(
+                        "performance", "engineering", "comparative", "optimization",
+                        "improvement", "advantage", "novelty",
+                    ),
+                )[:4],
+            ),
+            self._build_claim_explainer(
+                explainer_kind="limitations",
+                title="Limitations",
+                statements=self._collect_claim_statements(
+                    context,
+                    claim_type_prefixes=(
+                        "limitation", "constraint", "background", "toxicity",
+                        "negative", "incompatib",
+                    ),
                 )[:3],
             ),
             self._build_claim_explainer(
@@ -1386,14 +1458,13 @@ class ItemMaterializer:
                 title="Implementation constraints",
                 statements=self._collect_claim_statements(
                     context,
+                    claim_type_prefixes=(
+                        "design", "implementation", "construct", "composition",
+                        "structural", "delivery", "requirement",
+                    ),
                     keywords=(
-                        "phycocyanobilin",
-                        "biliverdin",
-                        "pcb",
-                        "bv",
-                        "chromophore",
-                        "cofactor",
-                        "exogenous",
+                        "phycocyanobilin", "biliverdin", "pcb", "bv",
+                        "chromophore", "cofactor", "exogenous",
                     ),
                 )[:3],
             ),
@@ -1538,6 +1609,8 @@ class ItemMaterializer:
                 "pmid": citation["pmid"],
                 "is_retracted": citation["is_retracted"],
             }
+        for evidence in context.extracted_evidence:
+            documents.setdefault(evidence.source_document["id"], evidence.source_document)
 
         primary_docs = [
             doc
@@ -1562,6 +1635,18 @@ class ItemMaterializer:
                 }
             ),
         )
+
+        extracted_primary_doc_ids = {
+            evidence.source_document["id"]
+            for evidence in context.extracted_evidence
+            if evidence.source_document.get("source_type")
+            in {"primary_paper", "preprint", "benchmark", "trial_record"}
+        }
+        independent_count = max(
+            independent_count,
+            max(0, len(extracted_primary_doc_ids) - 1),
+        )
+
         institution_count = len(
             {
                 validation["institution_cluster_id"]
@@ -1579,6 +1664,8 @@ class ItemMaterializer:
                 for validation in context.validations
             }
         )
+        if biological_contexts == 0 and context.extracted_evidence:
+            biological_contexts = 1
         publication_years = [
             doc["publication_year"]
             for doc in documents.values()
@@ -1635,6 +1722,7 @@ class ItemMaterializer:
             "translatability_score": translatability_score,
             "explanation": {
                 "primary_document_count": len(primary_docs),
+                "extracted_primary_document_count": len(extracted_primary_doc_ids),
                 "claim_count": len(context.claims),
                 "validation_count": len(context.validations),
                 "independent_count": independent_count,
@@ -1723,14 +1811,15 @@ class ItemMaterializer:
         for facet in facets:
             cursor.execute(
                 """
-                insert into item_facet (item_id, facet_name, facet_value, evidence_note)
-                values (%s, %s, %s, %s)
+                insert into item_facet (item_id, facet_name, facet_value, evidence_note, derived_version)
+                values (%s, %s, %s, %s, %s)
                 """,
                 (
                     item_id,
                     facet["facet_name"],
                     facet["facet_value"],
                     facet.get("evidence_note"),
+                    ItemMaterializer.DERIVATION_VERSION,
                 ),
             )
 
@@ -1786,6 +1875,44 @@ class ItemMaterializer:
                 ),
             )
 
+    @staticmethod
+    def _build_candidate_index(
+        all_contexts: Sequence[ItemContext],
+    ) -> Dict[Any, set]:
+        """Pre-index items by category so comparisons only run within overlapping groups.
+
+        An item is a comparison candidate only if it shares at least one
+        *specific* attribute (mechanism, target process, or input modality).
+        Sharing only the broad item_type (e.g. both are ``protein_domain``)
+        is not enough -- that bucket is too large and produces low-value
+        comparisons.  Same-type items that also share a specific attribute
+        will naturally appear via the specific-attribute buckets.
+        """
+        from collections import defaultdict
+        bucket: Dict[str, set] = defaultdict(set)
+        for ctx in all_contexts:
+            for proc in ctx.target_processes:
+                bucket[f"proc:{proc}"].add(ctx.item_id)
+            for mech in ctx.mechanisms:
+                bucket[f"mech:{mech}"].add(ctx.item_id)
+            if ctx.primary_input_modality:
+                bucket[f"input:{ctx.primary_input_modality}"].add(ctx.item_id)
+            for tech in ctx.techniques:
+                bucket[f"tech:{tech}"].add(ctx.item_id)
+
+        candidates_for: Dict[Any, set] = defaultdict(set)
+        for ctx in all_contexts:
+            keys: List[str] = []
+            keys.extend(f"proc:{p}" for p in ctx.target_processes)
+            keys.extend(f"mech:{m}" for m in ctx.mechanisms)
+            keys.extend(f"tech:{t}" for t in ctx.techniques)
+            if ctx.primary_input_modality:
+                keys.append(f"input:{ctx.primary_input_modality}")
+            for key in keys:
+                candidates_for[ctx.item_id].update(bucket[key])
+            candidates_for[ctx.item_id].discard(ctx.item_id)
+        return candidates_for
+
     def _replace_item_comparisons(
         self,
         cursor: Any,
@@ -1797,20 +1924,30 @@ class ItemMaterializer:
             return
         cursor.execute("delete from item_comparison where item_id = any(%s)", (item_ids,))
         all_contexts = list(contexts.values())
-        for context in all_contexts:
-            literature_comparisons = self._build_literature_comparisons(context, all_contexts)
+        context_by_id = {ctx.item_id: ctx for ctx in all_contexts}
+        candidate_index = self._build_candidate_index(all_contexts)
+        name_index = self._build_name_index(all_contexts)
+        first_tokens = self._build_name_first_tokens(name_index)
+        logger.info("Comparison candidate index built (%d items, %d name labels).",
+                     len(all_contexts), len(name_index))
+
+        for idx, context in enumerate(all_contexts):
+            literature_comparisons = self._build_literature_comparisons(
+                context, all_contexts, name_index, first_tokens,
+            )
             if literature_comparisons:
                 comparisons = literature_comparisons
             else:
+                nearby_ids = candidate_index.get(context.item_id, set())
                 comparisons = sorted(
                     (
-                        self._build_comparison(context, candidate)
-                        for candidate in all_contexts
-                        if candidate.item_id != context.item_id
+                        self._build_comparison(context, context_by_id[cid])
+                        for cid in nearby_ids
                     ),
                     key=lambda comparison: comparison["score"],
                     reverse=True,
                 )[:3]
+            self._maybe_log_progress("Compared items", idx, len(all_contexts))
             for comparison in comparisons:
                 if comparison["score"] <= 0:
                     continue
@@ -1835,10 +1972,75 @@ class ItemMaterializer:
                     ),
                 )
 
+    @staticmethod
+    def _build_name_index(
+        all_contexts: Sequence[ItemContext],
+    ) -> Dict[str, set]:
+        """Map lowercased name/synonym labels to item IDs for fast text matching.
+
+        Returns a dict keyed by cleaned label (lowercased, stripped of markup).
+        ``_find_mentioned_item_ids`` does a substring check per label, but
+        iterates only labels whose *first word* appears in the text (using a
+        word-level pre-filter) so the inner loop stays small.
+        """
+        index: Dict[str, set] = {}
+        for ctx in all_contexts:
+            for label in [ctx.canonical_name, *ctx.synonyms]:
+                cleaned = _strip_inline_markup(label).strip().casefold()
+                if len(cleaned) < 4:
+                    continue
+                index.setdefault(cleaned, set()).add(ctx.item_id)
+        return index
+
+    @staticmethod
+    def _build_name_first_tokens(
+        name_index: Dict[str, set],
+    ) -> Dict[str, Optional[str]]:
+        """Pre-compute the first alphanumeric token for each label."""
+        tokens: Dict[str, Optional[str]] = {}
+        for label in name_index:
+            m = re.match(r"[a-z0-9]+", label)
+            tokens[label] = m.group() if m else None
+        return tokens
+
+    @staticmethod
+    def _find_mentioned_item_ids(
+        text: str,
+        name_index: Dict[str, set],
+        first_tokens: Dict[str, Optional[str]],
+        exclude_id: Any,
+    ) -> set:
+        """Return item IDs whose name/synonym appears in *text*.
+
+        Uses a two-pass strategy:
+        1. Extract the set of words from *text* (O(len(text))).
+        2. For each label in the index, check if the label's first token is
+           in the word set.  Only then do a full substring check.
+        This skips the vast majority of labels for any given text.
+        """
+        normalized = _strip_inline_markup(text).casefold()
+        text_words = set(re.findall(r"[a-z0-9]+", normalized))
+
+        found: set = set()
+        for label, item_ids in name_index.items():
+            ft = first_tokens[label]
+            if ft is None:
+                if label in normalized:
+                    found.update(item_ids)
+                continue
+            if ft not in text_words:
+                continue
+            if label in normalized:
+                found.update(item_ids)
+        found.discard(exclude_id)
+        return found
+
     def _build_literature_comparisons(
         self,
         context: ItemContext,
         all_contexts: Sequence[ItemContext],
+        name_index: Dict[str, set],
+        first_tokens: Dict[str, Optional[str]],
     ) -> List[Dict[str, Any]]:
         alternative_statements = self._collect_literature_statements(
             context,
@@ -1846,25 +2048,35 @@ class ItemMaterializer:
         )
         if not alternative_statements:
             return []
+
+        mentioned_ids_per_statement: List[Tuple[Dict[str, Any], set]] = []
+        all_mentioned: set = set()
+        for statement in alternative_statements:
+            ids = self._find_mentioned_item_ids(
+                statement["text"], name_index, first_tokens, context.item_id,
+            )
+            mentioned_ids_per_statement.append((statement, ids))
+            all_mentioned.update(ids)
+
+        if not all_mentioned:
+            return []
+
         extracted_strengths = self._collect_structured_values(context, "strengths")[:3]
         extracted_limitations = self._collect_structured_values(context, "limitations")[:3]
         comparisons: List[Dict[str, Any]] = []
-        for candidate in all_contexts:
-            if candidate.item_id == context.item_id:
-                continue
+        context_by_id = {ctx.item_id: ctx for ctx in all_contexts}
+        for candidate_id in all_mentioned:
             matched_statements = [
-                statement
-                for statement in alternative_statements
-                if self._text_mentions_item(statement["text"], candidate)
+                stmt for stmt, ids in mentioned_ids_per_statement if candidate_id in ids
             ]
             if not matched_statements:
                 continue
             summary = "; ".join(
-                _dedupe_preserving_order(statement["text"] for statement in matched_statements)
+                _dedupe_preserving_order(stmt["text"] for stmt in matched_statements)
             )
             comparisons.append(
                 {
-                    "related_item_id": candidate.item_id,
+                    "related_item_id": candidate_id,
                     "relation_type": "source_stated_alternative",
                     "summary": summary,
                     "strengths": extracted_strengths,

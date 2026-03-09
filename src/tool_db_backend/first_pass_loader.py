@@ -27,6 +27,49 @@ def _strip_nul_bytes(value: Any) -> Any:
     return value
 
 
+LEGACY_PACKET_LIST_DEFAULTS: Dict[str, Tuple[str, ...]] = {
+    "review_extract_v1": (
+        "entity_candidates",
+        "claims",
+        "workflow_observations",
+        "workflow_stage_observations",
+        "workflow_step_observations",
+        "unresolved_ambiguities",
+    ),
+    "primary_paper_extract_v1": (
+        "entity_candidates",
+        "claims",
+        "workflow_observations",
+        "workflow_stage_observations",
+        "workflow_step_observations",
+        "unresolved_ambiguities",
+    ),
+    "database_entry_extract_v1": (
+        "entity_candidates",
+        "claims",
+        "unresolved_ambiguities",
+    ),
+    "trial_extract_v1": (
+        "entity_candidates",
+        "claims",
+        "unresolved_ambiguities",
+    ),
+}
+
+
+def _backfill_legacy_packet_defaults(payload: Dict[str, Any]) -> Dict[str, Any]:
+    packet_kind = payload.get("packet_type")
+    default_fields = LEGACY_PACKET_LIST_DEFAULTS.get(str(packet_kind), ())
+    if not default_fields:
+        return payload
+
+    normalized_payload = dict(payload)
+    for field_name in default_fields:
+        if normalized_payload.get(field_name) is None:
+            normalized_payload[field_name] = []
+    return normalized_payload
+
+
 class FirstPassExtractionLoader:
     def __init__(self, settings: Settings, connection: Any = None) -> None:
         self.settings = settings
@@ -36,7 +79,9 @@ class FirstPassExtractionLoader:
         self._controlled_vocabularies = load_controlled_vocabularies(settings)
 
     def load_packet_file(self, packet_path: Path) -> Dict[str, Any]:
-        payload = _strip_nul_bytes(json.loads(packet_path.read_text()))
+        payload = _backfill_legacy_packet_defaults(
+            _strip_nul_bytes(json.loads(packet_path.read_text()))
+        )
         packet_kind = payload.get("packet_type")
         if packet_kind not in PACKET_TO_SCHEMA:
             raise PacketValidationError(f"Unsupported packet kind in {packet_path}: {packet_kind}")

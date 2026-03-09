@@ -12,6 +12,7 @@ from tool_db_backend.clients.optobase import OptoBaseClient
 from tool_db_backend.clients.pmc import PMCClient
 from tool_db_backend.clients.semantic_scholar import SemanticScholarClient
 from tool_db_backend.config import Settings
+from tool_db_backend.llm_web_research import LLMWebResearchClient, LLMWebResearchError
 from tool_db_backend.raw_store import RawPayloadStore
 from tool_db_backend.source_staging import OptoBaseSearchParser
 
@@ -30,7 +31,37 @@ def _append_unique(values: List[str], candidate: Optional[str]) -> None:
     values.append(normalized)
 
 
-def build_first_pass_query_sets(settings: Settings, seed_query_limit: int = 24) -> Dict[str, List[str]]:
+def _prepend_unique(values: List[str], candidate: Optional[str]) -> None:
+    if candidate is None:
+        return
+    normalized = candidate.strip()
+    if not normalized:
+        return
+    existing = [value for value in values if value != normalized]
+    values[:] = [normalized, *existing]
+
+
+def _looks_like_tool_name(candidate: Optional[str]) -> bool:
+    if candidate is None:
+        return False
+    cleaned = candidate.strip()
+    if not cleaned:
+        return False
+    if len(cleaned) > 80:
+        return False
+    tokens = cleaned.split()
+    if len(tokens) > 8:
+        return False
+    if cleaned.endswith(".") or ":" in cleaned:
+        return False
+    return True
+
+
+def build_first_pass_query_sets(
+    settings: Settings,
+    seed_query_limit: int = 24,
+    web_research_client: Optional[LLMWebResearchClient] = None,
+) -> Dict[str, Any]:
     seed_bundle_path = settings.repo_root / "db" / "seeds" / "knowledge_seed_bundle.v1.json"
     vocabulary_path = settings.schema_root / "canonical" / "controlled_vocabularies.v1.json"
     seed_bundle = json.loads(seed_bundle_path.read_text())
@@ -101,11 +132,42 @@ def build_first_pass_query_sets(settings: Settings, seed_query_limit: int = 24) 
     for query in literature_queries:
         _append_unique(semantic_scholar_queries, query)
 
+    web_research_summary: Dict[str, Any] = {}
+    owns_web_research_client = False
+    if settings.llm_web_research_enabled:
+        client = web_research_client
+        if client is None:
+            client = LLMWebResearchClient(settings)
+            owns_web_research_client = True
+        try:
+            seed_window = seed_terms[: min(seed_query_limit, 12)]
+            web_research_summary = client.expand_seed_queries(seed_terms=seed_window)
+            filtered_related_candidates = []
+            for related in web_research_summary.get("related_item_candidates", []):
+                related_name = str(related.get("name") or "").strip()
+                if not _looks_like_tool_name(related_name):
+                    continue
+                filtered_related_candidates.append(related)
+                _append_unique(seed_terms, related_name)
+                _prepend_unique(optobase_terms, related_name)
+            web_research_summary["related_item_candidates"] = filtered_related_candidates
+            for query in web_research_summary.get("literature_queries", []):
+                _append_unique(literature_queries, str(query))
+                _append_unique(semantic_scholar_queries, str(query))
+            for query in web_research_summary.get("optobase_queries", []):
+                _prepend_unique(optobase_terms, str(query))
+        except LLMWebResearchError:
+            web_research_summary = {}
+        finally:
+            if owns_web_research_client:
+                client.close()
+
     return {
         "europe_pmc": literature_queries,
         "openalex": literature_queries,
         "semantic_scholar": semantic_scholar_queries,
         "optobase": optobase_terms[:seed_query_limit],
+        "web_research": web_research_summary,
     }
 
 
@@ -250,13 +312,48 @@ class RealDataHarvester:
                 "raw_paths": {},
             }
 
+    def _read_cached_json_payload(
+        self,
+        *,
+        source_key: str,
+        resource_type: str,
+        external_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        reader = getattr(self.raw_store, "read_json_payload", None)
+        if reader is None:
+            return None
+        payload = reader(source_key, resource_type, external_id)
+        return payload if isinstance(payload, dict) else None
+
+    def _read_cached_text_payload(
+        self,
+        *,
+        source_key: str,
+        resource_type: str,
+        external_id: str,
+    ) -> Optional[str]:
+        reader = getattr(self.raw_store, "read_text_payload", None)
+        if reader is None:
+            return None
+        payload = reader(source_key, resource_type, external_id)
+        return payload if isinstance(payload, str) else None
+
     def _fetch_gap_map(self) -> Dict[str, Any]:
         dataset_names = ["gaps", "capabilities", "resources", "fields"]
         counts: Dict[str, int] = {}
         raw_paths: Dict[str, str] = {}
         total = 0
+        cache_hits = 0
         for dataset_name in dataset_names:
-            payload = self.gap_map_client.fetch_dataset(dataset_name)
+            payload = self._read_cached_json_payload(
+                source_key="gap_map",
+                resource_type=dataset_name,
+                external_id=dataset_name,
+            )
+            if payload is None:
+                payload = self.gap_map_client.fetch_dataset(dataset_name)
+            else:
+                cache_hits += 1
             entry_count = self._count_entries(payload)
             counts[dataset_name] = entry_count
             total += entry_count
@@ -271,21 +368,32 @@ class RealDataHarvester:
             "datasets": counts,
             "entry_count": total,
             "raw_paths": raw_paths,
+            "cache_hits": cache_hits,
         }
 
     def _fetch_europe_pmc(self, queries: List[str], page_size: int, pages: int) -> Dict[str, Any]:
         seen_ids = set()
         counts: Dict[str, int] = {}
         raw_paths: Dict[str, str] = {}
+        cache_hits = 0
         for query in queries:
             query_total = 0
             for page in range(1, pages + 1):
-                payload = self.europe_pmc_client.search(
-                    query=query,
-                    page_size=page_size,
-                    page=page,
-                    result_type="core",
+                external_id = f"{_slugify(query)}-page-{page}"
+                payload = self._read_cached_json_payload(
+                    source_key="europe_pmc",
+                    resource_type="search",
+                    external_id=external_id,
                 )
+                if payload is None:
+                    payload = self.europe_pmc_client.search(
+                        query=query,
+                        page_size=page_size,
+                        page=page,
+                        result_type="core",
+                    )
+                else:
+                    cache_hits += 1
                 results = ((payload.get("resultList") or {}).get("result") or [])
                 counts[f"{query} [page {page}]"] = len(results)
                 query_total += len(results)
@@ -296,7 +404,7 @@ class RealDataHarvester:
                 raw_path = self.raw_store.write_json_payload(
                     source_key="europe_pmc",
                     resource_type="search",
-                    external_id=f"{_slugify(query)}-page-{page}",
+                    external_id=external_id,
                     payload=payload,
                 )
                 raw_paths[f"{query} [page {page}]"] = str(raw_path)
@@ -307,12 +415,14 @@ class RealDataHarvester:
             "queries": counts,
             "entry_count": len(seen_ids),
             "raw_paths": raw_paths,
+            "cache_hits": cache_hits,
         }
 
     def _fetch_pmc_fulltexts(self, europe_pmc_raw_paths: Dict[str, str], limit: int) -> Dict[str, Any]:
         raw_paths: Dict[str, str] = {}
         errors: Dict[str, str] = {}
         pmcids: List[str] = []
+        cache_hits = 0
         for raw_path in europe_pmc_raw_paths.values():
             try:
                 payload = json.loads(Path(raw_path).read_text())
@@ -330,11 +440,19 @@ class RealDataHarvester:
                 break
 
         for pmcid in pmcids:
-            try:
-                payload = self.pmc_client.fetch_bioc_fulltext(pmcid)
-            except (httpx.HTTPError, ValueError) as exc:
-                errors[pmcid] = str(exc)
-                continue
+            payload = self._read_cached_json_payload(
+                source_key="pmc",
+                resource_type="bioc_fulltext",
+                external_id=pmcid,
+            )
+            if payload is None:
+                try:
+                    payload = self.pmc_client.fetch_bioc_fulltext(pmcid)
+                except (httpx.HTTPError, ValueError) as exc:
+                    errors[pmcid] = str(exc)
+                    continue
+            else:
+                cache_hits += 1
             raw_path = self.raw_store.write_json_payload(
                 source_key="pmc",
                 resource_type="bioc_fulltext",
@@ -347,16 +465,27 @@ class RealDataHarvester:
             "requested_pmcids": pmcids,
             "raw_paths": raw_paths,
             "errors": errors,
+            "cache_hits": cache_hits,
         }
 
     def _fetch_openalex(self, queries: List[str], per_page: int, pages: int) -> Dict[str, Any]:
         seen_ids = set()
         counts: Dict[str, int] = {}
         raw_paths: Dict[str, str] = {}
+        cache_hits = 0
         for query in queries:
             query_total = 0
             for page in range(1, pages + 1):
-                payload = self.openalex_client.search_works(query=query, per_page=per_page, page=page)
+                external_id = f"{_slugify(query)}-page-{page}"
+                payload = self._read_cached_json_payload(
+                    source_key="openalex",
+                    resource_type="work_search",
+                    external_id=external_id,
+                )
+                if payload is None:
+                    payload = self.openalex_client.search_works(query=query, per_page=per_page, page=page)
+                else:
+                    cache_hits += 1
                 results = payload.get("results", [])
                 counts[f"{query} [page {page}]"] = len(results)
                 query_total += len(results)
@@ -367,7 +496,7 @@ class RealDataHarvester:
                 raw_path = self.raw_store.write_json_payload(
                     source_key="openalex",
                     resource_type="work_search",
-                    external_id=f"{_slugify(query)}-page-{page}",
+                    external_id=external_id,
                     payload=payload,
                 )
                 raw_paths[f"{query} [page {page}]"] = str(raw_path)
@@ -378,22 +507,33 @@ class RealDataHarvester:
             "queries": counts,
             "entry_count": len(seen_ids),
             "raw_paths": raw_paths,
+            "cache_hits": cache_hits,
         }
 
     def _fetch_semantic_scholar(self, queries: List[str], limit: int, pages: int) -> Dict[str, Any]:
         counts: Dict[str, int] = {}
         raw_paths: Dict[str, str] = {}
         seen_ids = set()
+        cache_hits = 0
         for query in queries:
             query_total = 0
             for page in range(pages):
                 offset = page * limit
-                payload = self.semantic_scholar_client.search_papers(
-                    query=query,
-                    limit=limit,
-                    offset=offset,
-                    fields=self.DEFAULT_SEMANTIC_SCHOLAR_FIELDS,
+                external_id = f"{_slugify(query)}-page-{page + 1}"
+                payload = self._read_cached_json_payload(
+                    source_key="semantic_scholar",
+                    resource_type="paper_search",
+                    external_id=external_id,
                 )
+                if payload is None:
+                    payload = self.semantic_scholar_client.search_papers(
+                        query=query,
+                        limit=limit,
+                        offset=offset,
+                        fields=self.DEFAULT_SEMANTIC_SCHOLAR_FIELDS,
+                    )
+                else:
+                    cache_hits += 1
                 results = payload.get("data", [])
                 counts[f"{query} [page {page + 1}]"] = len(results)
                 query_total += len(results)
@@ -404,7 +544,7 @@ class RealDataHarvester:
                 raw_path = self.raw_store.write_json_payload(
                     source_key="semantic_scholar",
                     resource_type="paper_search",
-                    external_id=f"{_slugify(query)}-page-{page + 1}",
+                    external_id=external_id,
                     payload=payload,
                 )
                 raw_paths[f"{query} [page {page + 1}]"] = str(raw_path)
@@ -415,17 +555,28 @@ class RealDataHarvester:
             "queries": counts,
             "entry_count": len(seen_ids),
             "raw_paths": raw_paths,
+            "cache_hits": cache_hits,
         }
 
     def _fetch_optobase(self, queries: List[str]) -> Dict[str, Any]:
         raw_paths: Dict[str, str] = {}
         parsed_result_counts: Dict[str, int] = {}
+        cache_hits = 0
         for query in queries:
-            payload_text = self.optobase_client.fetch_search_page(query=query)
+            external_id = _slugify(query)
+            payload_text = self._read_cached_text_payload(
+                source_key="optobase",
+                resource_type="search_html",
+                external_id=external_id,
+            )
+            if payload_text is None:
+                payload_text = self.optobase_client.fetch_search_page(query=query)
+            else:
+                cache_hits += 1
             raw_path = self.raw_store.write_text_payload(
                 source_key="optobase",
                 resource_type="search_html",
-                external_id=_slugify(query),
+                external_id=external_id,
                 payload_text=payload_text,
                 content_type="text/html",
             )
@@ -439,6 +590,7 @@ class RealDataHarvester:
             "entry_count": sum(parsed_result_counts.values()),
             "parsed_result_counts": parsed_result_counts,
             "raw_paths": raw_paths,
+            "cache_hits": cache_hits,
         }
 
     @staticmethod

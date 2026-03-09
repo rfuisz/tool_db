@@ -494,6 +494,8 @@ def harvest_real_data(
         )
     finally:
         harvester.close()
+    if query_sets.get("web_research"):
+        result["query_expansion"] = query_sets["web_research"]
     print(json.dumps(result, indent=2))
     return 0
 

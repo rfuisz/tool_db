@@ -46,6 +46,27 @@ def test_load_plan_builder_summary_prefers_extracted_explainer_text() -> None:
     assert summary == "Provides light-gated recruitment in the source-backed extraction output."
 
 
+def test_load_plan_builder_summary_skips_name_only_evidence_text() -> None:
+    builder = LoadPlanBuilder(get_settings())
+
+    summary = builder._derive_summary(  # noqa: SLF001
+        {
+            "canonical_name": "Am1_c0023g2",
+            "evidence_text": "the CBCR Am1_c0023g2",
+        },
+        [
+            {
+                "claim_type": "engineering_result",
+                "claim_text_normalized": (
+                    "AM1_C0023g2 covalently binds both phycocyanobilin and biliverdin with high binding efficiencies."
+                ),
+            }
+        ],
+    )
+
+    assert summary == "AM1_C0023g2 covalently binds both phycocyanobilin and biliverdin with high binding efficiencies."
+
+
 def test_load_plan_writer_outputs_json(tmp_path: Path) -> None:
     payload = json.loads(Path("tests/fixtures/review_extract_v1.sample.json").read_text())
     normalizer = PacketNormalizer(get_settings())

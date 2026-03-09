@@ -46,12 +46,14 @@ class FakeCursor:
             self._last_row = self.db.find_item_id(params[0])
         elif normalized.startswith("select item_type::text from toolkit_item where id = %s"):
             self._last_row = self.db.find_item_type(params[0])
+        elif normalized.startswith("select summary, primary_input_modality::text, primary_output_modality::text from toolkit_item where id = %s"):
+            self._last_row = self.db.find_item_details(params[0])
         elif normalized.startswith("insert into toolkit_item"):
             self._last_row = (self.db.upsert_item(params),)
         elif normalized.startswith("update toolkit_item set item_type = %s::item_type"):
             self.db.update_item_type(params)
             self._last_row = None
-        elif normalized.startswith("update toolkit_item set summary = coalesce(summary, %s)"):
+        elif normalized.startswith("update toolkit_item set summary = %s, primary_input_modality = %s, primary_output_modality = %s"):
             self.db.update_item_details(params)
             self._last_row = None
         elif normalized.startswith("insert into item_synonym"):
@@ -145,7 +147,14 @@ class FakeDatabase:
     def seed_item(self, slug):
         item_id = f"item-{self._next_item_id}"
         self._next_item_id += 1
-        self.items[slug] = {"id": item_id, "slug": slug, "item_type": "protein_domain"}
+        self.items[slug] = {
+            "id": item_id,
+            "slug": slug,
+            "item_type": "protein_domain",
+            "summary": None,
+            "primary_input_modality": None,
+            "primary_output_modality": None,
+        }
         return item_id
 
     def seed_workflow_template(self, slug):
@@ -195,6 +204,16 @@ class FakeDatabase:
                 return (row.get("item_type"),)
         return None
 
+    def find_item_details(self, item_id):
+        for row in self.items.values():
+            if row["id"] == item_id:
+                return (
+                    row.get("summary"),
+                    row.get("primary_input_modality"),
+                    row.get("primary_output_modality"),
+                )
+        return None
+
     def find_workflow_template_id(self, slug):
         row = self.workflow_templates.get(slug)
         return (row["id"],) if row else None
@@ -230,9 +249,9 @@ class FakeDatabase:
         summary, primary_input_modality, primary_output_modality, item_id = params
         for row in self.items.values():
             if row["id"] == item_id:
-                row["summary"] = row.get("summary") or summary
-                row["primary_input_modality"] = row.get("primary_input_modality") or primary_input_modality
-                row["primary_output_modality"] = row.get("primary_output_modality") or primary_output_modality
+                row["summary"] = summary
+                row["primary_input_modality"] = primary_input_modality
+                row["primary_output_modality"] = primary_output_modality
                 return
 
     def insert_synonym(self, params):
@@ -329,6 +348,25 @@ def test_execute_load_plan_applies_existing_item_claims() -> None:
     assert len(fake_db.workflow_stages) == 2
     assert len(fake_db.workflow_assumptions) == 2
     assert fake_db.items["aslov2"]["summary"]
+
+
+def test_execute_load_plan_replaces_low_information_existing_summary() -> None:
+    settings = get_settings()
+    fake_db = FakeDatabase()
+    fake_db.seed_item("aslov2")
+    fake_db.items["aslov2"]["summary"] = "the AsLOV2 domain"
+
+    PostgresLoadPlanExecutor._maybe_update_existing_item_details(  # noqa: SLF001
+        FakeCursor(fake_db),
+        fake_db.items["aslov2"]["id"],
+        summary="AsLOV2 enables light-gated conformational control in engineered protein fusions.",
+        primary_input_modality="light",
+        primary_output_modality="conformation",
+    )
+
+    assert fake_db.items["aslov2"]["summary"] == (
+        "AsLOV2 enables light-gated conformational control in engineered protein fusions."
+    )
 
 
 def test_execute_load_plan_routes_new_candidate_to_review_queue() -> None:

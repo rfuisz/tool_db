@@ -18,6 +18,7 @@ Convert one literature source into a `primary_paper_extract_v1` packet.
 - Use empty arrays rather than invented content when the source text is insufficient.
 - Put any unresolved merge, subject, or context uncertainty into `unresolved_ambiguities`.
 - Use only evidence present in the job payload, especially `title`, `abstract_text`, and any explicitly provided metadata.
+- When the job payload includes a `web_research_summary`, treat it as an additional source-discovery scaffold that was compiled upstream with explicit URLs/identifiers. Use it conservatively to recover better-supported tool names, nearby alternatives, or high-signal citation leads, but do not invent claims beyond what that summary explicitly states.
 - Preserve the provided `source_document` metadata exactly when it is already present in the job payload, including IDs, `abstract_text`, license flags, and raw payload references.
 - Do not infer toolkit items, validation observations, or replication booleans from topic labels alone.
 - Emit `toolkit_item` candidates only for discrete tools, tool components, engineered constructs, delivery harnesses, or named methods/assays that could plausibly deserve a collection record.
@@ -50,6 +51,7 @@ Convert one literature source into a `primary_paper_extract_v1` packet.
   - `alternatives`
 - Each `freeform_explainers` field should be 1-3 compact sentences, grounded in the title/abstract/full-text evidence actually provided to the model, and left blank or omitted when unsupported.
 - Keep those fields source-backed and terse; use empty arrays when the abstract does not support them.
+- If `web_research_summary.high_signal_sources` is present, prefer peer-reviewed or review-like source leads over tertiary pages when deciding which alternatives, constraints, or use-cases look well-supported.
 - When the job payload includes sectioned or excerpted full text, preferentially pull usefulness, limitations, alternatives, and implementation details from the most decision-relevant sections such as results, discussion, comparison, benchmark, limitations, and protocol/method excerpts rather than repeating title metadata.
 - Set `citation_role_suggestion` only when the source clearly fits an existing canonical citation role such as `foundational`, `best_review`, `independent_validation`, `benchmark`, `protocol`, `therapeutic`, `negative_result`, `structural`, or `database_reference`; otherwise omit it.
 - If you emit any `validation_observations`, every observation must include `success_outcome` with one of: `success`, `mixed`, or `failed`.

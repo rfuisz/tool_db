@@ -38,6 +38,19 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("OPENAI_BASE_URL", "LLM_BASE_URL"),
     )
     llm_model: str = Field(default="gpt-5.4", validation_alias=AliasChoices("OPENAI_MODEL", "LLM_MODEL"))
+    llm_web_research_enabled: bool = False
+    llm_web_research_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("OPENAI_WEB_RESEARCH_API_KEY", "LLM_WEB_RESEARCH_API_KEY"),
+    )
+    llm_web_research_base_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("OPENAI_WEB_RESEARCH_BASE_URL", "LLM_WEB_RESEARCH_BASE_URL"),
+    )
+    llm_web_research_model: str = Field(
+        default="",
+        validation_alias=AliasChoices("OPENAI_WEB_RESEARCH_MODEL", "LLM_WEB_RESEARCH_MODEL"),
+    )
     llm_cache_enabled: bool = True
     llm_max_concurrency: int = 64
     llm_retry_attempts: int = 3
@@ -87,6 +100,18 @@ class Settings(BaseSettings):
     @property
     def llm_cache_root(self) -> Path:
         return self.repo_root / "data" / "llm-cache"
+
+    @property
+    def effective_llm_web_research_api_key(self) -> str:
+        return self.llm_web_research_api_key or self.llm_api_key
+
+    @property
+    def effective_llm_web_research_base_url(self) -> str:
+        return self.llm_web_research_base_url or self.llm_base_url
+
+    @property
+    def effective_llm_web_research_model(self) -> str:
+        return self.llm_web_research_model or self.llm_model
 
 
 @lru_cache(maxsize=1)

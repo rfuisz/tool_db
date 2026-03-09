@@ -16,6 +16,70 @@ def _strip_inline_markup(value: str) -> str:
     return re.sub(r"<[^>]+>", "", value or "")
 
 
+def _normalize_summary_text(value: Optional[str]) -> str:
+    return " ".join(_strip_inline_markup(value or "").split()).strip()
+
+
+def _summary_is_low_information(summary: Optional[str], canonical_name: Optional[str] = None) -> bool:
+    cleaned = _normalize_summary_text(summary)
+    if not cleaned:
+        return True
+    normalized_summary = re.sub(r"[^a-z0-9]+", " ", cleaned.casefold()).strip()
+    if not normalized_summary:
+        return True
+    normalized_name = re.sub(r"[^a-z0-9]+", " ", (canonical_name or "").casefold()).strip()
+    summary_tokens = normalized_summary.split()
+    if normalized_name:
+        normalized_variants = {
+            normalized_name,
+            f"the {normalized_name}",
+            f"a {normalized_name}",
+            f"an {normalized_name}",
+        }
+        if normalized_summary in normalized_variants:
+            return True
+        name_tokens = set(normalized_name.split())
+        has_action_verb = any(
+            token in {
+                "is",
+                "are",
+                "was",
+                "were",
+                "enables",
+                "enable",
+                "allows",
+                "allow",
+                "binds",
+                "bind",
+                "controls",
+                "control",
+                "provides",
+                "provide",
+                "requires",
+                "require",
+                "serves",
+                "serve",
+                "acts",
+                "act",
+                "uses",
+                "use",
+                "forms",
+                "form",
+                "works",
+                "work",
+                "derived",
+            }
+            for token in summary_tokens
+        )
+        if len(summary_tokens) <= len(name_tokens) + 2 and not has_action_verb:
+            non_article_tokens = {token for token in summary_tokens if token not in {"the", "a", "an"}}
+            if non_article_tokens and non_article_tokens.issubset(name_tokens):
+                return True
+        if normalized_summary.endswith(normalized_name) and len(summary_tokens) <= len(name_tokens) + 3 and not has_action_verb:
+            return True
+    return False
+
+
 class LoadPlanBuilder:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -562,14 +626,15 @@ class LoadPlanBuilder:
 
     @staticmethod
     def _derive_summary(candidate: Dict[str, Any], related_claims: List[Dict[str, Any]]) -> Optional[str]:
-        evidence_text = (candidate.get("evidence_text") or "").strip()
-        if evidence_text:
+        canonical_name = str(candidate.get("canonical_name") or "").strip()
+        evidence_text = _normalize_summary_text(candidate.get("evidence_text"))
+        if evidence_text and not _summary_is_low_information(evidence_text, canonical_name):
             return evidence_text
         freeform_explainers = candidate.get("freeform_explainers") or {}
         if isinstance(freeform_explainers, dict):
             for key in ("what_it_does", "problem_it_solves", "resources_required"):
-                value = str(freeform_explainers.get(key) or "").strip()
-                if value:
+                value = _normalize_summary_text(freeform_explainers.get(key))
+                if value and not _summary_is_low_information(value, canonical_name):
                     return value
         for key in ("useful_for", "problem_solved"):
             values = candidate.get(key) or []
@@ -577,10 +642,25 @@ class LoadPlanBuilder:
                 cleaned_values = [str(value).strip() for value in values if str(value).strip()]
                 if cleaned_values:
                     return "; ".join(cleaned_values)
+        preferred_claim_types = (
+            "application_result",
+            "mechanism_summary",
+            "engineering_result",
+            "application_potential",
+        )
+        for claim_type in preferred_claim_types:
+            for claim in related_claims:
+                if claim.get("claim_type") != claim_type:
+                    continue
+                claim_text = _normalize_summary_text(claim.get("claim_text_normalized"))
+                if claim_text and not _summary_is_low_information(claim_text, canonical_name):
+                    return claim_text
         for claim in related_claims:
-            claim_text = (claim.get("claim_text_normalized") or "").strip()
+            claim_text = _normalize_summary_text(claim.get("claim_text_normalized"))
             if claim_text:
                 return claim_text
+        if evidence_text:
+            return evidence_text
         return None
 
     def _derive_mechanisms(self, combined_text: str) -> List[str]:

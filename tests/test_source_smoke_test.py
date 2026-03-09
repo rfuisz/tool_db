@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from tool_db_backend.config import get_settings
-from tool_db_backend.source_smoke_test import RealDataSmokeTester
+from tool_db_backend.source_smoke_test import RealDataSmokeTester, build_first_pass_query_sets
 
 
 class _FakeRawStore:
@@ -67,6 +67,30 @@ class _FakePMCClient:
         return None
 
 
+class _FakeWebResearchClient:
+    def expand_seed_queries(self, *, seed_terms, max_related_items=24):
+        assert "AsLOV2" in seed_terms
+        return {
+            "related_item_candidates": [
+                {
+                    "name": "Rapid blue-light-mediated induction of protein interactions in living cells",
+                    "relation": "paper_title_noise",
+                    "why_relevant": "Should be filtered because this is a paper title, not a tool name.",
+                },
+                {
+                    "name": "Am1_c0023g2",
+                    "relation": "adjacent_tool",
+                    "why_relevant": "Frequently appears in cyanobacteriochrome optogenetics literature.",
+                }
+            ],
+            "literature_queries": [
+                "\"Am1_c0023g2\" optogenetic",
+                "\"AsLOV2\" versus iLID",
+            ],
+            "optobase_queries": ["Am1_c0023g2"],
+        }
+
+
 def test_real_data_smoke_test_writes_manifest(tmp_path: Path) -> None:
     tester = RealDataSmokeTester(
         get_settings(),
@@ -86,3 +110,20 @@ def test_real_data_smoke_test_writes_manifest(tmp_path: Path) -> None:
     assert manifest["sources"]["openalex"]["entry_count"] == 3
     assert manifest["sources"]["semantic_scholar"]["entry_count"] == 2
     assert manifest["sources"]["gap_map"]["entry_count"] == 8
+
+
+def test_build_first_pass_query_sets_includes_web_research_expansion() -> None:
+    query_sets = build_first_pass_query_sets(
+        get_settings().model_copy(update={"llm_web_research_enabled": True}),
+        seed_query_limit=8,
+        web_research_client=_FakeWebResearchClient(),
+    )
+
+    assert "\"Am1_c0023g2\" optogenetic" in query_sets["openalex"]
+    assert "\"AsLOV2\" versus iLID" in query_sets["semantic_scholar"]
+    assert "Am1_c0023g2" in query_sets["optobase"]
+    assert query_sets["web_research"]["related_item_candidates"][0]["name"] == "Am1_c0023g2"
+    assert all(
+        candidate["name"] != "Rapid blue-light-mediated induction of protein interactions in living cells"
+        for candidate in query_sets["web_research"]["related_item_candidates"]
+    )

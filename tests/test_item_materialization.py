@@ -158,4 +158,28 @@ def test_item_materializer_uses_claims_when_no_literature_explainers_exist() -> 
 
     assert explainers_by_kind["usefulness"]["evidence_payload"]["source_kind"] == "canonical_claim"
     assert "light-dependent control of transcription in yeast" in explainers_by_kind["usefulness"]["body"]
+    assert explainers_by_kind["strengths"]["evidence_payload"]["source_kind"] == "canonical_claim"
     assert explainers_by_kind["implementation_constraints"]["evidence_payload"]["source_kind"] == "canonical_claim"
+
+
+def test_item_materializer_upgrades_low_information_summary_from_extracted_evidence() -> None:
+    materializer = ItemMaterializer(get_settings())
+    context = _empty_context("Am1_c0023g2", "am1-c0023g2")
+    context.summary = "the CBCR Am1_c0023g2"
+    context.extracted_evidence = [
+        ExtractedItemEvidence(
+            local_id="item_1",
+            source_document=_source_document("source-1", "AM1 Paper"),
+            evidence_text="AM1_C0023g2 covalently binds both phycocyanobilin and biliverdin with high binding efficiencies.",
+            useful_for=[],
+            problem_solved=[],
+            strengths=[],
+            limitations=[],
+            implementation_constraints=[],
+            freeform_explainers={},
+        )
+    ]
+
+    summary = materializer._derive_best_summary(context, [])  # noqa: SLF001
+
+    assert summary == "AM1_C0023g2 covalently binds both phycocyanobilin and biliverdin with high binding efficiencies."

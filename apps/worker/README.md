@@ -232,12 +232,22 @@ LLM extraction calls now go through one shared JSON-call harness with disk cache
 - identical extraction or repair prompts reuse cached JSON; changing the prompt text, schema text, or job payload produces a new cache key
 - retryable transport failures and `408/409/429/5xx` responses back off and retry automatically before the worker fails
 
+Optional browsing-backed web research can now enrich extraction job context before the main packet extraction step:
+
+- enable it with `LLM_WEB_RESEARCH_ENABLED=true`
+- it reuses the OpenAI-compatible credentials by default, but you can override them with `OPENAI_WEB_RESEARCH_*` or `LLM_WEB_RESEARCH_*`
+- the artifact builder injects a structured `web_research_summary` into `input_context` when available
+- that summary is meant to surface additional high-signal source leads and adjacent tool names with explicit provenance, not to bypass the evidence-first packet model
+- the harvest query builder can also use the same browsing-capable model to fan out from strong seed tools into adjacent tool/component names and additional literature queries before OpenAlex / Europe PMC / Semantic Scholar fetches run
+
 Relevant settings:
 
 - `LLM_CACHE_ENABLED` to disable cache reads and writes
 - `LLM_MAX_CONCURRENCY` to control how many extraction jobs can wait on the LLM in parallel
 - `LLM_RETRY_ATTEMPTS` to change total attempts
 - `LLM_RETRY_BASE_DELAY_SECONDS` and `LLM_RETRY_MAX_DELAY_SECONDS` to tune exponential backoff
+- `LLM_WEB_RESEARCH_ENABLED` to turn on the optional browsing-backed source-compilation step
+- `LLM_WEB_RESEARCH_MODEL` and `LLM_WEB_RESEARCH_BASE_URL` to point that step at a browsing-capable OpenAI-compatible model/provider
 
 Prompt harness guidance:
 
@@ -250,6 +260,7 @@ Agent test-visibility guidance:
 - reveal the suite intentionally with `python scripts/agent_test_visibility.py show`
 - restore the barrier with `python scripts/agent_test_visibility.py hide`
 - check current state with `python scripts/agent_test_visibility.py status`
+- if you temporarily reveal `tests/` to inspect or edit them, put the barrier back before you finish the task so broad agent search does not silently start depending on hidden test internals
 
 Run a small batch of LLM extraction jobs:
 
@@ -289,3 +300,5 @@ This command:
 - ingests `data/pipeline-artifacts/real-extraction-seed/gap_map/*.database_entry_extract_v1.json`
 - materializes canonical item facets, explainers, comparisons, problem links, and replication summaries
 - writes normalized packets, load plans, execution reports, and review-queue artifacts under `data/pipeline-artifacts/populate-local-db/`
+
+For first-pass reloads, the loader also backfills missing legacy list fields such as `workflow_observations`, `workflow_stage_observations`, `workflow_step_observations`, and `unresolved_ambiguities` with empty arrays before schema validation so older extraction packets remain loadable.

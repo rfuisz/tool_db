@@ -35,6 +35,70 @@ def _strip_inline_markup(value: str) -> str:
     return re.sub(r"<[^>]+>", "", value or "")
 
 
+def _normalize_summary_text(value: Optional[str]) -> str:
+    return " ".join(_strip_inline_markup(value or "").split()).strip()
+
+
+def _summary_is_low_information(summary: Optional[str], canonical_name: Optional[str] = None) -> bool:
+    cleaned = _normalize_summary_text(summary)
+    if not cleaned:
+        return True
+    normalized_summary = re.sub(r"[^a-z0-9]+", " ", cleaned.casefold()).strip()
+    if not normalized_summary:
+        return True
+    normalized_name = re.sub(r"[^a-z0-9]+", " ", (canonical_name or "").casefold()).strip()
+    summary_tokens = normalized_summary.split()
+    if normalized_name:
+        normalized_variants = {
+            normalized_name,
+            f"the {normalized_name}",
+            f"a {normalized_name}",
+            f"an {normalized_name}",
+        }
+        if normalized_summary in normalized_variants:
+            return True
+        name_tokens = set(normalized_name.split())
+        has_action_verb = any(
+            token in {
+                "is",
+                "are",
+                "was",
+                "were",
+                "enables",
+                "enable",
+                "allows",
+                "allow",
+                "binds",
+                "bind",
+                "controls",
+                "control",
+                "provides",
+                "provide",
+                "requires",
+                "require",
+                "serves",
+                "serve",
+                "acts",
+                "act",
+                "uses",
+                "use",
+                "forms",
+                "form",
+                "works",
+                "work",
+                "derived",
+            }
+            for token in summary_tokens
+        )
+        if len(summary_tokens) <= len(name_tokens) + 2 and not has_action_verb:
+            non_article_tokens = {token for token in summary_tokens if token not in {"the", "a", "an"}}
+            if non_article_tokens and non_article_tokens.issubset(name_tokens):
+                return True
+        if normalized_summary.endswith(normalized_name) and len(summary_tokens) <= len(name_tokens) + 3 and not has_action_verb:
+            return True
+    return False
+
+
 @dataclass
 class ExtractedItemEvidence:
     local_id: str
@@ -208,6 +272,7 @@ class ItemMaterializer:
                             problem_links=problem_links,
                         )
                         self._update_item_type(cursor, context.item_id, refined_item_type)
+                        self._update_item_summary(cursor, context, explainers)
                         self._update_first_publication_year(cursor, context, replication_summary)
                         self._replace_item_facets(cursor, item_id, facets)
                         self._replace_item_problem_links(cursor, item_id, problem_links)
@@ -1176,6 +1241,44 @@ class ItemMaterializer:
         process_list = ", ".join(context.target_processes) if context.target_processes else "the target biology"
         return f"{context.canonical_name} is positioned to help when the goal is to control {process_list}. {problem_label}."
 
+    def _derive_best_summary(self, context: ItemContext, explainers: List[Dict[str, Any]]) -> Optional[str]:
+        current_summary = _normalize_summary_text(context.summary)
+        if current_summary and not _summary_is_low_information(current_summary, context.canonical_name):
+            return current_summary
+
+        for evidence in context.extracted_evidence:
+            for candidate_text in (
+                evidence.freeform_explainers.get("what_it_does"),
+                evidence.freeform_explainers.get("problem_it_solves"),
+                evidence.evidence_text,
+            ):
+                cleaned = _normalize_summary_text(candidate_text)
+                if cleaned and not _summary_is_low_information(cleaned, context.canonical_name):
+                    return cleaned
+
+        preferred_claim_types = (
+            "application_result",
+            "mechanism_summary",
+            "engineering_result",
+            "application_potential",
+        )
+        for claim_type in preferred_claim_types:
+            for claim in context.claims:
+                if claim.get("claim_type") != claim_type:
+                    continue
+                cleaned = _normalize_summary_text(claim.get("claim_text_normalized"))
+                if cleaned and not _summary_is_low_information(cleaned, context.canonical_name):
+                    return cleaned
+
+        for explainer in explainers:
+            if not (explainer.get("evidence_payload") or {}).get("source_kind"):
+                continue
+            cleaned = _normalize_summary_text(explainer.get("body"))
+            if cleaned and not _summary_is_low_information(cleaned, context.canonical_name):
+                return cleaned
+
+        return current_summary or None
+
     def _derive_explainers(
         self,
         context: ItemContext,
@@ -1271,6 +1374,14 @@ class ItemMaterializer:
                 )[:3],
             ),
             self._build_claim_explainer(
+                explainer_kind="strengths",
+                title="Strengths",
+                statements=self._collect_claim_statements(
+                    context,
+                    claim_types=("engineering_result", "application_result", "application_potential"),
+                )[:3],
+            ),
+            self._build_claim_explainer(
                 explainer_kind="implementation_constraints",
                 title="Implementation constraints",
                 statements=self._collect_claim_statements(
@@ -1278,10 +1389,11 @@ class ItemMaterializer:
                     keywords=(
                         "phycocyanobilin",
                         "biliverdin",
+                        "pcb",
+                        "bv",
                         "chromophore",
                         "cofactor",
-                        "illumination",
-                        "light",
+                        "exogenous",
                     ),
                 )[:3],
             ),
@@ -1579,6 +1691,19 @@ class ItemMaterializer:
             where id = %s
             """,
             (min(years), context.item_id),
+        )
+
+    def _update_item_summary(self, cursor: Any, context: ItemContext, explainers: List[Dict[str, Any]]) -> None:
+        summary = self._derive_best_summary(context, explainers)
+        if not summary or summary == context.summary:
+            return
+        cursor.execute(
+            """
+            update toolkit_item
+            set summary = %s
+            where id = %s
+            """,
+            (summary, context.item_id),
         )
 
     @staticmethod

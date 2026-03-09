@@ -8,6 +8,7 @@ from tool_db_backend.clients.europe_pmc import EuropePMCClient
 from tool_db_backend.clients.pmc import PMCClient
 from tool_db_backend.clients.semantic_scholar import SemanticScholarClient
 from tool_db_backend.config import Settings
+from tool_db_backend.llm_web_research import LLMWebResearchClient, LLMWebResearchError
 from tool_db_backend.schema_validation import validate_packet
 from tool_db_backend.source_staging import OptoBaseSearchParser
 
@@ -39,11 +40,15 @@ class RealExtractionArtifactBuilder:
         europe_pmc_client: Optional[EuropePMCClient] = None,
         pmc_client: Optional[PMCClient] = None,
         semantic_scholar_client: Optional[SemanticScholarClient] = None,
+        web_research_client: Optional[LLMWebResearchClient] = None,
     ) -> None:
         self.settings = settings
         self.europe_pmc_client = europe_pmc_client or EuropePMCClient(settings)
         self.pmc_client = pmc_client or PMCClient(settings)
         self.semantic_scholar_client = semantic_scholar_client or SemanticScholarClient(settings)
+        self.web_research_client = web_research_client or (
+            LLMWebResearchClient(settings) if settings.llm_web_research_enabled else None
+        )
         self.optobase_parser = OptoBaseSearchParser()
         self.enrichment_cache_dir = self.settings.pipeline_artifact_root / "openalex-enrichment-cache"
 
@@ -51,6 +56,8 @@ class RealExtractionArtifactBuilder:
         self.europe_pmc_client.close()
         self.pmc_client.close()
         self.semantic_scholar_client.close()
+        if self.web_research_client is not None:
+            self.web_research_client.close()
 
     def build_from_smoke_test_manifest(
         self,
@@ -830,6 +837,20 @@ class RealExtractionArtifactBuilder:
             external_id=external_id,
         )
         packet_path.write_text(json.dumps(packet, indent=2) + "\n")
+
+        if self.web_research_client is not None and "web_research_summary" not in input_context:
+            try:
+                web_research_summary = self.web_research_client.research_source_document(
+                    source_document=source_document,
+                    abstract_text=abstract_text,
+                )
+            except LLMWebResearchError:
+                web_research_summary = {}
+            if web_research_summary:
+                input_context = {
+                    **input_context,
+                    "web_research_summary": web_research_summary,
+                }
 
         job = {
             "job_type": "llm_extraction_job_v1",

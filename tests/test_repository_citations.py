@@ -70,3 +70,44 @@ def test_repository_derives_ranked_citations_from_claims_when_missing_item_citat
     assert citations[0]["importance_rank"] == 1
     assert "Derived from" in citations[0]["why_this_matters"]
     assert citations[0]["source_document_id"] == "source-review"
+
+
+def test_repository_dedupes_curated_citations_for_same_paper() -> None:
+    citations = KnowledgeRepository._dedupe_item_citations(  # noqa: SLF001
+        [
+            {
+                "citation_role": "best_review",
+                "importance_rank": 999,
+                "why_this_matters": "Seeded from load plan for claim cl1.",
+                "source_document_id": "source-1",
+                "label": "Genome Editing and Its Applications in Model Organisms",
+                "status": "curated",
+                "source_type": "review",
+                "publication_year": 2015,
+                "url": "Genomics Proteomics & Bioinformatics",
+                "doi": "10.1016/j.gpb.2015.12.001",
+                "pmid": "26762955",
+                "is_retracted": False,
+            },
+            {
+                "citation_role": "therapeutic",
+                "importance_rank": 999,
+                "why_this_matters": "Seeded from load plan for claim cl2.",
+                "source_document_id": "source-2",
+                "label": "Genome Editing and Its Applications in Model Organisms",
+                "status": "curated",
+                "source_type": "review",
+                "publication_year": 2015,
+                "url": "Genomics Proteomics & Bioinformatics",
+                "doi": "10.1016/j.gpb.2015.12.001",
+                "pmid": "26762955",
+                "is_retracted": False,
+            },
+        ]
+    )
+
+    assert len(citations) == 1
+    assert citations[0]["citation_role"] == "therapeutic"
+    assert citations[0]["importance_rank"] == 1
+    assert "claim cl1" in citations[0]["why_this_matters"]
+    assert "claim cl2" in citations[0]["why_this_matters"]

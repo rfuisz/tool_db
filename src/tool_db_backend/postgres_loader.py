@@ -6,6 +6,49 @@ from tool_db_backend.config import Settings
 from tool_db_backend.errors import LoadPlanExecutionError
 from tool_db_backend.review_queue import ReviewQueueWriter
 
+
+def _normalize_summary_text(value: Optional[str]) -> str:
+    return " ".join(str(value or "").split()).strip()
+
+
+def _summary_is_low_information(summary: Optional[str]) -> bool:
+    cleaned = _normalize_summary_text(summary)
+    if not cleaned:
+        return True
+    tokens = cleaned.casefold().split()
+    action_tokens = {
+        "is",
+        "are",
+        "was",
+        "were",
+        "enables",
+        "enable",
+        "allows",
+        "allow",
+        "binds",
+        "bind",
+        "controls",
+        "control",
+        "provides",
+        "provide",
+        "requires",
+        "require",
+        "serves",
+        "serve",
+        "acts",
+        "act",
+        "uses",
+        "use",
+        "forms",
+        "form",
+        "works",
+        "work",
+        "derived",
+    }
+    if len(tokens) > 6 or any(token in action_tokens for token in tokens):
+        return False
+    return len(tokens) <= 3 or tokens[0] in {"the", "a", "an"}
+
 def _strip_nul_bytes(value: Any) -> Any:
     if isinstance(value, str):
         return value.replace("\x00", "")
@@ -421,15 +464,47 @@ class PostgresLoadPlanExecutor:
     ) -> None:
         cursor.execute(
             """
+            select
+              summary,
+              primary_input_modality::text,
+              primary_output_modality::text
+            from toolkit_item
+            where id = %s
+            """,
+            (item_id,),
+        )
+        row = cursor.fetchone()
+        current_summary = row[0] if row else None
+        current_primary_input_modality = row[1] if row else None
+        current_primary_output_modality = row[2] if row else None
+        next_summary = current_summary
+        proposed_summary = _normalize_summary_text(summary)
+        if proposed_summary and _summary_is_low_information(current_summary):
+            next_summary = proposed_summary
+        next_primary_input_modality = current_primary_input_modality or primary_input_modality
+        next_primary_output_modality = current_primary_output_modality or primary_output_modality
+        if (
+            next_summary == current_summary
+            and next_primary_input_modality == current_primary_input_modality
+            and next_primary_output_modality == current_primary_output_modality
+        ):
+            return
+        cursor.execute(
+            """
             update toolkit_item
             set
-              summary = coalesce(summary, %s),
-              primary_input_modality = coalesce(primary_input_modality, %s),
-              primary_output_modality = coalesce(primary_output_modality, %s),
+              summary = %s,
+              primary_input_modality = %s,
+              primary_output_modality = %s,
               updated_at = now()
             where id = %s
             """,
-            (summary, primary_input_modality, primary_output_modality, item_id),
+            (
+                next_summary,
+                next_primary_input_modality,
+                next_primary_output_modality,
+                item_id,
+            ),
         )
 
     def _execute_claim_actions(

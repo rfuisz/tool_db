@@ -49,6 +49,21 @@ from tool_db_backend.models import (
 )
 
 
+def _dedupe_preserving_order(values: List[str]) -> List[str]:
+    seen = set()
+    result: List[str] = []
+    for value in values:
+        cleaned = str(value).strip()
+        if not cleaned:
+            continue
+        key = cleaned.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(cleaned)
+    return result
+
+
 class KnowledgeRepository:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -1471,8 +1486,65 @@ class KnowledgeRepository:
             for row in cursor.fetchall()
         ]
         if citations:
-            return citations
+            return self._dedupe_item_citations(citations)
         return self._derive_item_citations_from_evidence(claims or [], validations or [])
+
+    @staticmethod
+    def _citation_identity_key(citation: Dict[str, Any]) -> str:
+        doi = str(citation.get("doi") or "").strip().casefold()
+        if doi:
+            return f"doi:{doi}"
+        pmid = str(citation.get("pmid") or "").strip().casefold()
+        if pmid:
+            return f"pmid:{pmid}"
+        label = str(citation.get("label") or "").strip().casefold()
+        publication_year = citation.get("publication_year")
+        source_type = str(citation.get("source_type") or "").strip().casefold()
+        return f"title:{label}|year:{publication_year}|type:{source_type}"
+
+    @classmethod
+    def _dedupe_item_citations(cls, citations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        role_priority = {
+            "structural": 0,
+            "benchmark": 1,
+            "independent_validation": 2,
+            "negative_result": 3,
+            "therapeutic": 4,
+            "protocol": 5,
+            "best_review": 6,
+            "foundational": 7,
+            "database_reference": 8,
+        }
+        grouped: Dict[str, List[Dict[str, Any]]] = {}
+        for citation in citations:
+            grouped.setdefault(cls._citation_identity_key(citation), []).append(citation)
+
+        deduped: List[Dict[str, Any]] = []
+        for group in grouped.values():
+            best = min(
+                group,
+                key=lambda citation: (
+                    citation.get("importance_rank") if citation.get("importance_rank") is not None else 10_000,
+                    role_priority.get(str(citation.get("citation_role") or ""), 99),
+                    str(citation.get("source_document_id") or ""),
+                ),
+            ).copy()
+            rationale_parts = _dedupe_preserving_order(
+                str(citation.get("why_this_matters") or "").strip() for citation in group
+            )
+            if rationale_parts:
+                best["why_this_matters"] = " ".join(rationale_parts)
+            deduped.append(best)
+
+        deduped.sort(
+            key=lambda citation: (
+                citation.get("importance_rank") if citation.get("importance_rank") is not None else 10_000,
+                str(citation.get("label") or ""),
+            )
+        )
+        for index, citation in enumerate(deduped, start=1):
+            citation["importance_rank"] = index
+        return deduped
 
     @staticmethod
     def _derive_item_citations_from_evidence(

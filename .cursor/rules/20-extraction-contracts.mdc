@@ -12,3 +12,4 @@ alwaysApply: false
 - Canonical ID assignment, synonym resolution, unit normalization, and merges are deterministic post-processing steps.
 - Add new packet fields only when they serve downstream normalization or curation.
 - If packets include source-backed usefulness, limitation, prerequisite, or alternative prose, preserve that evidence through normalization/materialization and surface it with provenance instead of regenerating generic UI copy later.
+- Browsing-backed or web-research summaries may enrich extraction job context, but they remain intermediate evidence scaffolds. Preserve explicit URLs/IDs/provenance, prefer literature-grade sources over tertiary summaries, and do not promote uncited browse text directly into canonical records.

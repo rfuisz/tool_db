@@ -1,13 +1,13 @@
 import "server-only";
 
-import type { ItemSearchFilters, WorkflowSearchFilters } from "./api-search";
+import type { ExtractedWorkflowSearchFilters, ItemSearchFilters } from "./api-search";
 
 const DEFAULT_QUERY_MODEL = "gpt-5-nano";
 const DEFAULT_QUERY_BASE_URL = "https://api.openai.com/v1";
 
 export interface PromptQueryInterpretation {
   item_filters: ItemSearchFilters;
-  workflow_filters: WorkflowSearchFilters;
+  workflow_filters: ExtractedWorkflowSearchFilters;
   include_items: boolean;
   include_workflows: boolean;
   ambiguity_notes: string[];
@@ -16,7 +16,7 @@ export interface PromptQueryInterpretation {
 
 interface LlmPromptQueryResponse {
   item_filters?: ItemSearchFilters;
-  workflow_filters?: WorkflowSearchFilters;
+  workflow_filters?: ExtractedWorkflowSearchFilters;
   include_items?: boolean;
   include_workflows?: boolean;
   ambiguity_notes?: string[];
@@ -98,9 +98,8 @@ function normalizeFilters(
         typeof raw.workflow_filters?.q === "string"
           ? raw.workflow_filters.q.trim()
           : undefined,
-      workflow_family: normalizeStringArray(
-        raw.workflow_filters?.workflow_family,
-      ),
+      mechanism: normalizeStringArray(raw.workflow_filters?.mechanism),
+      technique: normalizeStringArray(raw.workflow_filters?.technique),
     },
     include_items: raw.include_items !== false,
     include_workflows: raw.include_workflows !== false,
@@ -172,7 +171,7 @@ export async function interpretPromptQuery(
               "Return JSON with keys item_filters, workflow_filters, include_items, include_workflows, and ambiguity_notes. " +
               "Use only filter keys that exist. " +
               "Valid item filter keys: q, type, mechanism, technique, family, maturity_stage, status, has_independent_replication, has_mouse_in_vivo_validation, has_therapeutic_use. " +
-              "Valid workflow filter keys: q, workflow_family. " +
+              "Valid workflow filter keys: q, mechanism, technique. " +
               "If a request is broad, keep q populated with the original search terms instead of inventing unsupported filters.",
           },
           {

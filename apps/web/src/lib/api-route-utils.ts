@@ -1,4 +1,4 @@
-import type { ExtractedWorkflowSearchFilters, ItemSearchFilters, WorkflowSearchFilters } from "./api-search";
+import type { ExtractedWorkflowSearchFilters, ItemSearchFilters } from "./api-search";
 import { parseBooleanParam, splitMultiValue } from "./api-search";
 
 function parseOptionalNumber(rawValue: string | null): number | undefined {
@@ -28,15 +28,6 @@ export function parseItemSearchFilters(searchParams: URLSearchParams): ItemSearc
     has_mouse_in_vivo_validation: parseBooleanParam(searchParams.get("has_mouse_in_vivo_validation")),
     has_therapeutic_use: parseBooleanParam(searchParams.get("has_therapeutic_use")),
     sort: (searchParams.get("sort") as ItemSearchFilters["sort"] | null) ?? undefined,
-    limit: parseOptionalNumber(searchParams.get("limit")),
-    offset: parseOptionalNumber(searchParams.get("offset")),
-  };
-}
-
-export function parseWorkflowSearchFilters(searchParams: URLSearchParams): WorkflowSearchFilters {
-  return {
-    q: searchParams.get("q")?.trim() || undefined,
-    workflow_family: parseMultiValueParams(searchParams, "workflow_family"),
     limit: parseOptionalNumber(searchParams.get("limit")),
     offset: parseOptionalNumber(searchParams.get("offset")),
   };

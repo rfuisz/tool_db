@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 
-import { getItems, getWorkflows } from "@/lib/backend-data";
+import { getItems, getExtractedWorkflows } from "@/lib/backend-data";
 import {
   searchItems,
-  searchWorkflows,
+  searchExtractedWorkflows,
   type ItemSearchFilters,
-  type WorkflowSearchFilters,
+  type ExtractedWorkflowSearchFilters,
 } from "@/lib/api-search";
 import { interpretPromptQuery } from "@/lib/prompt-query";
 import { guardQueryRequest } from "@/lib/query-guard";
@@ -68,7 +68,7 @@ function coerceItemFilters(raw: unknown): Partial<ItemSearchFilters> {
   };
 }
 
-function coerceWorkflowFilters(raw: unknown): Partial<WorkflowSearchFilters> {
+function coerceWorkflowFilters(raw: unknown): Partial<ExtractedWorkflowSearchFilters> {
   if (!raw || typeof raw !== "object") {
     return {};
   }
@@ -76,7 +76,8 @@ function coerceWorkflowFilters(raw: unknown): Partial<WorkflowSearchFilters> {
   const value = raw as Record<string, unknown>;
   return {
     q: typeof value.q === "string" ? value.q.trim() : undefined,
-    workflow_family: normalizeStringArray(value.workflow_family),
+    mechanism: normalizeStringArray(value.mechanism),
+    technique: normalizeStringArray(value.technique),
     limit: normalizeNumber(value.limit),
     offset: normalizeNumber(value.offset),
   };
@@ -108,7 +109,8 @@ export async function GET() {
       },
       workflow_filters: {
         q: "string",
-        workflow_family: ["string"],
+        mechanism: ["string"],
+        technique: ["string"],
         limit: "number",
         offset: "number",
       },
@@ -177,12 +179,12 @@ export async function POST(request: Request) {
 
   const [items, workflows] = await Promise.all([
     includeItems ? getItems() : Promise.resolve([]),
-    includeWorkflows ? getWorkflows() : Promise.resolve([]),
+    includeWorkflows ? getExtractedWorkflows() : Promise.resolve([]),
   ]);
 
   const itemResult = includeItems ? searchItems(items, itemFilters) : null;
   const workflowResult = includeWorkflows
-    ? searchWorkflows(workflows, workflowFilters)
+    ? searchExtractedWorkflows(workflows, workflowFilters)
     : null;
 
   return NextResponse.json(

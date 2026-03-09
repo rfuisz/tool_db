@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getItems, getWorkflows } from "@/lib/backend-data";
+import { getItems, getExtractedWorkflows } from "@/lib/backend-data";
 import { getAllFamilies } from "@/lib/data";
 import {
   MECHANISM_HIERARCHY_SECTIONS,
@@ -17,7 +17,10 @@ import {
 import type { ItemType } from "@/lib/types";
 
 export default async function Home() {
-  const [items, workflows] = await Promise.all([getItems(), getWorkflows()]);
+  const [items, extractedWorkflows] = await Promise.all([
+    getItems(),
+    getExtractedWorkflows(),
+  ]);
   const typeCounts = items.reduce<Record<string, number>>((acc, item) => {
     acc[item.item_type] = (acc[item.item_type] || 0) + 1;
     return acc;
@@ -89,7 +92,7 @@ Or am I a wild storm, or a great song?`}
             <strong className="text-ink">{families.length}</strong> families
           </span>
           <span>
-            <strong className="text-ink">{workflows.length}</strong> workflows
+            <strong className="text-ink">{extractedWorkflows.length}</strong> workflows
           </span>
           {avgEvidence !== null && (
             <span>
@@ -276,28 +279,31 @@ Or am I a wild storm, or a great song?`}
             </div>
           </div>
         </div>
-        <p className="mt-4 max-w-3xl text-sm leading-relaxed text-ink-secondary">
-          Families remain a useful supporting lens for browsing related lineages
-          like LOV, BLUF, phytochromes, or display platforms, but they are not
-          the top conceptual hierarchy.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
-          {families.map((f) => {
-            const count = items.filter((i) => i.family === f).length;
-            return (
-              <Link
-                key={f}
-                href={`/items?family=${f}`}
-                className="group font-body text-base text-ink-secondary transition-colors hover:text-accent"
-              >
-                {f}
-                <sup className="ml-0.5 font-data text-xs text-ink-muted group-hover:text-accent">
-                  {count}
-                </sup>
-              </Link>
-            );
-          })}
-        </div>
+        {families.length >= 3 && (
+          <>
+            <p className="mt-4 max-w-3xl text-sm leading-relaxed text-ink-secondary">
+              Families group related lineages that share evolutionary or engineering
+              ancestry. They complement the mechanism and technique hierarchies above.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
+              {families.map((f) => {
+                const count = items.filter((i) => i.family === f).length;
+                return (
+                  <Link
+                    key={f}
+                    href={`/items?family=${f}`}
+                    className="group font-body text-base text-ink-secondary transition-colors hover:text-accent"
+                  >
+                    {f}
+                    <sup className="ml-0.5 font-data text-xs text-ink-muted group-hover:text-accent">
+                      {count}
+                    </sup>
+                  </Link>
+                );
+              })}
+            </div>
+          </>
+        )}
         <p className="mt-6">
           <Link
             href="/items"
@@ -316,40 +322,69 @@ Or am I a wild storm, or a great song?`}
         <p className="mb-6 max-w-3xl text-[15px] leading-relaxed text-ink-secondary">
           Workflows sit above both branches. They combine mechanisms and
           techniques to obtain, optimize, verify, characterize, deliver, and
-          evaluate engineered systems.
+          evaluate engineered systems. These are extracted from the primary
+          literature.
         </p>
-        <div className="space-y-8">
-          {workflows.map((w) => {
-            const totalDays = Math.round(
-              w.steps.reduce(
-                (s, st) => s + (st.duration_typical_hours ?? 0),
-                0,
-              ) / 24,
-            );
-            const totalCost = w.steps.reduce(
-              (s, st) => s + (st.direct_cost_usd_typical ?? 0),
-              0,
-            );
-            return (
-              <Link
-                key={w.id}
-                href={`/workflows#${w.slug}`}
-                className="group block border-b border-edge pb-8 transition-colors hover:border-accent"
-              >
-                <h3 className="mb-1 text-ink group-hover:text-accent">
-                  {w.name}
-                </h3>
-                <p className="mb-2 text-[15px] text-ink-secondary">
-                  {w.objective}
-                </p>
-                <span className="font-data text-sm text-ink-muted">
-                  {w.steps.length} steps &middot; ~{totalDays}d &middot; $
-                  {totalCost.toLocaleString()}
-                </span>
-              </Link>
-            );
-          })}
-        </div>
+        {extractedWorkflows.length > 0 ? (
+          <div>
+            {extractedWorkflows.slice(0, 8).map((wf) => {
+              const doc = wf.source_document;
+              return (
+                <Link
+                  key={wf.workflow_id}
+                  href="/workflows"
+                  className="group block border-b border-edge py-5 transition-colors hover:border-accent"
+                >
+                  <h3 className="mb-1 text-ink group-hover:text-accent">
+                    {wf.workflow_objective ?? "Untitled workflow"}
+                  </h3>
+                  {wf.why_workflow_works && (
+                    <p className="mb-2 line-clamp-2 text-[15px] leading-relaxed text-ink-secondary">
+                      {wf.why_workflow_works}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-ui text-xs">
+                    {doc?.title && (
+                      <span className="text-ink-muted">{doc.title}</span>
+                    )}
+                    {doc?.publication_year && (
+                      <span className="font-data text-ink-muted">
+                        {doc.publication_year}
+                      </span>
+                    )}
+                    <span className="font-data text-ink-muted">
+                      {wf.stages.length > 0 &&
+                        `${wf.stages.length} stages`}
+                      {wf.stages.length > 0 && wf.steps.length > 0 &&
+                        " · "}
+                      {wf.steps.length > 0 &&
+                        `${wf.steps.length} steps`}
+                      {wf.involved_items.length > 0 &&
+                        ` · ${wf.involved_items.length} tools`}
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+            {extractedWorkflows.length > 8 && (
+              <p className="mt-4 font-data text-sm text-ink-muted">
+                + {extractedWorkflows.length - 8} more workflows
+              </p>
+            )}
+          </div>
+        ) : (
+          <p className="text-ink-muted">
+            No workflows extracted yet.
+          </p>
+        )}
+        <p className="mt-6">
+          <Link
+            href="/workflows"
+            className="small-caps text-accent hover:text-accent-hover"
+          >
+            Browse all workflows &rarr;
+          </Link>
+        </p>
       </section>
     </div>
   );

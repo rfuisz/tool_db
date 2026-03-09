@@ -20,7 +20,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | `/items`        | Browse and filter toolkit items                                    |
 | `/items/[slug]` | Item detail — validation matrix, scores, citations                 |
 | `/gaps`         | Gap Map browser with normalized capabilities and resources         |
-| `/workflows`    | DBTL workflow templates with step timelines                        |
+| `/workflows`    | Literature-extracted DBTL workflows with search and filtering      |
 
 ## API
 
@@ -31,7 +31,7 @@ The web app now exposes read-only JSON endpoints alongside the UI:
 | `/api/v1/items-browse` via backend | Single-call browse payload used by the web app for hierarchy pages and large item lists                                                |
 | `/api/items`        | Filterable item search with `q`, `type`, `mechanism`, `technique`, `family`, `maturity_stage`, `status`, and validation booleans |
 | `/api/items/[slug]` | Full item payload for one canonical item                                                                                         |
-| `/api/workflows`    | Workflow search with `q` and `workflow_family`                                                                                   |
+| `/api/extracted-workflows` | Extracted workflow search with `q`, `mechanism`, `technique`, sorting, and pagination                                        |
 | `/api/query`        | Structured or prompt-driven query endpoint                                                                                       |
 
 ### Prompt Query LLM

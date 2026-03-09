@@ -1,4 +1,4 @@
-import type { ExtractedWorkflowSummary, ToolkitItem, WorkflowTemplate } from "./types";
+import type { ExtractedWorkflowSummary, ToolkitItem } from "./types";
 import { buildItemHierarchyAssignments } from "./item-hierarchy";
 
 const DEFAULT_LIMIT = 20;
@@ -23,13 +23,6 @@ export interface ItemSearchFilters {
   has_mouse_in_vivo_validation?: boolean;
   has_therapeutic_use?: boolean;
   sort?: ItemSort;
-  limit?: number;
-  offset?: number;
-}
-
-export interface WorkflowSearchFilters {
-  q?: string;
-  workflow_family?: string[];
   limit?: number;
   offset?: number;
 }
@@ -278,41 +271,6 @@ export function searchItems(
   });
 
   return paginate(sortItems(filtered, filters.sort), filters.limit, filters.offset);
-}
-
-export function searchWorkflows(
-  workflows: WorkflowTemplate[],
-  filters: WorkflowSearchFilters,
-): SearchResult<WorkflowTemplate> {
-  const filtered = workflows.filter((workflow) => {
-    if (
-      !matchesQuery(
-        [
-          workflow.name,
-          workflow.objective,
-          workflow.recommended_for,
-          workflow.workflow_family,
-          workflow.throughput_class,
-          workflow.simple_summary,
-          ...(workflow.how_to_implement ?? []),
-          ...(workflow.used_when ?? []),
-          ...(workflow.tradeoffs ?? []),
-          ...workflow.steps.map((step) => step.step_name),
-        ],
-        filters.q,
-      )
-    ) {
-      return false;
-    }
-
-    if (!matchesScalar(workflow.workflow_family, filters.workflow_family)) {
-      return false;
-    }
-
-    return true;
-  });
-
-  return paginate(filtered, filters.limit, filters.offset);
 }
 
 function sortExtractedWorkflows(

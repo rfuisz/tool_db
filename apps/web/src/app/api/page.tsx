@@ -44,8 +44,8 @@ export default function ApiDocsPage() {
               with citations, validations, and score rollups.
             </p>
             <p>
-              <code>GET /api/workflows</code> searches workflow templates by
-              text and workflow family.
+              <code>GET /api/extracted-workflows</code> searches extracted
+              workflows by text, mechanism, and technique.
             </p>
             <p>
               <code>POST /api/query</code> accepts either structured filters or

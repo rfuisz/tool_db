@@ -1,7 +1,6 @@
 import "server-only";
 
 import seedBundle from "./seed-bundle.json";
-import { WORKFLOW_EXPLAINERS } from "./workflow-explainers";
 import type {
   ApprovedItemEvidence,
   FirstPassEntityDetail,
@@ -29,16 +28,9 @@ import type {
   ToolkitItem,
   ValidationObservation,
   ValidationRollup,
-  WorkflowFamily,
   ExtractedWorkflow,
   ExtractedWorkflowSummary,
   WorkflowRecommendation,
-  WorkflowSearchModality,
-  WorkflowStage,
-  WorkflowStageKind,
-  WorkflowStep,
-  WorkflowStepType,
-  WorkflowTemplate,
 } from "./types";
 
 type BackendItemSummary = {
@@ -140,84 +132,10 @@ type BackendItemDetail = BackendItemSummary & {
   workflow_fit_markdown: string;
 };
 
-type BackendWorkflowSummary = {
-  slug: string;
-  name: string;
-  workflow_family: WorkflowFamily;
-  objective: string;
-  throughput_class?: string | null;
-};
-
-type BackendWorkflowStepTemplate = {
-  step_name: string;
-  stage_name?: string | null;
-  step_order?: number | null;
-  step_type: WorkflowStepType;
-  purpose?: string | null;
-  why_this_step_now?: string | null;
-  decision_gate_reason?: string | null;
-  advance_criteria?: string | null;
-  failure_criteria?: string | null;
-  validation_focus?: string | null;
-  target_property_axes?: string[];
-  target_mechanisms?: string[];
-  target_techniques?: string[];
-  duration_typical_hours?: number | null;
-  hands_on_hours?: number | null;
-  direct_cost_usd_typical?: number | null;
-  parallelizable?: boolean | null;
-  failure_probability?: number | null;
-  input_artifact?: string | null;
-  output_artifact?: string | null;
-};
-
-type BackendWorkflowStageTemplate = {
-  stage_name: string;
-  stage_kind: WorkflowStageKind;
-  stage_order: number;
-  search_modality?: WorkflowSearchModality | null;
-  input_candidate_count_typical?: number | null;
-  output_candidate_count_typical?: number | null;
-  candidate_unit?: string | null;
-  selection_basis?: string | null;
-  counterselection_basis?: string | null;
-  enriches_for_axes?: string[];
-  guards_against_axes?: string[];
-  preserves_downstream_property_axes?: string[];
-  why_stage_exists?: string | null;
-  advance_criteria?: string | null;
-  decision_gate_reason?: string | null;
-  bottleneck_risk?: string | null;
-  higher_fidelity_than_previous?: boolean | null;
-};
-
-type BackendWorkflowDetail = BackendWorkflowSummary & {
-  protocol_family?: string | null;
-  engineered_system_family?: string | null;
-  why_workflow_works?: string | null;
-  priority_logic?: string | null;
-  validation_strategy?: string | null;
-  recommended_for?: string[];
-  default_parallelization_assumption?: string | null;
-  mechanisms?: string[];
-  techniques?: string[];
-  design_goals?: Array<Record<string, unknown>>;
-  item_roles?: Array<Record<string, unknown>>;
-  stage_templates?: BackendWorkflowStageTemplate[];
-  step_templates?: BackendWorkflowStepTemplate[];
-  assumption_notes?: string[];
-  index_markdown: string;
-};
-
 type BackendGapSummary = GapSummary;
 type BackendGapDetail = GapDetail;
 
 type SeedBundleItem = {
-  slug: string;
-  structured: Record<string, unknown>;
-};
-
-type SeedBundleWorkflow = {
   slug: string;
   structured: Record<string, unknown>;
 };
@@ -574,147 +492,8 @@ function mapSeedItem(item: SeedBundleItem): ToolkitItem {
   };
 }
 
-function mapWorkflowStep(
-  slug: string,
-  step: BackendWorkflowStepTemplate,
-  index: number,
-): WorkflowStep {
-  return {
-    id: `${slug}-step-${index + 1}`,
-    step_name: step.step_name,
-    stage_name: step.stage_name ?? null,
-    step_order: step.step_order ?? null,
-    step_type: step.step_type,
-    purpose: step.purpose ?? null,
-    why_this_step_now: step.why_this_step_now ?? null,
-    decision_gate_reason: step.decision_gate_reason ?? null,
-    advance_criteria: step.advance_criteria ?? null,
-    failure_criteria: step.failure_criteria ?? null,
-    validation_focus: step.validation_focus ?? null,
-    target_property_axes: step.target_property_axes ?? [],
-    target_mechanisms: step.target_mechanisms ?? [],
-    target_techniques: step.target_techniques ?? [],
-    duration_typical_hours: step.duration_typical_hours ?? null,
-    hands_on_hours: step.hands_on_hours ?? null,
-    direct_cost_usd_typical: step.direct_cost_usd_typical ?? null,
-    parallelizable: step.parallelizable ?? false,
-    failure_probability: step.failure_probability ?? null,
-    input_artifact: step.input_artifact ?? null,
-    output_artifact: step.output_artifact ?? null,
-  };
-}
-
-function mapWorkflowStage(
-  slug: string,
-  stage: BackendWorkflowStageTemplate,
-  index: number,
-): WorkflowStage {
-  return {
-    id: `${slug}-stage-${index + 1}`,
-    stage_name: stage.stage_name,
-    stage_kind: stage.stage_kind,
-    stage_order: stage.stage_order,
-    search_modality: stage.search_modality ?? null,
-    input_candidate_count_typical: stage.input_candidate_count_typical ?? null,
-    output_candidate_count_typical:
-      stage.output_candidate_count_typical ?? null,
-    candidate_unit: stage.candidate_unit ?? null,
-    selection_basis: stage.selection_basis ?? null,
-    counterselection_basis: stage.counterselection_basis ?? null,
-    enriches_for_axes: stage.enriches_for_axes ?? [],
-    guards_against_axes: stage.guards_against_axes ?? [],
-    preserves_downstream_property_axes:
-      stage.preserves_downstream_property_axes ?? [],
-    why_stage_exists: stage.why_stage_exists ?? null,
-    advance_criteria: stage.advance_criteria ?? null,
-    decision_gate_reason: stage.decision_gate_reason ?? null,
-    bottleneck_risk: stage.bottleneck_risk ?? null,
-    higher_fidelity_than_previous: stage.higher_fidelity_than_previous ?? null,
-  };
-}
-
-function mapBackendWorkflow(detail: BackendWorkflowDetail): WorkflowTemplate {
-  const explainer = WORKFLOW_EXPLAINERS[detail.slug] ?? {};
-  return {
-    id: `workflow_${detail.slug.replace(/-/g, "_")}`,
-    slug: detail.slug,
-    name: detail.name,
-    workflow_family: detail.workflow_family,
-    objective: detail.objective,
-    throughput_class: detail.throughput_class ?? null,
-    recommended_for: detail.recommended_for?.join(", ") ?? null,
-    protocol_family: detail.protocol_family ?? null,
-    engineered_system_family: detail.engineered_system_family ?? null,
-    why_workflow_works: detail.why_workflow_works ?? null,
-    priority_logic: detail.priority_logic ?? null,
-    validation_strategy: detail.validation_strategy ?? null,
-    mechanisms: detail.mechanisms ?? [],
-    techniques: detail.techniques ?? [],
-    design_goals: detail.design_goals ?? [],
-    item_roles: detail.item_roles ?? [],
-    stages: (detail.stage_templates ?? [])
-      .map((stage, index) => mapWorkflowStage(detail.slug, stage, index))
-      .sort((a, b) => a.stage_order - b.stage_order),
-    steps: (detail.step_templates ?? []).map((step, index) =>
-      mapWorkflowStep(detail.slug, step, index),
-    ),
-    ...explainer,
-  };
-}
-
-function mapSeedWorkflow(entry: SeedBundleWorkflow): WorkflowTemplate {
-  const structured = entry.structured;
-  const explainer = WORKFLOW_EXPLAINERS[entry.slug] ?? {};
-  const stages = (
-    (structured.stage_templates as
-      | BackendWorkflowStageTemplate[]
-      | undefined) ?? []
-  )
-    .map((stage, index) => mapWorkflowStage(entry.slug, stage, index))
-    .sort((a, b) => a.stage_order - b.stage_order);
-  const steps = (
-    (structured.step_templates as BackendWorkflowDetail["step_templates"]) ?? []
-  ).map((step, index) => mapWorkflowStep(entry.slug, step, index));
-  return {
-    id: String(structured.id ?? `workflow_${entry.slug.replace(/-/g, "_")}`),
-    slug: String(structured.slug ?? entry.slug),
-    name: String(structured.name ?? entry.slug),
-    workflow_family: structured.workflow_family as WorkflowFamily,
-    objective: String(structured.objective ?? ""),
-    throughput_class:
-      (structured.throughput_class as string | null | undefined) ?? null,
-    recommended_for: Array.isArray(structured.recommended_for)
-      ? (structured.recommended_for as string[]).join(", ")
-      : null,
-    protocol_family:
-      (structured.protocol_family as string | null | undefined) ?? null,
-    engineered_system_family:
-      (structured.engineered_system_family as string | null | undefined) ?? null,
-    why_workflow_works:
-      (structured.why_workflow_works as string | null | undefined) ?? null,
-    priority_logic:
-      (structured.priority_logic as string | null | undefined) ?? null,
-    validation_strategy:
-      (structured.validation_strategy as string | null | undefined) ?? null,
-    mechanisms: (structured.mechanisms as string[] | undefined) ?? [],
-    techniques: (structured.techniques as string[] | undefined) ?? [],
-    design_goals:
-      (structured.design_goals as Array<Record<string, unknown>> | undefined) ??
-      [],
-    item_roles:
-      (structured.item_roles as Array<Record<string, unknown>> | undefined) ?? [],
-    stages,
-    steps,
-    ...explainer,
-  };
-}
-
 function getSeedItems(): ToolkitItem[] {
   return (seedBundle.items as SeedBundleItem[]).map(mapSeedItem);
-}
-
-function getSeedWorkflows(): WorkflowTemplate[] {
-  return (seedBundle.workflows as SeedBundleWorkflow[]).map(mapSeedWorkflow);
 }
 
 function normalizeFirstPassEvidenceSnippet(
@@ -834,26 +613,6 @@ export async function getItemBySlug(
       return getSeedItems().find((item) => item.slug === slug);
     }
     throw backendUnavailableError(`canonical item detail for ${slug}`, error);
-  }
-}
-
-export async function getWorkflows(): Promise<WorkflowTemplate[]> {
-  try {
-    const summaries =
-      await fetchBackendJson<BackendWorkflowSummary[]>("/api/v1/workflows");
-    const details = await Promise.all(
-      summaries.map((summary) =>
-        fetchBackendJson<BackendWorkflowDetail>(
-          `/api/v1/workflows/${summary.slug}`,
-        ),
-      ),
-    );
-    return details.map(mapBackendWorkflow);
-  } catch (error) {
-    if (ALLOW_SEED_FALLBACK) {
-      return getSeedWorkflows();
-    }
-    throw backendUnavailableError("workflow listing", error);
   }
 }
 

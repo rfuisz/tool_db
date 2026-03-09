@@ -27,6 +27,8 @@ Quick start:
 4. Populate the local database with checked-in literature and Gap Map packets using `.venv/bin/python -m apps.worker.main populate-local-db`.
 5. Recompute canonical item explainers, comparisons, facets, and scores with `.venv/bin/python -m apps.worker.main materialize-item-details` when you change derivation logic without reingesting.
 
+Worker commands now emit progress logs by default for long-running passes such as `materialize-item-details`. Set `LOG_LEVEL=DEBUG` if you want more verbose worker-side tracing.
+
 Recommended local `DATABASE_URL`:
 
 ```text

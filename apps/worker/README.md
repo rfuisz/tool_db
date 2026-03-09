@@ -144,6 +144,8 @@ Recompute canonical item explainers, comparisons, facets, and scores after schem
 .venv/bin/python -m apps.worker.main materialize-item-details
 ```
 
+This command now emits phase and progress logs during long runs. Use `LOG_LEVEL=DEBUG` if you want more verbose worker-side tracing.
+
 Optionally scope the refresh to one or more item slugs:
 
 ```bash

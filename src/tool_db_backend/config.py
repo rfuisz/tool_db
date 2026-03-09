@@ -19,6 +19,7 @@ class Settings(BaseSettings):
 
     app_name: str = "BioControl Toolkit API"
     app_env: str = "development"
+    log_level: str = "INFO"
     database_url: str = ""
     render_database_url: str = ""
     render_api_key: str = ""

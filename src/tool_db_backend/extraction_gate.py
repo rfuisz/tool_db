@@ -91,7 +91,7 @@ class ExtractionGate:
                     issues.append(
                         f"Claim {claim_local_id} references missing subject_local_id {subject_local_id}."
                     )
-                elif entity_type != "toolkit_item":
+                elif entity_type not in {"toolkit_item", "concept_label"}:
                     issues.append(
                         f"Claim {claim_local_id} references subject_local_id {subject_local_id} with unsupported type {entity_type}."
                     )

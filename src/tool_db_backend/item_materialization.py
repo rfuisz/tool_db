@@ -1,11 +1,15 @@
 import json
+import logging
 import re
 from dataclasses import dataclass
 from datetime import date
+from time import perf_counter
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from tool_db_backend.config import Settings
 from tool_db_backend.errors import LoadPlanExecutionError
+
+logger = logging.getLogger(__name__)
 
 
 def _dedupe_preserving_order(values: Iterable[str]) -> List[str]:
@@ -76,19 +80,33 @@ class ItemContext:
 class ItemMaterializer:
     SCORE_VERSION = "v1"
     DERIVATION_VERSION = "v1"
+    PROGRESS_LOG_INTERVAL = 100
 
     def __init__(self, settings: Settings, connection: Any = None) -> None:
         self.settings = settings
         self._connection = connection
 
     def refresh(self, item_slugs: Optional[Sequence[str]] = None, include_related: bool = True) -> Dict[str, Any]:
+        started_at = perf_counter()
         conn, should_close = self._get_connection()
         try:
             with conn.transaction():
                 with conn.cursor() as cursor:
+                    requested_slug_count = len(item_slugs or [])
+                    logger.info(
+                        "Starting item materialization: requested_slug_count=%s include_related=%s",
+                        requested_slug_count,
+                        include_related,
+                    )
                     item_rows = self._load_item_rows(cursor)
                     if not item_rows:
-                        return {"updated_item_count": 0, "updated_comparison_item_count": 0}
+                        elapsed_seconds = round(perf_counter() - started_at, 3)
+                        logger.info("Item materialization found no toolkit items to process.")
+                        return {
+                            "updated_item_count": 0,
+                            "updated_comparison_item_count": 0,
+                            "elapsed_seconds": elapsed_seconds,
+                        }
 
                     slug_to_id = {row["slug"]: row["id"] for row in item_rows}
                     if item_slugs:
@@ -101,12 +119,30 @@ class ItemMaterializer:
                         target_item_ids = {row["id"] for row in item_rows}
 
                     if not target_item_ids:
-                        return {"updated_item_count": 0, "updated_comparison_item_count": 0}
+                        elapsed_seconds = round(perf_counter() - started_at, 3)
+                        logger.info(
+                            "Item materialization resolved no matching target items from %s requested slugs.",
+                            requested_slug_count,
+                        )
+                        return {
+                            "updated_item_count": 0,
+                            "updated_comparison_item_count": 0,
+                            "elapsed_seconds": elapsed_seconds,
+                        }
 
-                    item_contexts = {
-                        item_id: self._fetch_item_context(cursor, item_id)
-                        for item_id in target_item_ids
-                    }
+                    logger.info(
+                        "Loaded %s toolkit items; materializing %s target items.",
+                        len(item_rows),
+                        len(target_item_ids),
+                    )
+
+                    fetch_started_at = perf_counter()
+                    item_contexts: Dict[Any, ItemContext] = {}
+                    target_item_id_list = sorted(target_item_ids, key=str)
+                    for index, item_id in enumerate(target_item_id_list, start=1):
+                        item_contexts[item_id] = self._fetch_item_context(cursor, item_id)
+                        self._maybe_log_progress("Fetched target item contexts", index, len(target_item_id_list))
+                    fetch_target_seconds = round(perf_counter() - fetch_started_at, 3)
 
                     comparison_item_ids = set(target_item_ids)
                     if include_related:
@@ -114,11 +150,30 @@ class ItemMaterializer:
                             self._expand_related_item_ids(item_rows, item_contexts.values())
                         )
 
-                    for item_id in comparison_item_ids:
+                    additional_item_ids = sorted(
+                        (item_id for item_id in comparison_item_ids if item_id not in item_contexts),
+                        key=str,
+                    )
+                    logger.info(
+                        "Preparing %s comparison items (%s additional related items).",
+                        len(comparison_item_ids),
+                        len(additional_item_ids),
+                    )
+                    related_fetch_started_at = perf_counter()
+                    for index, item_id in enumerate(additional_item_ids, start=1):
+                        item_contexts[item_id] = self._fetch_item_context(cursor, item_id)
+                        self._maybe_log_progress(
+                            "Fetched related comparison item contexts",
+                            index,
+                            len(additional_item_ids),
+                        )
+                    fetch_related_seconds = round(perf_counter() - related_fetch_started_at, 3)
+
+                    derive_started_at = perf_counter()
+                    comparison_item_id_list = sorted(comparison_item_ids, key=str)
+                    for index, item_id in enumerate(comparison_item_id_list, start=1):
                         if item_id not in item_contexts:
                             item_contexts[item_id] = self._fetch_item_context(cursor, item_id)
-
-                    for item_id in comparison_item_ids:
                         context = item_contexts[item_id]
                         replication_summary = self._derive_replication_summary(context)
                         facets = self._derive_facets(context, replication_summary)
@@ -136,21 +191,44 @@ class ItemMaterializer:
                         self._replace_item_problem_links(cursor, item_id, problem_links)
                         self._replace_item_explainers(cursor, item_id, explainers)
                         self._upsert_replication_summary(cursor, item_id, replication_summary)
+                        self._maybe_log_progress("Materialized item details", index, len(comparison_item_id_list))
+                    derive_seconds = round(perf_counter() - derive_started_at, 3)
 
+                    comparison_started_at = perf_counter()
                     self._replace_item_comparisons(
                         cursor,
                         comparison_item_ids,
                         {item_id: item_contexts[item_id] for item_id in comparison_item_ids},
                     )
+                    comparison_seconds = round(perf_counter() - comparison_started_at, 3)
 
         finally:
             if should_close:
                 conn.close()
 
+        elapsed_seconds = round(perf_counter() - started_at, 3)
+        logger.info(
+            "Finished item materialization: targets=%s comparisons=%s fetch_targets_s=%s fetch_related_s=%s derive_s=%s comparisons_s=%s total_s=%s",
+            len(target_item_ids),
+            len(comparison_item_ids),
+            fetch_target_seconds,
+            fetch_related_seconds,
+            derive_seconds,
+            comparison_seconds,
+            elapsed_seconds,
+        )
         return {
             "updated_item_count": len(target_item_ids),
             "updated_comparison_item_count": len(comparison_item_ids),
+            "elapsed_seconds": elapsed_seconds,
         }
+
+    @classmethod
+    def _maybe_log_progress(cls, label: str, current: int, total: int) -> None:
+        if total <= 0:
+            return
+        if current == total or current == 1 or current % cls.PROGRESS_LOG_INTERVAL == 0:
+            logger.info("%s: %s/%s", label, current, total)
 
     def _get_connection(self) -> Tuple[Any, bool]:
         if self._connection is not None:

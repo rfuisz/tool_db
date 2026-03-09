@@ -1,6 +1,7 @@
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
+import logging
 import re
 import sys
 from pathlib import Path
@@ -40,6 +41,19 @@ from tool_db_backend.source_smoke_test import (
     build_first_pass_query_sets,
 )
 from tool_db_backend.source_staging import ClinicalTrialArtifactBuilder, OptoBaseSearchParser
+
+logger = logging.getLogger(__name__)
+
+
+def configure_logging() -> None:
+    settings = get_settings()
+    level_name = str(settings.log_level or "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        force=True,
+    )
 
 
 def validate_packet_file(packet_kind: str, packet_path: str) -> int:
@@ -643,6 +657,7 @@ def run_extraction_batch(
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = argv or sys.argv[1:]
+    configure_logging()
     if len(args) == 2 and args[0] in PACKET_TO_SCHEMA:
         packet_kind, packet_path = args
         return validate_packet_file(packet_kind, packet_path)

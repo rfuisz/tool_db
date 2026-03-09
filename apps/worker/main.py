@@ -1,5 +1,6 @@
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import hashlib
 import json
 import logging
 import re
@@ -968,14 +969,20 @@ def run_full_pipeline(
             "seconds": round(perf_counter() - phase_start, 1),
         }
 
-        # ---- 4. Run extraction batch ----
+    # ---- 4. Run extraction batch (runs even if build was skipped, picks up existing jobs) ----
+    if not skip_extract and extraction_artifact_dir.exists():
         _phase("extraction")
         phase_start = perf_counter()
         all_new_jobs: List[Path] = []
+        total_jobs = 0
         for jd in sorted(extraction_artifact_dir.glob("**/jobs")):
             for jp in sorted(jd.glob("*.json")):
+                total_jobs += 1
                 if not _existing_extraction_outputs(settings, jp):
                     all_new_jobs.append(jp)
+        skipped_extraction = total_jobs - len(all_new_jobs)
+        if skipped_extraction:
+            logger.info("Extraction: skipping %d already-extracted jobs, %d new jobs to run.", skipped_extraction, len(all_new_jobs))
         extraction_total = 0
         extraction_failures = 0
         if all_new_jobs:
@@ -1000,9 +1007,27 @@ def run_full_pipeline(
     phase_start = perf_counter()
     pipeline_obj = PacketIngestPipeline(settings)
     packet_paths = sorted(Path("data/extractions").glob("*.json"))
+
+    # Load already-ingested packet fingerprints so we can skip unchanged files
+    known_fingerprints: set = set()
+    try:
+        with psycopg.connect(settings.database_url) as fp_conn:
+            with fp_conn.cursor() as fp_cur:
+                fp_cur.execute("select packet_fingerprint from extracted_packet")
+                known_fingerprints = {row[0] for row in fp_cur.fetchall()}
+    except Exception:
+        pass
+
     ingest_ok = 0
     ingest_fail = 0
+    ingest_skipped = 0
     for i, packet_path in enumerate(packet_paths, 1):
+        file_hash = hashlib.sha256(packet_path.read_bytes()).hexdigest()
+        if file_hash in known_fingerprints:
+            ingest_skipped += 1
+            if i == 1 or i % 200 == 0 or i == len(packet_paths):
+                logger.info("Ingest progress: %d/%d (ok=%d skip=%d fail=%d)", i, len(packet_paths), ingest_ok, ingest_skipped, ingest_fail)
+            continue
         try:
             packet_kind = _infer_packet_kind(packet_path)
             pipeline_obj.ingest_packet_file(
@@ -1015,10 +1040,13 @@ def run_full_pipeline(
         except Exception:
             ingest_fail += 1
         if i == 1 or i % 200 == 0 or i == len(packet_paths):
-            logger.info("Ingest progress: %d/%d (ok=%d fail=%d)", i, len(packet_paths), ingest_ok, ingest_fail)
+            logger.info("Ingest progress: %d/%d (ok=%d skip=%d fail=%d)", i, len(packet_paths), ingest_ok, ingest_skipped, ingest_fail)
+    if ingest_skipped:
+        logger.info("Ingest: skipped %d already-ingested packets.", ingest_skipped)
     phase_reports["ingest"] = {
         "total": len(packet_paths),
         "ok": ingest_ok,
+        "skipped": ingest_skipped,
         "failed": ingest_fail,
         "seconds": round(perf_counter() - phase_start, 1),
     }
@@ -1031,9 +1059,11 @@ def run_full_pipeline(
         packet_dir=Path("data/extractions"),
         glob_pattern="*.json",
         manifest_path=manifest_dir / "first-pass.json",
+        known_fingerprints=known_fingerprints,
     )
     phase_reports["first_pass"] = {
         "selected": fp_result.get("selected_packet_count", 0),
+        "skipped": fp_result.get("skipped_packet_count", 0),
         "failed": len(fp_result.get("failed_packets", [])),
         "seconds": round(perf_counter() - phase_start, 1),
     }

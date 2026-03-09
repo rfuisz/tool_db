@@ -338,12 +338,16 @@ function mapItemClaim(claim: BackendItemClaim): ItemClaim {
   };
 }
 
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
 function mapBackendItem(detail: BackendItemDetail): ToolkitItem {
   const itemId = `item_${detail.slug.replace(/-/g, "_")}`;
   const validations = (detail.validations ?? []).map((observation) =>
     mapValidationObservation(itemId, observation),
   );
-  const synonyms = detail.synonyms ?? [];
+  const synonyms = unique(detail.synonyms ?? []);
   return {
     id: itemId,
     slug: detail.slug,
@@ -361,12 +365,12 @@ function mapBackendItem(detail: BackendItemDetail): ToolkitItem {
     first_publication_year: detail.first_publication_year ?? null,
     primary_input_modality: coerceModality(detail.primary_input_modality),
     primary_output_modality: coerceModality(detail.primary_output_modality),
-    components: detail.components ?? [],
+    components: unique(detail.components ?? []),
     parent_items: detail.parent_items ?? [],
     child_items: detail.child_items ?? [],
-    mechanisms: detail.mechanisms ?? [],
-    techniques: detail.techniques ?? [],
-    target_processes: detail.target_processes ?? [],
+    mechanisms: unique(detail.mechanisms ?? []),
+    techniques: unique(detail.techniques ?? []),
+    target_processes: unique(detail.target_processes ?? []),
     synonyms,
     validation_rollup: detail.validation_rollup ?? null,
     replication_summary: detail.replication_summary ?? null,
@@ -389,7 +393,7 @@ function mapBackendItem(detail: BackendItemDetail): ToolkitItem {
 
 function mapBackendBrowseItem(detail: BackendItemBrowse): ToolkitItem {
   const itemId = `item_${detail.slug.replace(/-/g, "_")}`;
-  const synonyms = detail.synonyms ?? [];
+  const synonyms = unique(detail.synonyms ?? []);
   return {
     id: itemId,
     slug: detail.slug,
@@ -407,10 +411,10 @@ function mapBackendBrowseItem(detail: BackendItemBrowse): ToolkitItem {
     first_publication_year: detail.first_publication_year ?? null,
     primary_input_modality: coerceModality(detail.primary_input_modality),
     primary_output_modality: coerceModality(detail.primary_output_modality),
-    components: detail.components ?? [],
-    mechanisms: detail.mechanisms ?? [],
-    techniques: detail.techniques ?? [],
-    target_processes: detail.target_processes ?? [],
+    components: unique(detail.components ?? []),
+    mechanisms: unique(detail.mechanisms ?? []),
+    techniques: unique(detail.techniques ?? []),
+    target_processes: unique(detail.target_processes ?? []),
     synonyms,
     validation_rollup: detail.validation_rollup ?? null,
     replication_summary: detail.replication_summary ?? null,
@@ -433,7 +437,7 @@ function mapBackendBrowseItem(detail: BackendItemBrowse): ToolkitItem {
 
 function mapSeedItem(item: SeedBundleItem): ToolkitItem {
   const structured = item.structured;
-  const synonyms = (structured.synonyms as string[] | undefined) ?? [];
+  const synonyms = unique((structured.synonyms as string[] | undefined) ?? []);
   const canonicalName = String(structured.canonical_name ?? item.slug);
   const summary = (structured.summary as string | null | undefined) ?? null;
   return {
@@ -458,11 +462,11 @@ function mapSeedItem(item: SeedBundleItem): ToolkitItem {
     primary_output_modality: coerceModality(
       (structured.primary_output_modality as string | null | undefined) ?? null,
     ),
-    components: (structured.components as string[] | undefined) ?? [],
-    mechanisms: (structured.mechanisms as string[] | undefined) ?? [],
-    techniques: (structured.techniques as string[] | undefined) ?? [],
+    components: unique((structured.components as string[] | undefined) ?? []),
+    mechanisms: unique((structured.mechanisms as string[] | undefined) ?? []),
+    techniques: unique((structured.techniques as string[] | undefined) ?? []),
     target_processes:
-      (structured.target_processes as string[] | undefined) ?? [],
+      unique((structured.target_processes as string[] | undefined) ?? []),
     synonyms,
     validation_rollup: null,
     replication_summary: null,
@@ -584,14 +588,23 @@ function normalizeGapDetail(detail: BackendGapDetail): GapDetail {
   };
 }
 
+function deduplicateBySlug(items: ToolkitItem[]): ToolkitItem[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.slug)) return false;
+    seen.add(item.slug);
+    return true;
+  });
+}
+
 export async function getItems(): Promise<ToolkitItem[]> {
   try {
     const browseItems =
       await fetchBackendJson<BackendItemBrowse[]>("/api/v1/items-browse");
-    return browseItems.map(mapBackendBrowseItem);
+    return deduplicateBySlug(browseItems.map(mapBackendBrowseItem));
   } catch (error) {
     if (ALLOW_SEED_FALLBACK) {
-    return getSeedItems();
+    return deduplicateBySlug(getSeedItems());
     }
     throw backendUnavailableError("canonical item browse", error);
   }

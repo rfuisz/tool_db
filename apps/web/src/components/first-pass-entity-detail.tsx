@@ -260,42 +260,42 @@ function StageObservationCard({
           </Tooltip>
         ) : null}
       </div>
-      <h3 className="mb-2 text-base text-ink">{observation.stage_name}</h3>
+      <h3 className="mb-2 text-base text-ink">{renderInlineTitle(observation.stage_name)}</h3>
       <div className="space-y-2 text-sm leading-relaxed text-ink-secondary">
         {observation.why_stage_exists ? (
           <p>
             <span className="font-semibold text-ink">Why this stage exists:</span>{" "}
-            {observation.why_stage_exists}
+            {renderInlineTitle(observation.why_stage_exists)}
           </p>
         ) : null}
         {observation.selection_basis ? (
           <p>
             <span className="font-semibold text-ink">Selection basis:</span>{" "}
-            {observation.selection_basis}
+            {renderInlineTitle(observation.selection_basis)}
           </p>
         ) : null}
         {observation.counterselection_basis ? (
           <p>
             <span className="font-semibold text-ink">Counterselection:</span>{" "}
-            {observation.counterselection_basis}
+            {renderInlineTitle(observation.counterselection_basis)}
           </p>
         ) : null}
         {observation.advance_criteria ? (
           <p>
             <span className="font-semibold text-ink">Advance criteria:</span>{" "}
-            {observation.advance_criteria}
+            {renderInlineTitle(observation.advance_criteria)}
           </p>
         ) : null}
         {observation.decision_gate_reason ? (
           <p>
             <span className="font-semibold text-ink">Decision gate:</span>{" "}
-            {observation.decision_gate_reason}
+            {renderInlineTitle(observation.decision_gate_reason)}
           </p>
         ) : null}
         {observation.bottleneck_risk ? (
           <p>
             <span className="font-semibold text-ink">Bottleneck risk:</span>{" "}
-            {observation.bottleneck_risk}
+            {renderInlineTitle(observation.bottleneck_risk)}
           </p>
         ) : null}
         {observation.higher_fidelity_than_previous !== null ? (
@@ -339,25 +339,25 @@ function WorkflowObservationCard({
         {observation.workflow_objective ? (
           <p>
             <span className="font-semibold text-ink">Objective:</span>{" "}
-            {observation.workflow_objective}
+            {renderInlineTitle(observation.workflow_objective)}
           </p>
         ) : null}
         {observation.why_workflow_works ? (
           <p>
             <span className="font-semibold text-ink">Why it works:</span>{" "}
-            {observation.why_workflow_works}
+            {renderInlineTitle(observation.why_workflow_works)}
           </p>
         ) : null}
         {observation.workflow_priority_logic ? (
           <p>
             <span className="font-semibold text-ink">Priority logic:</span>{" "}
-            {observation.workflow_priority_logic}
+            {renderInlineTitle(observation.workflow_priority_logic)}
           </p>
         ) : null}
         {observation.validation_strategy ? (
           <p>
             <span className="font-semibold text-ink">Validation strategy:</span>{" "}
-            {observation.validation_strategy}
+            {renderInlineTitle(observation.validation_strategy)}
           </p>
         ) : null}
         {observation.target_property_axes.length > 0 ? (
@@ -404,30 +404,30 @@ function StepObservationCard({
           Source {sourceNumber}
         </a>
       </div>
-      <h3 className="mb-2 text-base text-ink">{observation.step_name}</h3>
+      <h3 className="mb-2 text-base text-ink">{renderInlineTitle(observation.step_name)}</h3>
       <div className="space-y-2 text-sm leading-relaxed text-ink-secondary">
         {observation.purpose ? (
           <p>
             <span className="font-semibold text-ink">Purpose:</span>{" "}
-            {observation.purpose}
+            {renderInlineTitle(observation.purpose)}
           </p>
         ) : null}
         {observation.why_this_step_now ? (
           <p>
             <span className="font-semibold text-ink">Why now:</span>{" "}
-            {observation.why_this_step_now}
+            {renderInlineTitle(observation.why_this_step_now)}
           </p>
         ) : null}
         {observation.validation_focus ? (
           <p>
             <span className="font-semibold text-ink">Validation focus:</span>{" "}
-            {observation.validation_focus}
+            {renderInlineTitle(observation.validation_focus)}
           </p>
         ) : null}
         {observation.decision_gate_reason ? (
           <p>
             <span className="font-semibold text-ink">Decision gate:</span>{" "}
-            {observation.decision_gate_reason}
+            {renderInlineTitle(observation.decision_gate_reason)}
           </p>
         ) : null}
         {observation.target_property_axes.length > 0 ? (

@@ -496,10 +496,10 @@ export default async function ItemDetailPage({
                                 rel="noopener noreferrer"
                                 className="text-accent hover:underline"
                               >
-                                {doc.title}
+                                {renderInlineTitle(doc.title)}
                               </a>
                             ) : (
-                              doc.title
+                              renderInlineTitle(doc.title)
                             )}
                           </p>
                         )}
@@ -515,7 +515,7 @@ export default async function ItemDetailPage({
                           <span className="font-ui text-xs font-medium uppercase text-ink-muted">
                             Objective:{" "}
                           </span>
-                          {wf.workflow_objective}
+                          {renderInlineTitle(wf.workflow_objective)}
                         </p>
                       )}
 
@@ -524,7 +524,7 @@ export default async function ItemDetailPage({
                           <span className="font-ui text-xs font-medium uppercase text-ink-muted">
                             Why it works:{" "}
                           </span>
-                          {wf.why_workflow_works}
+                          {renderInlineTitle(wf.why_workflow_works)}
                         </p>
                       )}
 
@@ -563,19 +563,19 @@ export default async function ItemDetailPage({
                                 </span>
                                 <div>
                                   <span className="font-ui font-medium text-ink">
-                                    {stage.stage_name}
+                                    {renderInlineTitle(stage.stage_name)}
                                   </span>
                                   <span className="ml-1 font-ui text-xs text-ink-muted">
                                     ({stage.stage_kind})
                                   </span>
                                   {stage.why_stage_exists && (
                                     <p className="mt-0.5 text-ink-secondary">
-                                      {stage.why_stage_exists}
+                                      {renderInlineTitle(stage.why_stage_exists)}
                                     </p>
                                   )}
                                   {stage.selection_basis && (
                                     <p className="mt-0.5 text-xs text-ink-muted">
-                                      Selection: {stage.selection_basis}
+                                      Selection: {renderInlineTitle(stage.selection_basis)}
                                     </p>
                                   )}
                                 </div>
@@ -598,7 +598,7 @@ export default async function ItemDetailPage({
                                 </span>
                                 <div>
                                   <span className="font-ui font-medium text-ink">
-                                    {step.step_name}
+                                    {renderInlineTitle(step.step_name)}
                                   </span>
                                   {step.item_role && (
                                     <span className="ml-1.5 rounded bg-blue-50 px-1.5 py-0.5 font-ui text-xs text-blue-800">
@@ -607,12 +607,12 @@ export default async function ItemDetailPage({
                                   )}
                                   {step.purpose && (
                                     <p className="mt-0.5 text-ink-secondary">
-                                      {step.purpose}
+                                      {renderInlineTitle(step.purpose)}
                                     </p>
                                   )}
                                   {step.why_this_step_now && (
                                     <p className="mt-0.5 text-xs text-ink-muted">
-                                      {step.why_this_step_now}
+                                      {renderInlineTitle(step.why_this_step_now)}
                                     </p>
                                   )}
                                 </div>

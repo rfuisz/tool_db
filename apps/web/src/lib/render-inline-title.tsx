@@ -1,22 +1,34 @@
 import type { ReactNode } from "react";
 
-const ENCODED_EMPHASIS_TAG_PATTERN = /&lt;(\/?)(i|em)&gt;/gi;
-const EMPHASIS_TAG_PATTERN = /<\/?(?:i|em)>/i;
-// Avoid the dotAll flag so Render's current TypeScript target can compile this file.
-const EMPHASIS_SEGMENT_PATTERN = /<(i|em)>([\s\S]*?)<\/\1>/gi;
+const SUPPORTED_TAGS = "i|em|b|strong|sup|sub";
 
-function normalizeInlineTitleMarkup(title: string): string {
-  return title.replace(ENCODED_EMPHASIS_TAG_PATTERN, "<$1$2>");
+const ENCODED_TAG_PATTERN = new RegExp(
+  `&lt;(\\/?)(${SUPPORTED_TAGS})&gt;`,
+  "gi",
+);
+const TAG_DETECT_PATTERN = new RegExp(`<\\/?(?:${SUPPORTED_TAGS})>`, "i");
+const TAG_SEGMENT_PATTERN = new RegExp(
+  `<(${SUPPORTED_TAGS})>([\\s\\S]*?)<\\/\\1>`,
+  "gi",
+);
+
+function normalizeInlineMarkup(text: string): string {
+  return text.replace(ENCODED_TAG_PATTERN, "<$1$2>");
 }
 
 export function stripInlineTitleMarkup(title: string): string {
-  return normalizeInlineTitleMarkup(title).replace(/<\/?(?:i|em)>/gi, "");
+  return normalizeInlineMarkup(title).replace(
+    new RegExp(`<\\/?(?:${SUPPORTED_TAGS})>`, "gi"),
+    "",
+  );
 }
 
-export function renderInlineTitle(title: string): ReactNode {
-  const normalized = normalizeInlineTitleMarkup(title);
+type InlineTag = "i" | "em" | "b" | "strong" | "sup" | "sub";
 
-  if (!EMPHASIS_TAG_PATTERN.test(normalized)) {
+export function renderInlineTitle(title: string): ReactNode {
+  const normalized = normalizeInlineMarkup(title);
+
+  if (!TAG_DETECT_PATTERN.test(normalized)) {
     return normalized;
   }
 
@@ -24,7 +36,7 @@ export function renderInlineTitle(title: string): ReactNode {
   let cursor = 0;
   let matchIndex = 0;
 
-  for (const match of normalized.matchAll(EMPHASIS_SEGMENT_PATTERN)) {
+  for (const match of normalized.matchAll(TAG_SEGMENT_PATTERN)) {
     const [fullMatch, tagName, content] = match;
     const start = match.index ?? 0;
 
@@ -32,8 +44,8 @@ export function renderInlineTitle(title: string): ReactNode {
       parts.push(normalized.slice(cursor, start));
     }
 
-    const TagName = tagName as "i" | "em";
-    parts.push(<TagName key={`emphasis-${matchIndex}`}>{content}</TagName>);
+    const TagName = tagName.toLowerCase() as InlineTag;
+    parts.push(<TagName key={`inline-${matchIndex}`}>{content}</TagName>);
 
     cursor = start + fullMatch.length;
     matchIndex += 1;

@@ -55,6 +55,19 @@
 - Entity resolution results are cached in `entity_match_cache`. The cache auto-invalidates when the item count changes; call `EntityResolver.invalidate_match_cache()` after bulk item additions or name changes.
 - When adding a new extraction field or prompt version, update `EXTRACTION_VERSION` and the migration backfill pattern so existing rows get correctly classified as legacy.
 
+## Caching and Skip-Unchanged Policy
+
+- **Evidence hash**: Each `toolkit_item` has a `materialization_evidence_hash` column. When materialization runs, if the hash of an item's current evidence matches the stored hash, that item is skipped. This avoids redundant derivation when re-running the pipeline.
+- **LLM synthesis skip**: Items that already have LLM-synthesized content (`summary_derivation_model IS NOT NULL`, `item_explainer.derivation_model IS NOT NULL`) and whose evidence hash hasn't changed are skipped entirely during synthesis. No DB context fetch, no LLM call.
+- **LLM response disk cache**: All LLM calls go through `run_cached_json_chat_completion`, which caches responses to `data/llm-cache/` keyed by full request body (model + messages + temperature). Identical prompts reuse cached JSON.
+- **Replication summary memoization**: `_derive_replication_summary` is called multiple times per item (once during derivation, again during each comparison pair). It is memoized in-memory per `refresh()` call.
+- **Comparison rebuild gating**: If zero items changed during materialization (all evidence hashes matched), the entire comparison phase is skipped.
+- **Extraction output dedup**: Before running LLM extraction, existing output files are checked. Already-extracted jobs are skipped.
+- **DOI dedup at harvest**: Existing DOIs/titles are loaded from `source_document` so already-ingested papers are skipped during artifact building.
+- To force full re-processing: bump `MATERIALIZATION_VERSION` or set `materialization_evidence_hash = NULL` on target items.
+- Small prompt tweaks that don't change evidence structure can be left without forcing re-derivation. Dramatic prompt or schema changes should bump `MATERIALIZATION_VERSION`.
+- See `apps/worker/README.md` "Caching and skip-unchanged policy" for the full table of caching layers.
+
 ## Editing Guidance
 
 - Prefer additive changes over speculative rewrites.

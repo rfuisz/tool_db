@@ -1,8 +1,11 @@
 import hashlib
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 from tool_db_backend.candidate_filtering import assess_toolkit_item_candidate, load_controlled_vocabularies
 from tool_db_backend.config import Settings
@@ -163,21 +166,31 @@ class FirstPassExtractionLoader:
         glob_pattern: str = "*.json",
         limit: Optional[int] = None,
         manifest_path: Optional[Path] = None,
+        known_fingerprints: Optional[set] = None,
     ) -> Dict[str, Any]:
         packet_paths = sorted(packet_dir.glob(glob_pattern))
         if limit is not None:
             packet_paths = packet_paths[:limit]
         completed = []
         failures = []
+        skipped_count = 0
         for packet_path in packet_paths:
+            if known_fingerprints:
+                fp = hashlib.sha256(packet_path.read_bytes()).hexdigest()
+                if fp in known_fingerprints:
+                    skipped_count += 1
+                    continue
             try:
                 completed.append(self.load_packet_file(packet_path))
             except (OSError, ValueError, PacketValidationError, LoadPlanExecutionError) as exc:
                 failures.append({"packet_path": str(packet_path), "error": str(exc)})
+        if skipped_count:
+            logger.info("First-pass load: skipped %d already-loaded packets.", skipped_count)
         report = {
             "packet_dir": str(packet_dir),
             "glob_pattern": glob_pattern,
             "selected_packet_count": len(packet_paths),
+            "skipped_packet_count": skipped_count,
             "completed_packets": completed,
             "failed_packets": failures,
         }

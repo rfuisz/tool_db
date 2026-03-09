@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { FilterSelect } from "@/components/filter-select";
+import { renderInlineTitle } from "@/lib/render-inline-title";
 import type { ExtractedWorkflowSummary } from "@/lib/types";
 
 const PAGE_SIZE_OPTIONS = [10, 50, 100] as const;
@@ -44,7 +45,7 @@ function WorkflowCard({ workflow }: { workflow: ExtractedWorkflowSummary }) {
     <article className="border-b border-edge py-6">
       <div className="mb-1.5 flex items-baseline justify-between gap-4">
         <h3 className="text-lg text-ink">
-          {workflow.workflow_objective ?? "Untitled workflow"}
+          {renderInlineTitle(workflow.workflow_objective ?? "Untitled workflow")}
         </h3>
         {workflow.protocol_family && (
           <span className="small-caps shrink-0 text-ink-muted">
@@ -62,10 +63,10 @@ function WorkflowCard({ workflow }: { workflow: ExtractedWorkflowSummary }) {
               rel="noopener noreferrer"
               className="underline decoration-edge decoration-1 underline-offset-2 text-ink-secondary transition-colors hover:text-accent hover:decoration-accent"
             >
-              {doc.title}
+              {renderInlineTitle(doc.title)}
             </a>
           ) : (
-            <span className="text-ink-secondary">{doc.title}</span>
+            <span className="text-ink-secondary">{renderInlineTitle(doc.title)}</span>
           )
         )}
         {doc?.journal_or_source && (
@@ -117,7 +118,7 @@ function WorkflowCard({ workflow }: { workflow: ExtractedWorkflowSummary }) {
 
       {workflow.why_workflow_works && (
         <p className="mb-3 line-clamp-2 text-[15px] leading-relaxed text-ink-secondary">
-          {workflow.why_workflow_works}
+          {renderInlineTitle(workflow.why_workflow_works)}
         </p>
       )}
 
@@ -172,14 +173,14 @@ function WorkflowCard({ workflow }: { workflow: ExtractedWorkflowSummary }) {
                 </span>
                 <div>
                   <span className="font-ui font-medium text-ink">
-                    {stage.stage_name}
+                    {renderInlineTitle(stage.stage_name)}
                   </span>
                   <span className="ml-1 small-caps text-ink-muted">
                     {stage.stage_kind}
                   </span>
                   {stage.why_stage_exists && (
                     <p className="mt-0.5 text-sm leading-relaxed text-ink-secondary">
-                      {stage.why_stage_exists}
+                      {renderInlineTitle(stage.why_stage_exists)}
                     </p>
                   )}
                 </div>
@@ -207,7 +208,7 @@ function WorkflowCard({ workflow }: { workflow: ExtractedWorkflowSummary }) {
                 </span>
                 <div>
                   <span className="font-ui font-medium text-ink">
-                    {step.step_name}
+                    {renderInlineTitle(step.step_name)}
                   </span>
                   {step.item_role && (
                     <span className="ml-1 small-caps text-ink-muted">
@@ -215,7 +216,9 @@ function WorkflowCard({ workflow }: { workflow: ExtractedWorkflowSummary }) {
                     </span>
                   )}
                   {step.purpose && (
-                    <p className="mt-0.5 text-sm leading-relaxed text-ink-secondary">{step.purpose}</p>
+                    <p className="mt-0.5 text-sm leading-relaxed text-ink-secondary">
+                      {renderInlineTitle(step.purpose)}
+                    </p>
                   )}
                 </div>
               </li>

@@ -234,13 +234,35 @@ def run_llm_synthesis_batch(
     item_ids: Sequence[Any],
 ) -> Dict[str, Any]:
     """Run LLM synthesis for a batch of items in parallel, then write results to DB."""
-    contexts = fetch_synthesis_contexts(cursor, item_ids)
+    # Skip items that already have LLM synthesis and no new evidence
+    cursor.execute(
+        """select ti.id from toolkit_item ti
+           where ti.id = any(%s)
+             and ti.summary_derivation_model is not null
+             and ti.materialization_evidence_hash is not null
+             and ti.materialization_evidence_hash = (
+               select materialization_evidence_hash from toolkit_item where id = ti.id
+             )
+             and exists (
+               select 1 from item_explainer ie
+               where ie.item_id = ti.id and ie.derivation_model is not null
+             )
+        """,
+        (list(item_ids),),
+    )
+    already_synthesized = {row[0] for row in cursor.fetchall()}
+    ids_needing_synthesis = [iid for iid in item_ids if iid not in already_synthesized]
+    pre_skipped = len(already_synthesized)
+    if pre_skipped:
+        logger.info("Skipping %d items already synthesized with current evidence hash.", pre_skipped)
+
+    contexts = fetch_synthesis_contexts(cursor, ids_needing_synthesis)
     if not contexts:
-        return {"synthesized": 0, "skipped": 0, "failed": 0}
+        return {"synthesized": 0, "skipped": pre_skipped, "failed": 0}
 
     model_name = settings.llm_model
     synthesized = 0
-    skipped = 0
+    skipped = pre_skipped
     failed = 0
 
     results: Dict[Any, Dict[str, Any]] = {}

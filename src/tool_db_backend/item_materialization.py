@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import re
@@ -163,6 +164,26 @@ class ItemContext:
             parts.extend(evidence.freeform_explainers.values())
         return " ".join(part for part in parts if part).casefold()
 
+    @property
+    def evidence_hash(self) -> str:
+        """Stable hash of evidence inputs. Changes when claims/citations/validations change."""
+        parts = [
+            f"claims:{len(self.claims)}",
+            f"validations:{len(self.validations)}",
+            f"citations:{len(self.citations)}",
+            f"evidence:{len(self.extracted_evidence)}",
+            f"mechanisms:{','.join(sorted(self.mechanisms))}",
+            f"techniques:{','.join(sorted(self.techniques))}",
+            f"processes:{','.join(sorted(self.target_processes))}",
+            f"type:{self.item_type}",
+            f"version:{MATERIALIZATION_VERSION}",
+        ]
+        for claim in sorted(self.claims, key=lambda c: c.get("claim_text_normalized", "")):
+            parts.append(claim.get("claim_text_normalized", ""))
+        for citation in sorted(self.citations, key=lambda c: str(c.get("source_document_id", ""))):
+            parts.append(str(citation.get("source_document_id", "")))
+        return hashlib.sha256("|".join(parts).encode()).hexdigest()[:32]
+
 
 class ItemMaterializer:
     SCORE_VERSION = MATERIALIZATION_VERSION
@@ -172,9 +193,11 @@ class ItemMaterializer:
     def __init__(self, settings: Settings, connection: Any = None) -> None:
         self.settings = settings
         self._connection = connection
+        self._replication_cache: Dict[Any, Dict[str, Any]] = {}
 
     def refresh(self, item_slugs: Optional[Sequence[str]] = None, include_related: bool = True) -> Dict[str, Any]:
         started_at = perf_counter()
+        self._replication_cache.clear()
         conn, should_close = self._get_connection()
         try:
             with conn.transaction():
@@ -263,12 +286,27 @@ class ItemMaterializer:
                         )
                     fetch_related_seconds = round(perf_counter() - related_fetch_started_at, 3)
 
+                    # Load stored evidence hashes for skip-unchanged optimization
+                    cursor.execute(
+                        "select id, materialization_evidence_hash from toolkit_item where id = any(%s)",
+                        (list(comparison_item_ids),),
+                    )
+                    stored_hashes = {row[0]: row[1] for row in cursor.fetchall()}
+
                     derive_started_at = perf_counter()
                     comparison_item_id_list = sorted(comparison_item_ids, key=str)
+                    skipped_unchanged = 0
                     for index, item_id in enumerate(comparison_item_id_list, start=1):
                         if item_id not in item_contexts:
                             item_contexts[item_id] = self._fetch_item_context(cursor, item_id)
                         context = item_contexts[item_id]
+
+                        current_hash = context.evidence_hash
+                        if stored_hashes.get(item_id) == current_hash:
+                            skipped_unchanged += 1
+                            self._maybe_log_progress("Materialized item details", index, len(comparison_item_id_list))
+                            continue
+
                         replication_summary = self._derive_replication_summary(context)
                         facets = self._derive_facets(context, replication_summary)
                         refined_item_type = self._refine_item_type(context, facets)
@@ -286,19 +324,33 @@ class ItemMaterializer:
                         self._replace_item_problem_links(cursor, item_id, problem_links)
                         self._replace_item_explainers(cursor, item_id, explainers)
                         self._upsert_replication_summary(cursor, item_id, replication_summary)
+                        cursor.execute(
+                            "update toolkit_item set materialization_evidence_hash = %s where id = %s",
+                            (current_hash, item_id),
+                        )
                         self._maybe_log_progress("Materialized item details", index, len(comparison_item_id_list))
                     derive_seconds = round(perf_counter() - derive_started_at, 3)
+                    if skipped_unchanged:
+                        logger.info("Skipped %d unchanged items (evidence hash matched).", skipped_unchanged)
 
                     comparison_started_at = perf_counter()
-                    logger.info(
-                        "Replacing item comparisons for %s items.",
-                        len(comparison_item_id_list),
-                    )
-                    self._replace_item_comparisons(
-                        cursor,
-                        comparison_item_ids,
-                        {item_id: item_contexts[item_id] for item_id in comparison_item_ids},
-                    )
+                    changed_count = len(comparison_item_id_list) - skipped_unchanged
+                    if changed_count == 0:
+                        logger.info(
+                            "Skipping comparison rebuild -- all %d items unchanged.",
+                            len(comparison_item_id_list),
+                        )
+                    else:
+                        logger.info(
+                            "Replacing item comparisons for %s items (%d changed).",
+                            len(comparison_item_id_list),
+                            changed_count,
+                        )
+                        self._replace_item_comparisons(
+                            cursor,
+                            comparison_item_ids,
+                            {item_id: item_contexts[item_id] for item_id in comparison_item_ids},
+                        )
                     comparison_seconds = round(perf_counter() - comparison_started_at, 3)
 
         finally:
@@ -307,9 +359,11 @@ class ItemMaterializer:
 
         elapsed_seconds = round(perf_counter() - started_at, 3)
         logger.info(
-            "Finished item materialization: targets=%s comparisons=%s fetch_targets_s=%s fetch_related_s=%s derive_s=%s comparisons_s=%s total_s=%s",
+            "Finished item materialization: targets=%s comparisons=%s skipped_unchanged=%s "
+            "fetch_targets_s=%s fetch_related_s=%s derive_s=%s comparisons_s=%s total_s=%s",
             len(target_item_ids),
             len(comparison_item_ids),
+            skipped_unchanged,
             fetch_target_seconds,
             fetch_related_seconds,
             derive_seconds,
@@ -1593,6 +1647,10 @@ class ItemMaterializer:
         return " ".join(notes)
 
     def _derive_replication_summary(self, context: ItemContext) -> Dict[str, Any]:
+        cached = self._replication_cache.get(context.item_id)
+        if cached is not None:
+            return cached
+
         documents: Dict[str, Dict[str, Any]] = {}
         for claim in context.claims:
             documents[claim["source_document"]["id"]] = claim["source_document"]
@@ -1705,7 +1763,7 @@ class ItemMaterializer:
         )
         orphan_tool_flag = independent_count == 0 and len(primary_docs) <= 1
 
-        return {
+        result = {
             "score_version": self.SCORE_VERSION,
             "primary_paper_count": len(primary_docs),
             "independent_primary_paper_count": independent_count,
@@ -1732,6 +1790,8 @@ class ItemMaterializer:
                 "retraction_count": retraction_count,
             },
         }
+        self._replication_cache[context.item_id] = result
+        return result
 
     @staticmethod
     def _derive_practicality_penalties(

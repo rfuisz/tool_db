@@ -154,9 +154,22 @@ Run everything end-to-end: harvest, extract, ingest, materialize, LLM-synthesize
 .venv/bin/python -m apps.worker.main run-pipeline
 ```
 
-Use flags to skip steps you don't need:
+By default the pipeline uses **broad discovery mode** with 255 queries across 8 topic areas (optogenetics, ultrasound, chemogenetics, cell therapy, synbio tools, delivery, magnetogenetics/thermogenetics/electrogenetics). It also runs a dedicated review-paper harvest pass to find high-citation reviews that catalog dozens of tools each.
+
+**DOI dedup**: The extraction artifact builder loads all existing DOIs/titles from `source_document` before building jobs, so papers already in the DB are skipped automatically. Re-running the pipeline only processes genuinely new papers.
+
+Use flags to control what runs:
 
 ```bash
+# Full broad discovery (default)
+.venv/bin/python -m apps.worker.main run-pipeline
+
+# Only harvest specific topics
+.venv/bin/python -m apps.worker.main run-pipeline --topics ultrasound cell_therapy
+
+# Use the original 5-item seed queries (small, optogenetics-only)
+.venv/bin/python -m apps.worker.main run-pipeline --discovery-mode seed
+
 # Skip the literature harvest (re-use cached data)
 .venv/bin/python -m apps.worker.main run-pipeline --skip-harvest
 
@@ -167,13 +180,15 @@ Use flags to skip steps you don't need:
 .venv/bin/python -m apps.worker.main run-pipeline --skip-sync
 ```
 
+Available topics for `--topics`: `reviews`, `optogenetics`, `ultrasound`, `chemogenetics`, `cell_therapy`, `synbio_tools`, `delivery`, `magneto_thermo_electro`.
+
 The pipeline phases, in order:
 
 | # | Phase | What it does |
 |---|-------|-------------|
 | 1 | `migrations` | Apply any pending DB migrations |
 | 2 | `harvest` | Pull literature from OpenAlex, Europe PMC, Semantic Scholar, OptoBase |
-| 3 | `build-extraction-artifacts` | Build LLM extraction jobs from harvest data |
+| 3 | `build-extraction-artifacts` | Build LLM extraction jobs from harvest data (with DOI dedup against DB) |
 | 4 | `extraction` | Run LLM extraction on new jobs (parallelized at 64) |
 | 5 | `ingest` | Ingest extraction packets into the DB |
 | 6 | `first-pass-load` | Load first-pass extraction data |

@@ -127,7 +127,22 @@
     "dna_binding",
     "rna_binding",
     "degradation",
-    "translation_control"
+    "translation_control",
+    "mechanotransduction",
+    "sonoporation",
+    "thermal_gating",
+    "magnetic_actuation",
+    "electroconformational_change",
+    "chemical_dimerization",
+    "allosteric_switching",
+    "antigen_recognition",
+    "proteolytic_cleavage",
+    "base_editing",
+    "prime_editing",
+    "transposition",
+    "site_specific_recombination",
+    "rna_interference",
+    "aptamer_binding"
   ],
   "technique_families": [
     "computational_design",
@@ -135,7 +150,15 @@
     "directed_evolution",
     "sequence_verification",
     "functional_assay",
-    "structural_characterization"
+    "structural_characterization",
+    "high_throughput_screening",
+    "deep_mutational_scanning",
+    "machine_learning_design",
+    "rational_mutagenesis",
+    "domain_shuffling",
+    "codon_optimization",
+    "display_selection",
+    "cell_free_evolution"
   ],
   "item_role_facets": [
     "actuator",
@@ -179,7 +202,19 @@
     "editing",
     "selection",
     "manufacturing",
-    "diagnostic"
+    "diagnostic",
+    "neuromodulation",
+    "cell_killing",
+    "immune_activation",
+    "differentiation",
+    "reprogramming",
+    "secretion",
+    "adhesion",
+    "migration",
+    "proliferation",
+    "apoptosis",
+    "imaging",
+    "sensing"
   ],
   "problem_link_breakdown_keys": [
     "mechanistic_match_score",

@@ -22,7 +22,7 @@ export default async function MechanismsPage() {
         {concepts.map((concept) => (
           <Link
             key={concept.key}
-            href={`/mechanisms/${concept.key}`}
+            href={`/mechanisms/${encodeURIComponent(concept.key)}`}
             className="group rounded border border-edge p-5 transition-colors hover:border-accent"
           >
             <div className="flex items-baseline justify-between gap-3">

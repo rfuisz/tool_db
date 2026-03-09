@@ -103,7 +103,7 @@ export function ItemCard({ item }: { item: ToolkitItem }) {
           <Tag
             key={m}
             label={MECHANISM_LABELS[m] ?? m.replace(/_/g, " ")}
-            href={`/items?mechanism=${m}`}
+            href={`/items?mechanism=${encodeURIComponent(m)}`}
             tooltip={MECHANISM_DESCRIPTIONS[m]}
           />
         ))}
@@ -111,7 +111,7 @@ export function ItemCard({ item }: { item: ToolkitItem }) {
           <Tag
             key={t}
             label={TECHNIQUE_LABELS[t] ?? t.replace(/_/g, " ")}
-            href={`/items?technique=${t}`}
+            href={`/items?technique=${encodeURIComponent(t)}`}
             tooltip={TECHNIQUE_DESCRIPTIONS[t]}
           />
         ))}

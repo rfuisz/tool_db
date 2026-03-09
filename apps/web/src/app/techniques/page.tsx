@@ -21,7 +21,7 @@ export default async function TechniquesPage() {
         {concepts.map((concept) => (
           <Link
             key={concept.key}
-            href={`/techniques/${concept.key}`}
+            href={`/techniques/${encodeURIComponent(concept.key)}`}
             className="group rounded border border-edge p-5 transition-colors hover:border-accent"
           >
             <div className="flex items-baseline justify-between gap-3">

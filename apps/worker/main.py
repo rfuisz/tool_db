@@ -771,6 +771,8 @@ def run_full_pipeline(
     skip_harvest: bool = False,
     skip_extract: bool = False,
     skip_sync: bool = False,
+    discovery_mode: str = "broad",
+    topics: Optional[List[str]] = None,
     artifact_dir: Optional[str] = None,
 ) -> int:
     """Run the entire pipeline end-to-end in one shot.
@@ -778,7 +780,7 @@ def run_full_pipeline(
     Steps executed in order:
       1. run-migrations
       2. harvest-real-data        (skip with --skip-harvest)
-      3. build-extraction-artifacts
+      3. build-extraction-artifacts (with DOI dedup against DB)
       4. run-extraction-batch     (skip with --skip-extract)
       5. ingest-packet-batch
       6. load-first-pass-extractions
@@ -786,6 +788,11 @@ def run_full_pipeline(
       8. synthesize-item-profiles
       9. materialize-gap-links
      10. sync-render-db           (skip with --skip-sync)
+
+    discovery_mode controls which queries are used:
+      - "seed" : original 5-item seed queries (small)
+      - "broad": full discovery query set across all topics (default)
+    topics: optional list to filter broad queries (e.g. ["ultrasound", "cell_therapy"])
     """
     from time import perf_counter
 
@@ -845,47 +852,119 @@ def run_full_pipeline(
         _phase("harvest")
         phase_start = perf_counter()
         try:
-            query_sets = build_first_pass_query_sets(settings, seed_query_limit=24)
+            if discovery_mode == "broad":
+                from tool_db_backend.discovery_queries import get_flat_query_list, REVIEW_QUERIES
+                all_queries = get_flat_query_list(topics=topics)
+                review_queries = [q for q in REVIEW_QUERIES if not topics or any(
+                    t in q.lower() for t in (topics or [])
+                )] if topics else REVIEW_QUERIES
+                literature_queries = all_queries
+                optobase_queries = [q for q in all_queries if len(q) <= 48][:30]
+            else:
+                query_sets = build_first_pass_query_sets(settings, seed_query_limit=24)
+                literature_queries = query_sets["europe_pmc"]
+                review_queries = []
+                optobase_queries = query_sets["optobase"][:20]
+
+            logger.info(
+                "Harvest using %s mode: %d literature queries, %d review queries",
+                discovery_mode, len(literature_queries), len(review_queries),
+            )
+
             harvester = RealDataHarvester(settings)
             try:
                 harvest_result = harvester.run(
                     artifact_dir=harvest_dir,
-                    europe_pmc_queries=query_sets["europe_pmc"],
-                    europe_pmc_pages=5,
+                    europe_pmc_queries=literature_queries,
+                    europe_pmc_pages=3,
                     europe_pmc_page_size=100,
-                    pmc_fulltext_limit=50,
-                    openalex_queries=query_sets["openalex"],
-                    openalex_pages=5,
-                    openalex_per_page=50,
-                    semantic_scholar_queries=query_sets["semantic_scholar"],
-                    semantic_scholar_pages=3,
+                    pmc_fulltext_limit=100,
+                    openalex_queries=literature_queries,
+                    openalex_pages=3,
+                    openalex_per_page=200,
+                    semantic_scholar_queries=literature_queries,
+                    semantic_scholar_pages=2,
                     semantic_scholar_limit=100,
-                    optobase_queries=query_sets["optobase"][:20],
+                    optobase_queries=optobase_queries,
                 )
+
+                # Also harvest review papers via OpenAlex with type:review filter
+                if review_queries:
+                    logger.info("Harvesting %d review-paper queries via OpenAlex", len(review_queries))
+                    review_dir = harvest_dir / "reviews"
+                    review_dir.mkdir(parents=True, exist_ok=True)
+                    review_harvester = RealDataHarvester(settings)
+                    try:
+                        review_harvest = review_harvester.run(
+                            artifact_dir=review_dir,
+                            europe_pmc_queries=review_queries,
+                            europe_pmc_pages=2,
+                            europe_pmc_page_size=100,
+                            pmc_fulltext_limit=50,
+                            openalex_queries=review_queries,
+                            openalex_pages=5,
+                            openalex_per_page=200,
+                            semantic_scholar_queries=review_queries,
+                            semantic_scholar_pages=2,
+                            semantic_scholar_limit=100,
+                            optobase_queries=[],
+                        )
+                    finally:
+                        review_harvester.close()
             finally:
                 harvester.close()
             phase_reports["harvest"] = {
                 "seconds": round(perf_counter() - phase_start, 1),
                 "status": "ok",
+                "discovery_mode": discovery_mode,
+                "query_count": len(literature_queries),
+                "review_query_count": len(review_queries),
             }
         except Exception as exc:
             logger.warning("Harvest failed (non-fatal): %s", exc)
             phase_reports["harvest"] = {"status": "error", "error": str(exc)}
 
-    # ---- 3. Build extraction artifacts ----
-    harvest_manifest = harvest_dir / "manifest.json"
-    if not skip_extract and harvest_manifest.exists():
+    # ---- 3. Build extraction artifacts (with DB dedup) ----
+    harvest_manifests = []
+    for candidate in [
+        harvest_dir / "manifest.json",
+        harvest_dir / "reviews" / "manifest.json",
+    ]:
+        if candidate.exists():
+            harvest_manifests.append(candidate)
+
+    if not skip_extract and harvest_manifests:
         _phase("build-extraction-artifacts")
         phase_start = perf_counter()
+
+        existing_keys = RealExtractionArtifactBuilder.load_existing_document_keys(settings.database_url)
+        logger.info("Loaded %d existing document keys for dedup", len(existing_keys))
+
         builder = RealExtractionArtifactBuilder(settings)
+        total_new_jobs = 0
         try:
-            builder.build_from_smoke_test_manifest(
-                manifest_path=harvest_manifest,
-                output_dir=extraction_artifact_dir,
-            )
+            for manifest_path in harvest_manifests:
+                out_dir = extraction_artifact_dir / manifest_path.parent.name
+                build_result = builder.build_from_smoke_test_manifest(
+                    manifest_path=manifest_path,
+                    output_dir=out_dir,
+                    europe_pmc_limit=2000,
+                    openalex_limit=2000,
+                    semantic_scholar_limit=2000,
+                    existing_document_keys=existing_keys,
+                )
+                jobs_built = (
+                    build_result.get("europe_pmc_job_count", 0)
+                    + build_result.get("openalex_job_count", 0)
+                    + build_result.get("semantic_scholar_job_count", 0)
+                )
+                total_new_jobs += jobs_built
+                logger.info("Built %d extraction jobs from %s", jobs_built, manifest_path)
         finally:
             builder.close()
         phase_reports["build_extraction_artifacts"] = {
+            "total_new_jobs": total_new_jobs,
+            "deduped_existing": len(existing_keys),
             "seconds": round(perf_counter() - phase_start, 1),
         }
 
@@ -893,7 +972,7 @@ def run_full_pipeline(
         _phase("extraction")
         phase_start = perf_counter()
         all_new_jobs: List[Path] = []
-        for jd in sorted(extraction_artifact_dir.glob("*/jobs")):
+        for jd in sorted(extraction_artifact_dir.glob("**/jobs")):
             for jp in sorted(jd.glob("*.json")):
                 if not _existing_extraction_outputs(settings, jp):
                     all_new_jobs.append(jp)
@@ -1339,6 +1418,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         default=None,
         help="Root directory for pipeline artifacts (default: tmp/pipeline-run).",
     )
+    pipeline_parser.add_argument(
+        "--discovery-mode",
+        choices=["seed", "broad"],
+        default="broad",
+        help="Query strategy: 'seed' uses original 5-item queries, 'broad' uses full multi-domain discovery (default: broad).",
+    )
+    pipeline_parser.add_argument(
+        "--topics",
+        nargs="*",
+        default=None,
+        help="Filter broad discovery to specific topics: reviews, optogenetics, ultrasound, chemogenetics, cell_therapy, synbio_tools, delivery, magneto_thermo_electro",
+    )
 
     parsed = parser.parse_args(args)
 
@@ -1466,6 +1557,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             skip_harvest=parsed.skip_harvest,
             skip_extract=parsed.skip_extract,
             skip_sync=parsed.skip_sync,
+            discovery_mode=parsed.discovery_mode,
+            topics=parsed.topics,
             artifact_dir=parsed.artifact_dir,
         )
 

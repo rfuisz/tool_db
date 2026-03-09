@@ -60,6 +60,22 @@ class RealExtractionArtifactBuilder:
         if self.web_research_client is not None:
             self.web_research_client.close()
 
+    @staticmethod
+    def load_existing_document_keys(database_url: str) -> set:
+        """Load DOI/PMID/title keys already in source_document so we can skip them."""
+        import psycopg
+
+        keys: set = set()
+        with psycopg.connect(database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute("select doi, title from source_document")
+                for doi, title in cur.fetchall():
+                    if doi:
+                        keys.add(f"doi:{doi.casefold()}")
+                    elif title:
+                        keys.add(f"title:{title.strip().casefold()}")
+        return keys
+
     def build_from_smoke_test_manifest(
         self,
         manifest_path: Path,
@@ -68,10 +84,11 @@ class RealExtractionArtifactBuilder:
         europe_pmc_limit: int = 200,
         openalex_limit: int = 200,
         semantic_scholar_limit: int = 200,
+        existing_document_keys: Optional[set] = None,
     ) -> Dict[str, Any]:
         manifest = json.loads(manifest_path.read_text())
         output_dir.mkdir(parents=True, exist_ok=True)
-        seen_document_keys = set()
+        seen_document_keys = set(existing_document_keys) if existing_document_keys else set()
 
         gap_packets = self._build_gap_packets(
             gaps_raw_path=Path(manifest["sources"]["gap_map"]["raw_paths"]["gaps"]),

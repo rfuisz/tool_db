@@ -80,7 +80,7 @@ function WorkflowCard({ workflow }: { workflow: ExtractedWorkflowSummary }) {
         {workflow.target_mechanisms.map((m) => (
           <Link
             key={m}
-            href={`/items?mechanism=${m}`}
+            href={`/items?mechanism=${encodeURIComponent(m)}`}
             className="inline-block rounded bg-surface-alt px-1.5 py-0.5 text-ink-muted transition-colors hover:bg-edge hover:text-ink"
           >
             {m.replace(/_/g, " ")}
@@ -89,7 +89,7 @@ function WorkflowCard({ workflow }: { workflow: ExtractedWorkflowSummary }) {
         {workflow.target_techniques.map((t) => (
           <Link
             key={t}
-            href={`/items?technique=${t}`}
+            href={`/items?technique=${encodeURIComponent(t)}`}
             className="inline-block rounded bg-surface-alt px-1.5 py-0.5 text-ink-muted transition-colors hover:bg-edge hover:text-ink"
           >
             {t.replace(/_/g, " ")}

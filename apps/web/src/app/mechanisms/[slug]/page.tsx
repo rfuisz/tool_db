@@ -88,7 +88,7 @@ export default async function MechanismDetailPage({
         ) : null}
         <p className="mt-6">
           <Link
-            href={`/items?mechanism=${concept.key}`}
+            href={`/items?mechanism=${encodeURIComponent(concept.key)}`}
             className="small-caps text-accent hover:text-accent-hover"
           >
             Browse All Matching Toolkit Items

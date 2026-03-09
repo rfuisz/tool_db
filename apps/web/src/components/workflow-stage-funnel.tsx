@@ -102,6 +102,12 @@ export function WorkflowStageFunnel({
                 </p>
               )}
 
+              {stage.why_stage_exists && (
+                <p className="mb-3 text-sm leading-6 text-ink-secondary">
+                  Why this stage exists: {stage.why_stage_exists}
+                </p>
+              )}
+
               {mappedSteps.length > 0 && (
                 <div className="mb-3 flex flex-wrap gap-2">
                   {mappedSteps.map((step) => (
@@ -118,6 +124,12 @@ export function WorkflowStageFunnel({
               {stage.advance_criteria && (
                 <p className="text-sm leading-6 text-ink-secondary">
                   Advance when: {stage.advance_criteria}
+                </p>
+              )}
+
+              {stage.decision_gate_reason && (
+                <p className="mt-2 text-sm leading-6 text-ink-secondary">
+                  Decision gate: {stage.decision_gate_reason}
                 </p>
               )}
 

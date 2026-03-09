@@ -84,6 +84,16 @@ class FirstPassExtractionLoader:
                         packet_kind=packet_kind,
                         claims=payload.get("claims", []),
                     )
+                    workflow_counts = self._replace_workflow_evidence(
+                        cursor,
+                        packet_fingerprint=packet_fingerprint,
+                        source_document_id=source_document_id,
+                        extraction_run_id=extraction_run_id,
+                        packet_kind=packet_kind,
+                        workflow_observations=payload.get("workflow_observations", []),
+                        workflow_stage_observations=payload.get("workflow_stage_observations", []),
+                        workflow_step_observations=payload.get("workflow_step_observations", []),
+                    )
         finally:
             if should_close:
                 conn.close()
@@ -96,6 +106,9 @@ class FirstPassExtractionLoader:
             "extraction_run_id": str(extraction_run_id),
             "entity_candidate_count": len(payload.get("entity_candidates", [])),
             "claim_count": claim_count,
+            "workflow_observation_count": workflow_counts["workflow_observation_count"],
+            "workflow_stage_count": workflow_counts["workflow_stage_count"],
+            "workflow_step_count": workflow_counts["workflow_step_count"],
         }
 
     def load_packet_batch(
@@ -246,6 +259,194 @@ class FirstPassExtractionLoader:
                 )
         return inserted_count
 
+    def _replace_workflow_evidence(
+        self,
+        cursor: Any,
+        *,
+        packet_fingerprint: str,
+        source_document_id: Any,
+        extraction_run_id: Any,
+        packet_kind: str,
+        workflow_observations: List[Dict[str, Any]],
+        workflow_stage_observations: List[Dict[str, Any]],
+        workflow_step_observations: List[Dict[str, Any]],
+    ) -> Dict[str, int]:
+        cursor.execute(
+            "delete from extracted_workflow_step_observation where packet_fingerprint = %s",
+            (packet_fingerprint,),
+        )
+        cursor.execute(
+            "delete from extracted_workflow_stage_observation where packet_fingerprint = %s",
+            (packet_fingerprint,),
+        )
+        cursor.execute(
+            "delete from extracted_workflow_observation where packet_fingerprint = %s",
+            (packet_fingerprint,),
+        )
+        workflow_candidate_ids_by_local_id = self._load_workflow_candidate_ids(cursor, packet_fingerprint)
+
+        workflow_observation_count = 0
+        for observation in workflow_observations:
+            cursor.execute(
+                """
+                insert into extracted_workflow_observation (
+                  packet_fingerprint, source_document_id, extraction_run_id, packet_kind,
+                  local_id, workflow_local_id, workflow_candidate_id, workflow_objective,
+                  protocol_family, engineered_system_family, target_property_axes,
+                  target_mechanisms, target_techniques, why_workflow_works,
+                  workflow_priority_logic, validation_strategy, decision_gate_strategy,
+                  evidence_text, source_locator, unresolved_ambiguities, raw_payload
+                )
+                values (
+                  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::text[], %s::text[],
+                  %s::text[], %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb
+                )
+                """,
+                (
+                    packet_fingerprint,
+                    source_document_id,
+                    extraction_run_id,
+                    packet_kind,
+                    observation.get("local_id"),
+                    observation.get("workflow_local_id"),
+                    workflow_candidate_ids_by_local_id.get(observation.get("workflow_local_id")),
+                    observation.get("workflow_objective"),
+                    observation.get("protocol_family"),
+                    observation.get("engineered_system_family"),
+                    observation.get("target_property_axes", []),
+                    observation.get("target_mechanisms", []),
+                    observation.get("target_techniques", []),
+                    observation.get("why_workflow_works"),
+                    observation.get("workflow_priority_logic"),
+                    observation.get("validation_strategy"),
+                    observation.get("decision_gate_strategy"),
+                    observation.get("evidence_text"),
+                    json.dumps(observation.get("source_locator", {})),
+                    json.dumps(observation.get("unresolved_ambiguities", [])),
+                    json.dumps(observation),
+                ),
+            )
+            workflow_observation_count += 1
+
+        workflow_stage_count = 0
+        for observation in workflow_stage_observations:
+            cursor.execute(
+                """
+                insert into extracted_workflow_stage_observation (
+                  packet_fingerprint, source_document_id, extraction_run_id, packet_kind,
+                  local_id, workflow_local_id, workflow_candidate_id, stage_name,
+                  stage_kind, stage_order, search_modality, input_candidate_count,
+                  output_candidate_count, candidate_unit, selection_basis,
+                  counterselection_basis, enriches_for_axes, guards_against_axes,
+                  preserves_downstream_property_axes, why_stage_exists,
+                  advance_criteria, decision_gate_reason, bottleneck_risk,
+                  higher_fidelity_than_previous, source_locator,
+                  unresolved_ambiguities, raw_payload
+                )
+                values (
+                  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                  %s::text[], %s::text[], %s::text[], %s, %s, %s, %s, %s,
+                  %s::jsonb, %s::jsonb, %s::jsonb
+                )
+                """,
+                (
+                    packet_fingerprint,
+                    source_document_id,
+                    extraction_run_id,
+                    packet_kind,
+                    observation.get("local_id"),
+                    observation.get("workflow_local_id"),
+                    workflow_candidate_ids_by_local_id.get(observation.get("workflow_local_id")),
+                    observation.get("stage_name"),
+                    observation.get("stage_kind"),
+                    observation.get("stage_order"),
+                    observation.get("search_modality"),
+                    observation.get("input_candidate_count"),
+                    observation.get("output_candidate_count"),
+                    observation.get("candidate_unit"),
+                    observation.get("selection_basis"),
+                    observation.get("counterselection_basis"),
+                    observation.get("enriches_for_axes", []),
+                    observation.get("guards_against_axes", []),
+                    observation.get("preserves_downstream_property_axes", []),
+                    observation.get("why_stage_exists"),
+                    observation.get("advance_criteria"),
+                    observation.get("decision_gate_reason"),
+                    observation.get("bottleneck_risk"),
+                    observation.get("higher_fidelity_than_previous"),
+                    json.dumps(observation.get("source_locator", {})),
+                    json.dumps(observation.get("unresolved_ambiguities", [])),
+                    json.dumps(observation),
+                ),
+            )
+            workflow_stage_count += 1
+
+        workflow_step_count = 0
+        for observation in workflow_step_observations:
+            cursor.execute(
+                """
+                insert into extracted_workflow_step_observation (
+                  packet_fingerprint, source_document_id, extraction_run_id, packet_kind,
+                  local_id, workflow_local_id, workflow_candidate_id,
+                  workflow_observation_local_id, stage_local_id, stage_name, step_name,
+                  step_order, step_type, item_local_ids, item_role, purpose,
+                  why_this_step_now, decision_gate_reason, advance_criteria,
+                  failure_criteria, validation_focus, target_property_axes,
+                  target_mechanisms, target_techniques, input_artifact,
+                  output_artifact, duration_hours, queue_time_hours,
+                  direct_cost_usd, success, source_locator,
+                  unresolved_ambiguities, raw_payload
+                )
+                values (
+                  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::text[],
+                  %s, %s, %s, %s, %s, %s, %s, %s::text[], %s::text[], %s::text[],
+                  %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb
+                )
+                """,
+                (
+                    packet_fingerprint,
+                    source_document_id,
+                    extraction_run_id,
+                    packet_kind,
+                    observation.get("local_id"),
+                    observation.get("workflow_local_id"),
+                    workflow_candidate_ids_by_local_id.get(observation.get("workflow_local_id")),
+                    observation.get("workflow_observation_local_id"),
+                    observation.get("stage_local_id"),
+                    observation.get("stage_name"),
+                    observation.get("step_name"),
+                    observation.get("step_order"),
+                    observation.get("step_type"),
+                    observation.get("item_local_ids", []),
+                    observation.get("item_role"),
+                    observation.get("purpose"),
+                    observation.get("why_this_step_now"),
+                    observation.get("decision_gate_reason"),
+                    observation.get("advance_criteria"),
+                    observation.get("failure_criteria"),
+                    observation.get("validation_focus"),
+                    observation.get("target_property_axes", []),
+                    observation.get("target_mechanisms", []),
+                    observation.get("target_techniques", []),
+                    observation.get("input_artifact"),
+                    observation.get("output_artifact"),
+                    observation.get("duration_hours"),
+                    observation.get("queue_time_hours"),
+                    observation.get("direct_cost_usd"),
+                    observation.get("success"),
+                    json.dumps(observation.get("source_locator", {})),
+                    json.dumps(observation.get("unresolved_ambiguities", [])),
+                    json.dumps(observation),
+                ),
+            )
+            workflow_step_count += 1
+
+        return {
+            "workflow_observation_count": workflow_observation_count,
+            "workflow_stage_count": workflow_stage_count,
+            "workflow_step_count": workflow_step_count,
+        }
+
     @staticmethod
     def _load_item_candidate_ids(cursor: Any, packet_fingerprint: str) -> Dict[str, Any]:
         cursor.execute(
@@ -253,6 +454,19 @@ class FirstPassExtractionLoader:
             select local_id, id
             from extracted_item_candidate
             where packet_fingerprint = %s
+            """,
+            (packet_fingerprint,),
+        )
+        return {row[0]: row[1] for row in cursor.fetchall()}
+
+    @staticmethod
+    def _load_workflow_candidate_ids(cursor: Any, packet_fingerprint: str) -> Dict[str, Any]:
+        cursor.execute(
+            """
+            select local_id, id
+            from extracted_item_candidate
+            where packet_fingerprint = %s
+              and candidate_type = 'workflow_template'
             """,
             (packet_fingerprint,),
         )

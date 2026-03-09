@@ -466,6 +466,11 @@ create table workflow_template (
   workflow_family workflow_family not null,
   objective text not null,
   throughput_class throughput_class,
+  protocol_family text,
+  engineered_system_family text,
+  why_workflow_works text,
+  priority_logic text,
+  validation_strategy text,
   recommended_for text,
   default_parallelization_assumption text,
   notes text
@@ -486,7 +491,9 @@ create table workflow_stage_template (
   enriches_for_axes text[] not null default '{}'::text[],
   guards_against_axes text[] not null default '{}'::text[],
   preserves_downstream_property_axes text[] not null default '{}'::text[],
+  why_stage_exists text,
   advance_criteria text,
+  decision_gate_reason text,
   bottleneck_risk text,
   higher_fidelity_than_previous boolean,
   notes text,
@@ -498,7 +505,17 @@ create table workflow_step_template (
   workflow_template_id uuid not null references workflow_template(id) on delete cascade,
   workflow_stage_template_id uuid references workflow_stage_template(id) on delete set null,
   step_name text not null,
+  step_order int,
   step_type workflow_step_type not null,
+  purpose text,
+  why_this_step_now text,
+  decision_gate_reason text,
+  advance_criteria text,
+  failure_criteria text,
+  validation_focus text,
+  target_property_axes text[] not null default '{}'::text[],
+  target_mechanisms text[] not null default '{}'::text[],
+  target_techniques text[] not null default '{}'::text[],
   duration_p10_hours numeric(10,2),
   duration_typical_hours numeric(10,2),
   duration_p90_hours numeric(10,2),
@@ -510,7 +527,42 @@ create table workflow_step_template (
   failure_probability numeric(5,4),
   output_artifact text,
   input_artifact text,
-  notes text
+  notes text,
+  unique (workflow_template_id, step_name)
+);
+
+create table workflow_mechanism (
+  workflow_template_id uuid not null references workflow_template(id) on delete cascade,
+  mechanism_name text not null,
+  primary key (workflow_template_id, mechanism_name)
+);
+
+create table workflow_technique (
+  workflow_template_id uuid not null references workflow_template(id) on delete cascade,
+  technique_name text not null,
+  primary key (workflow_template_id, technique_name)
+);
+
+create table workflow_design_goal (
+  id uuid primary key default gen_random_uuid(),
+  workflow_template_id uuid not null references workflow_template(id) on delete cascade,
+  goal_name text not null,
+  goal_kind text not null default 'property_axis',
+  rationale text,
+  source_document_id uuid references source_document(id) on delete set null,
+  unique (workflow_template_id, goal_name, goal_kind)
+);
+
+create table workflow_item_role (
+  id uuid primary key default gen_random_uuid(),
+  workflow_template_id uuid not null references workflow_template(id) on delete cascade,
+  item_id uuid not null references toolkit_item(id) on delete cascade,
+  role_name text not null,
+  workflow_stage_template_id uuid references workflow_stage_template(id) on delete set null,
+  workflow_step_template_id uuid references workflow_step_template(id) on delete set null,
+  notes text,
+  source_document_id uuid references source_document(id) on delete set null,
+  unique (workflow_template_id, item_id, role_name, workflow_stage_template_id, workflow_step_template_id)
 );
 
 create table workflow_edge (
@@ -698,4 +750,103 @@ create table extracted_claim_subject_candidate (
   extracted_item_candidate_id uuid not null references extracted_item_candidate(id) on delete cascade,
   subject_role text not null default 'subject',
   unique (extracted_claim_candidate_id, extracted_item_candidate_id, subject_role)
+);
+
+create table extracted_workflow_observation (
+  id uuid primary key default gen_random_uuid(),
+  packet_fingerprint text not null references extracted_packet(packet_fingerprint) on delete cascade,
+  source_document_id uuid not null references source_document(id) on delete cascade,
+  extraction_run_id uuid references extraction_run(id) on delete set null,
+  packet_kind text not null,
+  local_id text not null,
+  workflow_local_id text,
+  workflow_candidate_id uuid references extracted_item_candidate(id) on delete set null,
+  workflow_objective text,
+  protocol_family text,
+  engineered_system_family text,
+  target_property_axes text[] not null default '{}'::text[],
+  target_mechanisms text[] not null default '{}'::text[],
+  target_techniques text[] not null default '{}'::text[],
+  why_workflow_works text,
+  workflow_priority_logic text,
+  validation_strategy text,
+  decision_gate_strategy text,
+  evidence_text text,
+  source_locator jsonb not null default '{}'::jsonb,
+  unresolved_ambiguities jsonb not null default '[]'::jsonb,
+  raw_payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  unique (packet_fingerprint, local_id)
+);
+
+create table extracted_workflow_stage_observation (
+  id uuid primary key default gen_random_uuid(),
+  packet_fingerprint text not null references extracted_packet(packet_fingerprint) on delete cascade,
+  source_document_id uuid not null references source_document(id) on delete cascade,
+  extraction_run_id uuid references extraction_run(id) on delete set null,
+  packet_kind text not null,
+  local_id text not null,
+  workflow_local_id text,
+  workflow_candidate_id uuid references extracted_item_candidate(id) on delete set null,
+  stage_name text not null,
+  stage_kind text not null,
+  stage_order int not null,
+  search_modality text,
+  input_candidate_count int,
+  output_candidate_count int,
+  candidate_unit text,
+  selection_basis text,
+  counterselection_basis text,
+  enriches_for_axes text[] not null default '{}'::text[],
+  guards_against_axes text[] not null default '{}'::text[],
+  preserves_downstream_property_axes text[] not null default '{}'::text[],
+  why_stage_exists text,
+  advance_criteria text,
+  decision_gate_reason text,
+  bottleneck_risk text,
+  higher_fidelity_than_previous boolean,
+  source_locator jsonb not null default '{}'::jsonb,
+  unresolved_ambiguities jsonb not null default '[]'::jsonb,
+  raw_payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  unique (packet_fingerprint, local_id)
+);
+
+create table extracted_workflow_step_observation (
+  id uuid primary key default gen_random_uuid(),
+  packet_fingerprint text not null references extracted_packet(packet_fingerprint) on delete cascade,
+  source_document_id uuid not null references source_document(id) on delete cascade,
+  extraction_run_id uuid references extraction_run(id) on delete set null,
+  packet_kind text not null,
+  local_id text not null,
+  workflow_local_id text,
+  workflow_candidate_id uuid references extracted_item_candidate(id) on delete set null,
+  workflow_observation_local_id text,
+  stage_local_id text,
+  stage_name text,
+  step_name text not null,
+  step_order int not null,
+  step_type text,
+  item_local_ids text[] not null default '{}'::text[],
+  item_role text,
+  purpose text,
+  why_this_step_now text,
+  decision_gate_reason text,
+  advance_criteria text,
+  failure_criteria text,
+  validation_focus text,
+  target_property_axes text[] not null default '{}'::text[],
+  target_mechanisms text[] not null default '{}'::text[],
+  target_techniques text[] not null default '{}'::text[],
+  input_artifact text,
+  output_artifact text,
+  duration_hours double precision,
+  queue_time_hours double precision,
+  direct_cost_usd double precision,
+  success boolean,
+  source_locator jsonb not null default '{}'::jsonb,
+  unresolved_ambiguities jsonb not null default '[]'::jsonb,
+  raw_payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  unique (packet_fingerprint, local_id)
 );

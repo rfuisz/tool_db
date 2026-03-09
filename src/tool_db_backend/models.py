@@ -213,8 +213,17 @@ class WorkflowSummary(BaseModel):
 
 
 class WorkflowDetail(WorkflowSummary):
+    protocol_family: Optional[str] = None
+    engineered_system_family: Optional[str] = None
+    why_workflow_works: Optional[str] = None
+    priority_logic: Optional[str] = None
+    validation_strategy: Optional[str] = None
     recommended_for: List[str] = Field(default_factory=list)
     default_parallelization_assumption: Optional[str] = None
+    mechanisms: List[str] = Field(default_factory=list)
+    techniques: List[str] = Field(default_factory=list)
+    design_goals: List[Dict[str, Any]] = Field(default_factory=list)
+    item_roles: List[Dict[str, Any]] = Field(default_factory=list)
     stage_templates: List[Dict[str, Any]] = Field(default_factory=list)
     step_templates: List[Dict[str, Any]] = Field(default_factory=list)
     assumption_notes: List[str] = Field(default_factory=list)
@@ -318,6 +327,24 @@ class FirstPassClaim(BaseModel):
     source_document: FirstPassSourceDocument
 
 
+class FirstPassWorkflowObservation(BaseModel):
+    local_id: str
+    workflow_local_id: Optional[str] = None
+    workflow_objective: Optional[str] = None
+    protocol_family: Optional[str] = None
+    engineered_system_family: Optional[str] = None
+    target_property_axes: List[str] = Field(default_factory=list)
+    target_mechanisms: List[str] = Field(default_factory=list)
+    target_techniques: List[str] = Field(default_factory=list)
+    why_workflow_works: Optional[str] = None
+    workflow_priority_logic: Optional[str] = None
+    validation_strategy: Optional[str] = None
+    decision_gate_strategy: Optional[str] = None
+    evidence_text: Optional[str] = None
+    source_locator: Dict[str, Any] = Field(default_factory=dict)
+    source_document: FirstPassSourceDocument
+
+
 class FirstPassWorkflowStageObservation(BaseModel):
     local_id: str
     workflow_local_id: Optional[str] = None
@@ -330,10 +357,48 @@ class FirstPassWorkflowStageObservation(BaseModel):
     enriches_for_axes: List[str] = Field(default_factory=list)
     guards_against_axes: List[str] = Field(default_factory=list)
     preserves_downstream_property_axes: List[str] = Field(default_factory=list)
+    why_stage_exists: Optional[str] = None
     advance_criteria: Optional[str] = None
+    decision_gate_reason: Optional[str] = None
     bottleneck_risk: Optional[str] = None
     higher_fidelity_than_previous: Optional[bool] = None
     source_locator: Dict[str, Any] = Field(default_factory=dict)
+    source_document: FirstPassSourceDocument
+
+
+class FirstPassWorkflowStepObservation(BaseModel):
+    local_id: str
+    workflow_local_id: Optional[str] = None
+    workflow_observation_local_id: Optional[str] = None
+    stage_local_id: Optional[str] = None
+    stage_name: Optional[str] = None
+    step_name: str
+    step_order: int
+    step_type: Optional[str] = None
+    item_local_ids: List[str] = Field(default_factory=list)
+    item_role: Optional[str] = None
+    purpose: Optional[str] = None
+    why_this_step_now: Optional[str] = None
+    decision_gate_reason: Optional[str] = None
+    advance_criteria: Optional[str] = None
+    failure_criteria: Optional[str] = None
+    validation_focus: Optional[str] = None
+    target_property_axes: List[str] = Field(default_factory=list)
+    target_mechanisms: List[str] = Field(default_factory=list)
+    target_techniques: List[str] = Field(default_factory=list)
+    input_artifact: Optional[str] = None
+    output_artifact: Optional[str] = None
+    duration_hours: Optional[float] = None
+    queue_time_hours: Optional[float] = None
+    direct_cost_usd: Optional[float] = None
+    success: Optional[bool] = None
+    source_locator: Dict[str, Any] = Field(default_factory=dict)
+    source_document: FirstPassSourceDocument
+
+
+class FirstPassExplainer(BaseModel):
+    explainer_kind: str
+    body: str
     source_document: FirstPassSourceDocument
 
 
@@ -355,7 +420,10 @@ class FirstPassEntityDetail(FirstPassEntitySummary):
     evidence_snippets: List[FirstPassEvidenceSnippet] = Field(default_factory=list)
     source_documents: List[FirstPassSourceDocument] = Field(default_factory=list)
     claims: List[FirstPassClaim] = Field(default_factory=list)
+    freeform_explainers: List[FirstPassExplainer] = Field(default_factory=list)
+    workflow_observations: List[FirstPassWorkflowObservation] = Field(default_factory=list)
     workflow_stage_observations: List[FirstPassWorkflowStageObservation] = Field(default_factory=list)
+    workflow_step_observations: List[FirstPassWorkflowStepObservation] = Field(default_factory=list)
 
 
 class FirstPassItemSummary(FirstPassEntitySummary):

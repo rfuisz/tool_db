@@ -10,7 +10,9 @@
     "source_document",
     "entity_candidates",
     "claims",
+    "workflow_observations",
     "workflow_stage_observations",
+    "workflow_step_observations",
     "unresolved_ambiguities"
   ],
   "properties": {
@@ -28,10 +30,22 @@
       "type": "array",
       "items": { "$ref": "common.v1.schema.json#/$defs/claim" }
     },
+    "workflow_observations": {
+      "type": "array",
+      "items": {
+        "$ref": "common.v1.schema.json#/$defs/workflow_observation"
+      }
+    },
     "workflow_stage_observations": {
       "type": "array",
       "items": {
         "$ref": "common.v1.schema.json#/$defs/workflow_stage_observation"
+      }
+    },
+    "workflow_step_observations": {
+      "type": "array",
+      "items": {
+        "$ref": "common.v1.schema.json#/$defs/workflow_step_observation"
       }
     },
     "recommended_seed_item_local_ids": {

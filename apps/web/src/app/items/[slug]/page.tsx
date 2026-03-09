@@ -49,6 +49,7 @@ export default async function ItemDetailPage({
   const itemFacets = item.item_facets ?? [];
   const comparisons = item.comparisons ?? [];
   const problemLinks = item.problem_links ?? [];
+  const workflowRecommendations = item.workflow_recommendations ?? [];
   const explainerByKind = new Map(
     explainers.map((explainer) => [explainer.explainer_kind, explainer]),
   );
@@ -183,6 +184,41 @@ export default async function ItemDetailPage({
                     </div>
                   </div>
                 )}
+              </div>
+            </Section>
+          )}
+
+          {workflowRecommendations.length > 0 && (
+            <Section title="Workflow Fit">
+              <div className="space-y-3">
+                {workflowRecommendations.map((recommendation) => (
+                  <div
+                    key={`${recommendation.workflow_slug}-${recommendation.role_name}-${recommendation.step_name ?? "step"}`}
+                    className="rounded border border-edge px-4 py-3"
+                  >
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <Link
+                        href={`/workflows#${recommendation.workflow_slug}`}
+                        className="font-ui text-sm font-medium text-accent hover:underline"
+                      >
+                        {recommendation.workflow_name}
+                      </Link>
+                      <span className="font-ui text-xs text-ink-muted">
+                        {recommendation.role_name.replace(/_/g, " ")}
+                      </span>
+                      {recommendation.stage_name && (
+                        <span className="font-ui text-xs text-ink-muted">
+                          Stage: {recommendation.stage_name}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
+                      {recommendation.notes ??
+                        recommendation.objective ??
+                        "Workflow-linked evidence is available for this item."}
+                    </p>
+                  </div>
+                ))}
               </div>
             </Section>
           )}

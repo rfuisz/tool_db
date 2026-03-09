@@ -9,11 +9,30 @@ import { renderInlineTitle } from "@/lib/render-inline-title";
 import type {
   FirstPassClaim,
   FirstPassEntityDetail,
+  FirstPassExplainer,
   FirstPassEvidenceSnippet,
   FirstPassSourceDocument,
+  FirstPassWorkflowObservation,
   FirstPassWorkflowStageObservation,
+  FirstPassWorkflowStepObservation,
   SourceDocument,
 } from "@/lib/types";
+
+const FIRST_PASS_EXPLAINER_LABELS: Record<string, string> = {
+  what_it_does: "What the tool is doing",
+  resources_required: "Resources required",
+  problem_it_solves: "What problem it solves",
+  problem_it_does_not_solve: "What it does not solve",
+  alternatives: "Alternatives",
+};
+
+const FIRST_PASS_EXPLAINER_ORDER = [
+  "what_it_does",
+  "resources_required",
+  "problem_it_solves",
+  "problem_it_does_not_solve",
+  "alternatives",
+] as const;
 
 function sourceAnchor(documentId: string) {
   return `#source-${documentId}`;
@@ -121,6 +140,54 @@ function SourceExternalLinks({ doc }: { doc: FirstPassSourceDocument }) {
   );
 }
 
+function FreeformExplainerGroup({
+  explainers,
+  sourceIndexById,
+}: {
+  explainers: FirstPassExplainer[];
+  sourceIndexById: Map<string, number>;
+}) {
+  const first = explainers[0];
+  const label = FIRST_PASS_EXPLAINER_LABELS[first.explainer_kind] ?? formatLabel(first.explainer_kind);
+
+  return (
+    <div>
+      <h3 className="mb-3 text-base text-ink">{label}</h3>
+      <div className="space-y-3">
+        {explainers.map((explainer, index) => {
+          const sourceDocument = explainer.source_document;
+          const sourceNumber = sourceIndexById.get(sourceDocument.id) ?? "?";
+          return (
+            <article
+              key={`${explainer.explainer_kind}-${sourceDocument.id}-${index}`}
+              className="rounded border border-edge bg-surface-alt px-4 py-3"
+            >
+              <p className="mb-3 text-sm leading-relaxed text-ink-secondary">
+                {explainer.body}
+              </p>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 font-ui text-xs text-ink-muted">
+                <a
+                  href={sourceAnchor(sourceDocument.id)}
+                  className="text-brand hover:underline"
+                >
+                  Source {sourceNumber}
+                </a>
+                <PaperLink
+                  document={toPaperDocument(sourceDocument)}
+                  className="text-left text-brand no-underline hover:underline"
+                >
+                  {renderInlineTitle(sourceDocument.title)}
+                </PaperLink>
+                <SourceExternalLinks doc={sourceDocument} />
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function StageObservationCard({
   observation,
   index,
@@ -195,6 +262,12 @@ function StageObservationCard({
       </div>
       <h3 className="mb-2 text-base text-ink">{observation.stage_name}</h3>
       <div className="space-y-2 text-sm leading-relaxed text-ink-secondary">
+        {observation.why_stage_exists ? (
+          <p>
+            <span className="font-semibold text-ink">Why this stage exists:</span>{" "}
+            {observation.why_stage_exists}
+          </p>
+        ) : null}
         {observation.selection_basis ? (
           <p>
             <span className="font-semibold text-ink">Selection basis:</span>{" "}
@@ -211,6 +284,12 @@ function StageObservationCard({
           <p>
             <span className="font-semibold text-ink">Advance criteria:</span>{" "}
             {observation.advance_criteria}
+          </p>
+        ) : null}
+        {observation.decision_gate_reason ? (
+          <p>
+            <span className="font-semibold text-ink">Decision gate:</span>{" "}
+            {observation.decision_gate_reason}
           </p>
         ) : null}
         {observation.bottleneck_risk ? (
@@ -236,6 +315,132 @@ function StageObservationCard({
   );
 }
 
+function WorkflowObservationCard({
+  observation,
+  sourceNumber,
+}: {
+  observation: FirstPassWorkflowObservation;
+  sourceNumber: number | string;
+}) {
+  return (
+    <article className="border-b border-edge pb-4 last:border-b-0 last:pb-0">
+      <div className="mb-2 flex flex-wrap items-center gap-2 font-ui text-xs text-ink-muted">
+        <span className="rounded bg-surface-alt px-2 py-1 font-semibold text-ink-secondary">
+          Workflow evidence
+        </span>
+        <a
+          href={sourceAnchor(observation.source_document.id)}
+          className="text-brand hover:underline"
+        >
+          Source {sourceNumber}
+        </a>
+      </div>
+      <div className="space-y-2 text-sm leading-relaxed text-ink-secondary">
+        {observation.workflow_objective ? (
+          <p>
+            <span className="font-semibold text-ink">Objective:</span>{" "}
+            {observation.workflow_objective}
+          </p>
+        ) : null}
+        {observation.why_workflow_works ? (
+          <p>
+            <span className="font-semibold text-ink">Why it works:</span>{" "}
+            {observation.why_workflow_works}
+          </p>
+        ) : null}
+        {observation.workflow_priority_logic ? (
+          <p>
+            <span className="font-semibold text-ink">Priority logic:</span>{" "}
+            {observation.workflow_priority_logic}
+          </p>
+        ) : null}
+        {observation.validation_strategy ? (
+          <p>
+            <span className="font-semibold text-ink">Validation strategy:</span>{" "}
+            {observation.validation_strategy}
+          </p>
+        ) : null}
+        {observation.target_property_axes.length > 0 ? (
+          <p>
+            <span className="font-semibold text-ink">Target properties:</span>{" "}
+            {observation.target_property_axes.join(", ")}
+          </p>
+        ) : null}
+        {observation.target_mechanisms.length > 0 ? (
+          <p>
+            <span className="font-semibold text-ink">Target mechanisms:</span>{" "}
+            {observation.target_mechanisms.join(", ")}
+          </p>
+        ) : null}
+        {observation.target_techniques.length > 0 ? (
+          <p>
+            <span className="font-semibold text-ink">Target techniques:</span>{" "}
+            {observation.target_techniques.join(", ")}
+          </p>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function StepObservationCard({
+  observation,
+  sourceNumber,
+}: {
+  observation: FirstPassWorkflowStepObservation;
+  sourceNumber: number | string;
+}) {
+  return (
+    <article className="border-b border-edge pb-4 last:border-b-0 last:pb-0">
+      <div className="mb-2 flex flex-wrap items-center gap-2 font-ui text-xs text-ink-muted">
+        <span className="rounded bg-surface-alt px-2 py-1 font-semibold text-ink-secondary">
+          Step {observation.step_order}
+        </span>
+        {observation.step_type ? <span>{formatLabel(observation.step_type)}</span> : null}
+        <a
+          href={sourceAnchor(observation.source_document.id)}
+          className="text-brand hover:underline"
+        >
+          Source {sourceNumber}
+        </a>
+      </div>
+      <h3 className="mb-2 text-base text-ink">{observation.step_name}</h3>
+      <div className="space-y-2 text-sm leading-relaxed text-ink-secondary">
+        {observation.purpose ? (
+          <p>
+            <span className="font-semibold text-ink">Purpose:</span>{" "}
+            {observation.purpose}
+          </p>
+        ) : null}
+        {observation.why_this_step_now ? (
+          <p>
+            <span className="font-semibold text-ink">Why now:</span>{" "}
+            {observation.why_this_step_now}
+          </p>
+        ) : null}
+        {observation.validation_focus ? (
+          <p>
+            <span className="font-semibold text-ink">Validation focus:</span>{" "}
+            {observation.validation_focus}
+          </p>
+        ) : null}
+        {observation.decision_gate_reason ? (
+          <p>
+            <span className="font-semibold text-ink">Decision gate:</span>{" "}
+            {observation.decision_gate_reason}
+          </p>
+        ) : null}
+        {observation.target_property_axes.length > 0 ? (
+          <p>
+            <span className="font-semibold text-ink">Targets properties:</span>{" "}
+            {observation.target_property_axes.join(", ")}
+          </p>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
 export function FirstPassEntityDetailView({
   entity,
 }: {
@@ -246,7 +451,10 @@ export function FirstPassEntityDetailView({
   );
   const claimsBySourceId = new Map<string, FirstPassClaim[]>();
   const evidenceBySourceId = new Map<string, FirstPassEvidenceSnippet[]>();
+  const workflowsBySourceId = new Map<string, FirstPassWorkflowObservation[]>();
   const stagesBySourceId = new Map<string, FirstPassWorkflowStageObservation[]>();
+  const stepsBySourceId = new Map<string, FirstPassWorkflowStepObservation[]>();
+  const explainersByKind = new Map<string, FirstPassExplainer[]>();
 
   for (const claim of entity.claims) {
     const existing = claimsBySourceId.get(claim.source_document.id) ?? [];
@@ -264,10 +472,28 @@ export function FirstPassEntityDetailView({
     evidenceBySourceId.set(sourceDocumentId, existing);
   }
 
+  for (const observation of entity.workflow_observations) {
+    const existing = workflowsBySourceId.get(observation.source_document.id) ?? [];
+    existing.push(observation);
+    workflowsBySourceId.set(observation.source_document.id, existing);
+  }
+
   for (const observation of entity.workflow_stage_observations) {
     const existing = stagesBySourceId.get(observation.source_document.id) ?? [];
     existing.push(observation);
     stagesBySourceId.set(observation.source_document.id, existing);
+  }
+
+  for (const observation of entity.workflow_step_observations) {
+    const existing = stepsBySourceId.get(observation.source_document.id) ?? [];
+    existing.push(observation);
+    stepsBySourceId.set(observation.source_document.id, existing);
+  }
+
+  for (const explainer of entity.freeform_explainers) {
+    const existing = explainersByKind.get(explainer.explainer_kind) ?? [];
+    existing.push(explainer);
+    explainersByKind.set(explainer.explainer_kind, existing);
   }
 
   return (
@@ -289,20 +515,44 @@ export function FirstPassEntityDetailView({
           {entity.item_type ? <span>Type: {formatLabel(entity.item_type)}</span> : null}
           <span>{entity.source_document_count} source documents</span>
           <span>{entity.claim_count} linked claims</span>
+          {entity.workflow_observations.length > 0 ? (
+            <span>{entity.workflow_observations.length} workflow observations</span>
+          ) : null}
           {entity.workflow_stage_observations.length > 0 ? (
             <span>{entity.workflow_stage_observations.length} stage observations</span>
+          ) : null}
+          {entity.workflow_step_observations.length > 0 ? (
+            <span>{entity.workflow_step_observations.length} step observations</span>
           ) : null}
           {entity.matched_slug ? (
             <span>Canonical suggestion: {entity.matched_slug}</span>
           ) : null}
         </div>
         <div className="mt-4 flex flex-wrap gap-3 font-ui text-sm">
+          {entity.freeform_explainers.length > 0 ? (
+            <a href="#extracted-explainers" className="text-brand hover:text-accent">
+              Jump to explainers
+            </a>
+          ) : null}
           {entity.workflow_stage_observations.length > 0 ? (
             <a
               href="#workflow-stage-observations"
               className="text-brand hover:text-accent"
             >
               Jump to workflow stages
+            </a>
+          ) : null}
+          {entity.workflow_observations.length > 0 ? (
+            <a
+              href="#workflow-observations"
+              className="text-brand hover:text-accent"
+            >
+              Jump to workflow logic
+            </a>
+          ) : null}
+          {entity.workflow_step_observations.length > 0 ? (
+            <a href="#workflow-step-observations" className="text-brand hover:text-accent">
+              Jump to workflow steps
             </a>
           ) : null}
           <a href="#evidence-snippets" className="text-brand hover:text-accent">
@@ -329,6 +579,27 @@ export function FirstPassEntityDetailView({
         </section>
       ) : null}
 
+      {entity.freeform_explainers.length > 0 ? (
+        <section id="extracted-explainers" className="mb-10 border border-edge bg-surface p-5">
+          <p className="small-caps mb-3">Extracted Explainers</p>
+          <div className="space-y-6">
+            {FIRST_PASS_EXPLAINER_ORDER.map((kind) => {
+              const explainers = explainersByKind.get(kind) ?? [];
+              if (explainers.length === 0) {
+                return null;
+              }
+              return (
+                <FreeformExplainerGroup
+                  key={kind}
+                  explainers={explainers}
+                  sourceIndexById={sourceIndexById}
+                />
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
       {entity.workflow_stage_observations.length > 0 ? (
         <section
           id="workflow-stage-observations"
@@ -341,6 +612,46 @@ export function FirstPassEntityDetailView({
                 key={`${observation.local_id}-${index}`}
                 observation={observation}
                 index={index}
+                sourceNumber={
+                  sourceIndexById.get(observation.source_document.id) ?? "?"
+                }
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {entity.workflow_observations.length > 0 ? (
+        <section
+          id="workflow-observations"
+          className="mb-10 border border-edge bg-surface p-5"
+        >
+          <p className="small-caps mb-3">Workflow Logic</p>
+          <div className="space-y-4">
+            {entity.workflow_observations.map((observation, index) => (
+              <WorkflowObservationCard
+                key={`${observation.local_id}-${index}`}
+                observation={observation}
+                sourceNumber={
+                  sourceIndexById.get(observation.source_document.id) ?? "?"
+                }
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {entity.workflow_step_observations.length > 0 ? (
+        <section
+          id="workflow-step-observations"
+          className="mb-10 border border-edge bg-surface p-5"
+        >
+          <p className="small-caps mb-3">Workflow Step Observations</p>
+          <div className="space-y-4">
+            {entity.workflow_step_observations.map((observation, index) => (
+              <StepObservationCard
+                key={`${observation.local_id}-${index}`}
+                observation={observation}
                 sourceNumber={
                   sourceIndexById.get(observation.source_document.id) ?? "?"
                 }
@@ -413,7 +724,9 @@ export function FirstPassEntityDetailView({
             entity.source_documents.map((doc) => {
               const relatedClaims = claimsBySourceId.get(doc.id) ?? [];
               const relatedEvidence = evidenceBySourceId.get(doc.id) ?? [];
+              const relatedWorkflows = workflowsBySourceId.get(doc.id) ?? [];
               const relatedStages = stagesBySourceId.get(doc.id) ?? [];
+              const relatedSteps = stepsBySourceId.get(doc.id) ?? [];
               const sourceNumber = sourceIndexById.get(doc.id) ?? "?";
 
               return (
@@ -450,6 +763,15 @@ export function FirstPassEntityDetailView({
                     <a href="#evidence-snippets" className="text-brand hover:underline">
                       {relatedEvidence.length} evidence snippet{relatedEvidence.length === 1 ? "" : "s"}
                     </a>
+                    {relatedWorkflows.length > 0 ? (
+                      <a
+                        href="#workflow-observations"
+                        className="text-brand hover:underline"
+                      >
+                        {relatedWorkflows.length} workflow logic note
+                        {relatedWorkflows.length === 1 ? "" : "s"}
+                      </a>
+                    ) : null}
                     {relatedStages.length > 0 ? (
                       <a
                         href="#workflow-stage-observations"
@@ -457,6 +779,15 @@ export function FirstPassEntityDetailView({
                       >
                         {relatedStages.length} workflow stage
                         {relatedStages.length === 1 ? "" : "s"}
+                      </a>
+                    ) : null}
+                    {relatedSteps.length > 0 ? (
+                      <a
+                        href="#workflow-step-observations"
+                        className="text-brand hover:underline"
+                      >
+                        {relatedSteps.length} workflow step
+                        {relatedSteps.length === 1 ? "" : "s"}
                       </a>
                     ) : null}
                     <a href="#linked-claims" className="text-brand hover:underline">

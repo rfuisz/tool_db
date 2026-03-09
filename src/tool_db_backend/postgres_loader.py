@@ -331,6 +331,11 @@ class PostgresLoadPlanExecutor:
             if kind == "attach_evidence_to_existing_item":
                 target_slug = action["target_slug"]
                 slug_to_item_id[target_slug] = self._get_item_id_by_slug(cursor, target_slug)
+                self._maybe_update_existing_item_type(
+                    cursor,
+                    slug_to_item_id[target_slug],
+                    action.get("item_type"),
+                )
                 self._upsert_synonyms(
                     cursor,
                     slug_to_item_id[target_slug],
@@ -358,6 +363,45 @@ class PostgresLoadPlanExecutor:
                     action.get("item_facets", []),
                 )
                 continue
+
+    @staticmethod
+    def _maybe_update_existing_item_type(
+        cursor: Any,
+        item_id: Any,
+        proposed_item_type: Optional[str],
+    ) -> None:
+        if not proposed_item_type:
+            return
+        cursor.execute(
+            "select item_type::text from toolkit_item where id = %s",
+            (item_id,),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return
+        current_item_type = row[0]
+        if current_item_type == proposed_item_type:
+            return
+
+        safe_method_remaps = {
+            ("engineering_method", "construct_pattern"),
+            ("engineering_method", "multi_component_switch"),
+            ("engineering_method", "delivery_harness"),
+            ("construct_pattern", "multi_component_switch"),
+            ("construct_pattern", "protein_domain"),
+        }
+        if (current_item_type, proposed_item_type) not in safe_method_remaps:
+            return
+
+        cursor.execute(
+            """
+            update toolkit_item
+            set item_type = %s::item_type,
+                updated_at = now()
+            where id = %s
+            """,
+            (proposed_item_type, item_id),
+        )
 
     def _execute_claim_actions(
         self,
@@ -559,11 +603,32 @@ class PostgresLoadPlanExecutor:
         actions: List[Dict[str, Any]],
         source_document_id: Any,
     ) -> int:
-        upserted_stage_count = 0
+        updated_count = 0
         for action in actions:
-            if action["action"] != "upsert_workflow_stages_for_existing_workflow":
+            if action["action"] != "upsert_workflow_for_existing_workflow":
                 continue
             workflow_template_id = self._get_workflow_template_id_by_slug(cursor, action["target_slug"])
+            self._update_workflow_template_details(
+                cursor,
+                workflow_template_id=workflow_template_id,
+                observations=action.get("workflow_observations", []),
+            )
+            self._replace_workflow_mechanisms(
+                cursor,
+                workflow_template_id=workflow_template_id,
+                mechanisms=action.get("workflow_mechanisms", []),
+            )
+            self._replace_workflow_techniques(
+                cursor,
+                workflow_template_id=workflow_template_id,
+                techniques=action.get("workflow_techniques", []),
+            )
+            self._upsert_workflow_design_goals(
+                cursor,
+                workflow_template_id=workflow_template_id,
+                source_document_id=source_document_id,
+                goals=action.get("design_goals", []),
+            )
             for stage in action.get("stages", []):
                 workflow_stage_template_id = self._upsert_workflow_stage_template(
                     cursor,
@@ -577,8 +642,29 @@ class PostgresLoadPlanExecutor:
                     source_document_id=source_document_id,
                     stage=stage,
                 )
-                upserted_stage_count += 1
-        return upserted_stage_count
+                updated_count += 1
+            step_ids_by_key = self._upsert_workflow_step_templates(
+                cursor,
+                workflow_template_id=workflow_template_id,
+                stages=action.get("stages", []),
+                steps=action.get("steps", []),
+                source_document_id=source_document_id,
+            )
+            self._replace_workflow_step_edges(
+                cursor,
+                workflow_template_id=workflow_template_id,
+                steps=action.get("steps", []),
+                step_ids_by_key=step_ids_by_key,
+            )
+            self._upsert_workflow_item_roles(
+                cursor,
+                workflow_template_id=workflow_template_id,
+                source_document_id=source_document_id,
+                item_roles=action.get("item_roles", []),
+                step_ids_by_key=step_ids_by_key,
+            )
+            updated_count += len(step_ids_by_key)
+        return updated_count
 
     def _execute_gap_item_actions(
         self,
@@ -788,6 +874,117 @@ class PostgresLoadPlanExecutor:
         return row[0]
 
     @staticmethod
+    def _update_workflow_template_details(
+        cursor: Any,
+        *,
+        workflow_template_id: Any,
+        observations: List[Dict[str, Any]],
+    ) -> None:
+        if not observations:
+            return
+        first = observations[0]
+        recommended_for = "\n".join(first.get("target_property_axes", [])) or None
+        notes_parts = [
+            first.get("decision_gate_strategy"),
+            first.get("evidence_text"),
+        ]
+        notes = " | ".join(part for part in notes_parts if part)
+        cursor.execute(
+            """
+            update workflow_template
+            set
+              objective = coalesce(%s, objective),
+              protocol_family = coalesce(%s, protocol_family),
+              engineered_system_family = coalesce(%s, engineered_system_family),
+              why_workflow_works = coalesce(%s, why_workflow_works),
+              priority_logic = coalesce(%s, priority_logic),
+              validation_strategy = coalesce(%s, validation_strategy),
+              recommended_for = coalesce(recommended_for, %s),
+              notes = case
+                when %s is null or %s = '' then notes
+                when notes is null or notes = '' then %s
+                else notes || ' | ' || %s
+              end
+            where id = %s
+            """,
+            (
+                first.get("workflow_objective"),
+                first.get("protocol_family"),
+                first.get("engineered_system_family"),
+                first.get("why_workflow_works"),
+                first.get("workflow_priority_logic"),
+                first.get("validation_strategy"),
+                recommended_for,
+                notes,
+                notes,
+                notes,
+                notes,
+                workflow_template_id,
+            ),
+        )
+
+    @staticmethod
+    def _replace_workflow_mechanisms(cursor: Any, workflow_template_id: Any, mechanisms: List[str]) -> None:
+        cursor.execute(
+            "delete from workflow_mechanism where workflow_template_id = %s",
+            (workflow_template_id,),
+        )
+        for mechanism in mechanisms:
+            cursor.execute(
+                """
+                insert into workflow_mechanism (workflow_template_id, mechanism_name)
+                values (%s, %s)
+                on conflict do nothing
+                """,
+                (workflow_template_id, mechanism),
+            )
+
+    @staticmethod
+    def _replace_workflow_techniques(cursor: Any, workflow_template_id: Any, techniques: List[str]) -> None:
+        cursor.execute(
+            "delete from workflow_technique where workflow_template_id = %s",
+            (workflow_template_id,),
+        )
+        for technique in techniques:
+            cursor.execute(
+                """
+                insert into workflow_technique (workflow_template_id, technique_name)
+                values (%s, %s)
+                on conflict do nothing
+                """,
+                (workflow_template_id, technique),
+            )
+
+    @staticmethod
+    def _upsert_workflow_design_goals(
+        cursor: Any,
+        *,
+        workflow_template_id: Any,
+        source_document_id: Any,
+        goals: List[Dict[str, Any]],
+    ) -> None:
+        for goal in goals:
+            cursor.execute(
+                """
+                insert into workflow_design_goal (
+                  workflow_template_id, goal_name, goal_kind, rationale, source_document_id
+                )
+                values (%s, %s, %s, %s, %s)
+                on conflict (workflow_template_id, goal_name, goal_kind) do update
+                set
+                  rationale = coalesce(workflow_design_goal.rationale, excluded.rationale),
+                  source_document_id = coalesce(workflow_design_goal.source_document_id, excluded.source_document_id)
+                """,
+                (
+                    workflow_template_id,
+                    goal.get("goal_name"),
+                    goal.get("goal_kind", "property_axis"),
+                    goal.get("rationale"),
+                    source_document_id,
+                ),
+            )
+
+    @staticmethod
     def _upsert_workflow_stage_template(cursor: Any, workflow_template_id: Any, stage: Dict[str, Any]) -> Any:
         cursor.execute(
             """
@@ -795,10 +992,10 @@ class PostgresLoadPlanExecutor:
               workflow_template_id, stage_name, stage_kind, stage_order, search_modality,
               input_candidate_count_typical, output_candidate_count_typical, candidate_unit,
               selection_basis, counterselection_basis, enriches_for_axes, guards_against_axes,
-              preserves_downstream_property_axes, advance_criteria, bottleneck_risk,
-              higher_fidelity_than_previous, notes
+              preserves_downstream_property_axes, why_stage_exists, advance_criteria,
+              decision_gate_reason, bottleneck_risk, higher_fidelity_than_previous, notes
             )
-            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             on conflict (workflow_template_id, stage_order) do update
             set
               stage_name = excluded.stage_name,
@@ -812,7 +1009,9 @@ class PostgresLoadPlanExecutor:
               enriches_for_axes = excluded.enriches_for_axes,
               guards_against_axes = excluded.guards_against_axes,
               preserves_downstream_property_axes = excluded.preserves_downstream_property_axes,
+              why_stage_exists = excluded.why_stage_exists,
               advance_criteria = excluded.advance_criteria,
+              decision_gate_reason = excluded.decision_gate_reason,
               bottleneck_risk = excluded.bottleneck_risk,
               higher_fidelity_than_previous = excluded.higher_fidelity_than_previous,
               notes = excluded.notes
@@ -832,7 +1031,9 @@ class PostgresLoadPlanExecutor:
                 stage.get("enriches_for_axes", []),
                 stage.get("guards_against_axes", []),
                 stage.get("preserves_downstream_property_axes", []),
+                stage.get("why_stage_exists"),
                 stage.get("advance_criteria"),
+                stage.get("decision_gate_reason"),
                 stage.get("bottleneck_risk"),
                 stage.get("higher_fidelity_than_previous"),
                 PostgresLoadPlanExecutor._format_workflow_stage_notes(stage),
@@ -878,14 +1079,285 @@ class PostgresLoadPlanExecutor:
         )
 
     @staticmethod
+    def _upsert_workflow_step_templates(
+        cursor: Any,
+        *,
+        workflow_template_id: Any,
+        stages: List[Dict[str, Any]],
+        steps: List[Dict[str, Any]],
+        source_document_id: Any,
+    ) -> Dict[tuple[str, str], Any]:
+        stage_ids_by_name = {
+            stage.get("stage_name"): PostgresLoadPlanExecutor._get_workflow_stage_id_by_order(
+                cursor,
+                workflow_template_id=workflow_template_id,
+                stage_order=stage.get("stage_order"),
+            )
+            for stage in stages
+            if stage.get("stage_name") and stage.get("stage_order") is not None
+        }
+        step_ids_by_key: Dict[tuple[str, str], Any] = {}
+        for step in steps:
+            workflow_stage_template_id = stage_ids_by_name.get(step.get("stage_name"))
+            cursor.execute(
+                """
+                insert into workflow_step_template (
+                  workflow_template_id, workflow_stage_template_id, step_name, step_order,
+                  step_type, purpose, why_this_step_now, decision_gate_reason,
+                  advance_criteria, failure_criteria, validation_focus,
+                  target_property_axes, target_mechanisms, target_techniques,
+                  duration_typical_hours, queue_time_typical_hours, hands_on_hours,
+                  direct_cost_usd_typical, parallelizable, failure_probability,
+                  output_artifact, input_artifact, notes
+                )
+                values (
+                  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::text[],
+                  %s::text[], %s::text[], %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                on conflict (workflow_template_id, step_name) do update
+                set
+                  workflow_stage_template_id = coalesce(excluded.workflow_stage_template_id, workflow_step_template.workflow_stage_template_id),
+                  step_order = excluded.step_order,
+                  step_type = excluded.step_type,
+                  purpose = excluded.purpose,
+                  why_this_step_now = excluded.why_this_step_now,
+                  decision_gate_reason = excluded.decision_gate_reason,
+                  advance_criteria = excluded.advance_criteria,
+                  failure_criteria = excluded.failure_criteria,
+                  validation_focus = excluded.validation_focus,
+                  target_property_axes = excluded.target_property_axes,
+                  target_mechanisms = excluded.target_mechanisms,
+                  target_techniques = excluded.target_techniques,
+                  duration_typical_hours = coalesce(excluded.duration_typical_hours, workflow_step_template.duration_typical_hours),
+                  queue_time_typical_hours = coalesce(excluded.queue_time_typical_hours, workflow_step_template.queue_time_typical_hours),
+                  direct_cost_usd_typical = coalesce(excluded.direct_cost_usd_typical, workflow_step_template.direct_cost_usd_typical),
+                  output_artifact = coalesce(excluded.output_artifact, workflow_step_template.output_artifact),
+                  input_artifact = coalesce(excluded.input_artifact, workflow_step_template.input_artifact),
+                  notes = excluded.notes
+                returning id
+                """,
+                (
+                    workflow_template_id,
+                    workflow_stage_template_id,
+                    step.get("step_name"),
+                    step.get("step_order"),
+                    step.get("step_type") or "analysis",
+                    step.get("purpose"),
+                    step.get("why_this_step_now"),
+                    step.get("decision_gate_reason"),
+                    step.get("advance_criteria"),
+                    step.get("failure_criteria"),
+                    step.get("validation_focus"),
+                    step.get("target_property_axes", []),
+                    step.get("target_mechanisms", []),
+                    step.get("target_techniques", []),
+                    step.get("duration_hours"),
+                    step.get("queue_time_hours"),
+                    None,
+                    step.get("direct_cost_usd"),
+                    False,
+                    None,
+                    step.get("output_artifact"),
+                    step.get("input_artifact"),
+                    PostgresLoadPlanExecutor._format_workflow_step_notes(step),
+                ),
+            )
+            step_id = cursor.fetchone()[0]
+            step_ids_by_key[(str(step.get("stage_name") or ""), str(step.get("step_name") or ""))] = step_id
+            PostgresLoadPlanExecutor._upsert_workflow_step_assumption(
+                cursor,
+                workflow_template_id=workflow_template_id,
+                workflow_step_template_id=step_id,
+                source_document_id=source_document_id,
+                step=step,
+            )
+            if step.get("duration_hours") is not None or step.get("direct_cost_usd") is not None or step.get("success") is not None:
+                PostgresLoadPlanExecutor._upsert_workflow_instance_observation(
+                    cursor,
+                    workflow_template_id=workflow_template_id,
+                    workflow_step_template_id=step_id,
+                    step=step,
+                )
+        return step_ids_by_key
+
+    @staticmethod
+    def _replace_workflow_step_edges(
+        cursor: Any,
+        *,
+        workflow_template_id: Any,
+        steps: List[Dict[str, Any]],
+        step_ids_by_key: Dict[tuple[str, str], Any],
+    ) -> None:
+        cursor.execute("delete from workflow_edge where workflow_template_id = %s", (workflow_template_id,))
+        ordered_steps = sorted(
+            steps,
+            key=lambda step: (step.get("step_order", 999999), step.get("local_id", "")),
+        )
+        for previous, current in zip(ordered_steps, ordered_steps[1:]):
+            from_step_id = step_ids_by_key.get(
+                (str(previous.get("stage_name") or ""), str(previous.get("step_name") or ""))
+            )
+            to_step_id = step_ids_by_key.get(
+                (str(current.get("stage_name") or ""), str(current.get("step_name") or ""))
+            )
+            if not from_step_id or not to_step_id:
+                continue
+            cursor.execute(
+                """
+                insert into workflow_edge (workflow_template_id, from_step_id, to_step_id, edge_type)
+                values (%s, %s, %s, %s)
+                on conflict do nothing
+                """,
+                (workflow_template_id, from_step_id, to_step_id, "depends_on"),
+            )
+
+    @staticmethod
+    def _upsert_workflow_item_roles(
+        cursor: Any,
+        *,
+        workflow_template_id: Any,
+        source_document_id: Any,
+        item_roles: List[Dict[str, Any]],
+        step_ids_by_key: Dict[tuple[str, str], Any],
+    ) -> None:
+        cursor.execute(
+            """
+            delete from workflow_item_role
+            where workflow_template_id = %s
+              and source_document_id = %s
+            """,
+            (workflow_template_id, source_document_id),
+        )
+        for item_role in item_roles:
+            cursor.execute("select id from toolkit_item where slug = %s", (item_role.get("target_slug"),))
+            row = cursor.fetchone()
+            if not row:
+                continue
+            stage_id = None
+            if item_role.get("stage_name"):
+                cursor.execute(
+                    """
+                    select id
+                    from workflow_stage_template
+                    where workflow_template_id = %s and stage_name = %s
+                    """,
+                    (workflow_template_id, item_role.get("stage_name")),
+                )
+                stage_row = cursor.fetchone()
+                stage_id = stage_row[0] if stage_row else None
+            step_id = step_ids_by_key.get(
+                (str(item_role.get("stage_name") or ""), str(item_role.get("step_name") or ""))
+            )
+            cursor.execute(
+                """
+                insert into workflow_item_role (
+                  workflow_template_id, item_id, role_name, workflow_stage_template_id,
+                  workflow_step_template_id, notes, source_document_id
+                )
+                values (%s, %s, %s, %s, %s, %s, %s)
+                on conflict (workflow_template_id, item_id, role_name, workflow_stage_template_id, workflow_step_template_id) do nothing
+                """,
+                (
+                    workflow_template_id,
+                    row[0],
+                    item_role.get("role_name"),
+                    stage_id,
+                    step_id,
+                    item_role.get("notes"),
+                    source_document_id,
+                ),
+            )
+
+    @staticmethod
+    def _get_workflow_stage_id_by_order(cursor: Any, *, workflow_template_id: Any, stage_order: Any) -> Any:
+        cursor.execute(
+            """
+            select id
+            from workflow_stage_template
+            where workflow_template_id = %s and stage_order = %s
+            """,
+            (workflow_template_id, stage_order),
+        )
+        row = cursor.fetchone()
+        return row[0] if row else None
+
+    @staticmethod
+    def _upsert_workflow_step_assumption(
+        cursor: Any,
+        *,
+        workflow_template_id: Any,
+        workflow_step_template_id: Any,
+        source_document_id: Any,
+        step: Dict[str, Any],
+    ) -> None:
+        cursor.execute(
+            """
+            delete from workflow_assumption
+            where workflow_step_template_id = %s
+              and source_document_id = %s
+              and assumption_kind = %s
+            """,
+            (workflow_step_template_id, source_document_id, "source_backed_step_observation"),
+        )
+        cursor.execute(
+            """
+            insert into workflow_assumption (
+              workflow_template_id, workflow_step_template_id, assumption_kind, assumption_name,
+              value_text, rationale, source_document_id
+            )
+            values (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                workflow_template_id,
+                workflow_step_template_id,
+                "source_backed_step_observation",
+                step.get("step_name"),
+                step.get("purpose") or step.get("validation_focus"),
+                PostgresLoadPlanExecutor._format_workflow_step_rationale(step),
+                source_document_id,
+            ),
+        )
+
+    @staticmethod
+    def _upsert_workflow_instance_observation(
+        cursor: Any,
+        *,
+        workflow_template_id: Any,
+        workflow_step_template_id: Any,
+        step: Dict[str, Any],
+    ) -> None:
+        cursor.execute(
+            """
+            insert into workflow_instance_observation (
+              workflow_template_id, workflow_step_template_id, duration_hours,
+              queue_time_hours, direct_cost_usd, success, notes
+            )
+            values (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                workflow_template_id,
+                workflow_step_template_id,
+                step.get("duration_hours"),
+                step.get("queue_time_hours"),
+                step.get("direct_cost_usd"),
+                step.get("success"),
+                step.get("decision_gate_reason") or step.get("why_this_step_now"),
+            ),
+        )
+
+    @staticmethod
     def _format_workflow_stage_notes(stage: Dict[str, Any]) -> Optional[str]:
         parts = []
+        if stage.get("why_stage_exists"):
+            parts.append(f"Why stage exists: {stage['why_stage_exists']}")
         if stage.get("selection_basis"):
             parts.append(f"Selection basis: {stage['selection_basis']}")
         if stage.get("counterselection_basis"):
             parts.append(f"Counterselection: {stage['counterselection_basis']}")
         if stage.get("advance_criteria"):
             parts.append(f"Advance criteria: {stage['advance_criteria']}")
+        if stage.get("decision_gate_reason"):
+            parts.append(f"Decision gate: {stage['decision_gate_reason']}")
         if stage.get("bottleneck_risk"):
             parts.append(f"Bottleneck risk: {stage['bottleneck_risk']}")
         locator = stage.get("source_locator") or {}
@@ -913,6 +1385,37 @@ class PostgresLoadPlanExecutor:
         if locator.get("quoted_text"):
             parts.append(f"Quoted text: {locator['quoted_text']}")
         return " ".join(parts) or "Source-backed workflow stage observation."
+
+    @staticmethod
+    def _format_workflow_step_notes(step: Dict[str, Any]) -> Optional[str]:
+        parts = []
+        if step.get("purpose"):
+            parts.append(f"Purpose: {step['purpose']}")
+        if step.get("why_this_step_now"):
+            parts.append(f"Why now: {step['why_this_step_now']}")
+        if step.get("decision_gate_reason"):
+            parts.append(f"Decision gate: {step['decision_gate_reason']}")
+        if step.get("advance_criteria"):
+            parts.append(f"Advance criteria: {step['advance_criteria']}")
+        if step.get("failure_criteria"):
+            parts.append(f"Failure criteria: {step['failure_criteria']}")
+        return " | ".join(parts) if parts else None
+
+    @staticmethod
+    def _format_workflow_step_rationale(step: Dict[str, Any]) -> str:
+        parts = []
+        if step.get("validation_focus"):
+            parts.append(f"Validation focus: {step['validation_focus']}")
+        if step.get("target_property_axes"):
+            parts.append("Targets properties: " + ", ".join(step["target_property_axes"]))
+        if step.get("target_mechanisms"):
+            parts.append("Targets mechanisms: " + ", ".join(step["target_mechanisms"]))
+        if step.get("target_techniques"):
+            parts.append("Targets techniques: " + ", ".join(step["target_techniques"]))
+        locator = step.get("source_locator") or {}
+        if locator.get("quoted_text"):
+            parts.append(f"Quoted text: {locator['quoted_text']}")
+        return " ".join(parts) or "Source-backed workflow step observation."
 
     @staticmethod
     def _insert_extraction_run(

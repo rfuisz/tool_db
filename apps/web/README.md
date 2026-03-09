@@ -84,6 +84,7 @@ Important boundary:
 
 - Render syncs checked-in repo state, not ad hoc local-only database mutations.
 - If you changed data only in your local Postgres, export or check in the corresponding repo artifacts before pushing.
+- The footer now renders a small deployment badge with the active service, branch, short commit, and API target so stale or mismatched Render services are easier to spot.
 
 **Manual Render settings if you do not use the blueprint:**
 

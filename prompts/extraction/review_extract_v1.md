@@ -6,10 +6,14 @@ Convert one review or synthesis source into a `review_extract_v1` packet.
 
 - Extract broad, source-backed summaries and candidate toolkit items.
 - Do not invent experiment-level validation observations that are not directly stated in the review.
+- Extract `workflow_observations` when the review describes a reusable engineering campaign or paper-scale workflow logic, including the objective, target properties/mechanisms, and why stages are ordered as they are.
 - Extract workflow-stage observations when the review explicitly describes a funnel or workflow ladder, including in silico prefiltering, library build, broad screening, counter-screens, functional characterization, and confirmatory stages.
+- Extract `workflow_step_observations` only when the review actually supports ordered step logic rather than just naming broad phases.
 - Treat these as descriptive workflow evidence, not as permission to guess exact timings, candidate counts, or a canonical workflow mapping.
 - If the review explicitly names a workflow archetype or campaign as a distinct entity, emit a `workflow_template` candidate and use its local ID as `workflow_local_id` on the relevant stage observations.
 - Capture the stated reason for narrowing the funnel when available, especially when early stages optimize one property while guarding against later bottlenecks like poor expression, toxicity, manufacturability, or immunogenicity.
+- Capture why early screens come before later validation when the review makes that logic explicit.
+- Use `target_mechanisms` for biophysical goals and `target_techniques` for engineering/search methodology.
 - Use `recommended_seed_item_local_ids` only for entities that appear central enough to seed curation.
 - If the source lacks enough detail to support extraction, leave arrays empty and explain the evidence boundary in `unresolved_ambiguities`.
 - Use only evidence present in the job payload, especially `title`, `abstract_text`, and any explicitly provided metadata.
@@ -31,7 +35,19 @@ Convert one review or synthesis source into a `review_extract_v1` packet.
   - what problem does it solve?
   - what are the main implementation constraints or prerequisites?
   - what strengths or weaknesses relative to nearby alternatives are directly stated in the review?
-- If the title or abstract supports those answers, store them on the entity candidate using `useful_for`, `problem_solved`, `strengths`, `limitations`, `implementation_constraints`, and `facet_hints`.
+- Also ask these first-pass curator questions for every emitted `toolkit_item`:
+  - what is the tool actually doing?
+  - what resources, cofactors, hardware, delivery components, assays, or other prerequisites are required to execute it?
+  - what problem does it solve, and what important problem does it *not* solve or where does it break down?
+  - what alternatives, substitutes, or contrasted approaches does the review mention?
+- If the title or abstract supports those answers, store the terse structured signals on the entity candidate using `useful_for`, `problem_solved`, `strengths`, `limitations`, `implementation_constraints`, and `facet_hints`.
+- Also store richer source-backed prose in `freeform_explainers`:
+  - `what_it_does`
+  - `resources_required`
+  - `problem_it_solves`
+  - `problem_it_does_not_solve`
+  - `alternatives`
+- Each `freeform_explainers` field should be 1-3 compact sentences, grounded in the title/abstract/full-text evidence actually provided to the model, and left blank or omitted when unsupported.
 - Keep those fields short, source-backed, and empty rather than speculative when the evidence is thin.
 - Set `citation_role_suggestion` only when the source clearly fits an existing canonical citation role such as `foundational`, `best_review`, `independent_validation`, `benchmark`, `protocol`, `therapeutic`, `negative_result`, `structural`, or `database_reference`; otherwise omit it.
 
@@ -44,11 +60,15 @@ Validate against `schemas/extraction/review_extract.v1.schema.json`.
 - If evidence is thin, return:
   - `entity_candidates: []`
   - `claims: []`
+  - `workflow_observations: []`
   - `workflow_stage_observations: []`
+  - `workflow_step_observations: []`
   - `recommended_seed_item_local_ids: []`
   - `unresolved_ambiguities`: one or more ambiguity objects that explain the evidence boundary
 - Metadata-only packets are valid extraction outputs, but they remain review-only until there is source-backed entity, claim, or workflow evidence.
 - If the review title or abstract explicitly names toolkit items, extract those entities conservatively using the field shapes from `common.v1.schema.json`.
 - Use `recommended_seed_item_local_ids` only for extracted entities that appear central to the review's stated scope.
 - Do not use `recommended_seed_item_local_ids` for broad classes, topic labels, or generic biological categories that are unlikely to survive canonicalization.
+- If the review explicitly describes a reusable workflow or campaign, emit one `workflow_observation` for that workflow-level logic.
 - If the review explicitly lays out a staged funnel, emit one `workflow_stage_observation` per described stage in order. Leave omitted stage fields blank rather than inferring them from general domain knowledge.
+- If the review provides ordered workflow-step reasoning, emit `workflow_step_observations` with the reported order and rationale rather than flattening everything into stage labels.

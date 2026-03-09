@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { EB_Garamond, Jost, Inter, JetBrains_Mono } from "next/font/google";
+import { DeploymentBadge } from "@/components/deployment-badge";
 import { Nav } from "@/components/nav";
 import { PaperModalProvider } from "@/components/paper-modal";
 import { isFirstPassEnabled } from "@/lib/first-pass-access";
@@ -86,6 +87,9 @@ export default async function RootLayout({
                 >
                   fuisz.xyz
                 </a>
+              </div>
+              <div className="mt-6">
+                <DeploymentBadge />
               </div>
             </div>
           </footer>

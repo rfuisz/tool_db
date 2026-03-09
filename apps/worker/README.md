@@ -212,6 +212,13 @@ Run one LLM extraction job:
 .venv/bin/python -m apps.worker.main run-extraction-job data/pipeline-artifacts/real-extraction-seed/openalex/jobs/optogenetics.llm_extraction_job_v1.json
 ```
 
+For `toolkit_item` candidates, first-pass extraction should now capture both terse list fields and richer question-driven prose when the source supports it, especially:
+
+- what the tool is doing
+- what resources or prerequisites are required to execute it
+- what problem it solves and does not solve
+- what alternatives the source contrasts it against
+
 LLM extraction calls now go through one shared JSON-call harness with disk cache and retry handling:
 
 - cached responses are stored under `data/llm-cache/`

@@ -232,6 +232,13 @@ This model lets you represent both:
 - and the nested subcomponents (`sequencing`, `cell-free assay`, `amplicon NGS`, `clone picking`, etc.)
 - and the funnel shape above those steps (`large search space -> broad screen -> higher-fidelity characterization -> confirmatory gate`)
 
+The workflow layer should now be interpreted as two linked views:
+
+- `paper-observed workflow`: source-backed campaign logic from one paper or review, including why stages are ordered, what gets tested early versus late, and which mechanisms, techniques, and property axes the workflow is trying to optimize
+- `canonical workflow template`: the reusable archetype that multiple paper-observed workflows can map into conservatively
+
+That split keeps provenance honest while still allowing workflows to sit above the mechanism and technique browse branches.
+
 ---
 
 ## 5. Recommended Canonical Schema
@@ -357,6 +364,11 @@ Taxonomy interpretation:
 - `item_component` helps express how lower-level components instantiate an architecture
 - `item_technique` attaches an item to the **methods-of-use hierarchy**
 - workflows then connect technique choices to mechanism-branch choices
+- explicit workflow links should preserve:
+  - target mechanisms
+  - target techniques
+  - target property axes / design goals
+  - item roles inside the workflow (engineered target, assay/readout, screening method, validator, delivery step, etc.)
 
 ---
 

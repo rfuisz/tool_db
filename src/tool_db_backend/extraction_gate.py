@@ -34,20 +34,24 @@ class ExtractionGate:
                 not payload.get("entity_candidates")
                 and not payload.get("claims")
                 and not payload.get("validation_observations")
+                and not payload.get("workflow_observations")
                 and not payload.get("workflow_stage_observations")
+                and not payload.get("workflow_step_observations")
             ):
                 issues.append(
-                    "Primary-paper packet is metadata-only with no extracted entities, claims, validation observations, or workflow stages."
+                    "Primary-paper packet is metadata-only with no extracted entities, claims, validation observations, workflow observations, workflow stages, or workflow steps."
                 )
 
         if packet_kind == "review_extract_v1":
             if (
                 not payload.get("entity_candidates")
                 and not payload.get("claims")
+                and not payload.get("workflow_observations")
                 and not payload.get("workflow_stage_observations")
+                and not payload.get("workflow_step_observations")
             ):
                 issues.append(
-                    "Review packet is metadata-only with no extracted entities, claims, or workflow stages."
+                    "Review packet is metadata-only with no extracted entities, claims, workflow observations, workflow stages, or workflow steps."
                 )
 
         if packet_kind in {"primary_paper_extract_v1", "review_extract_v1"}:
@@ -60,7 +64,9 @@ class ExtractionGate:
             )
             issues.extend(
                 self._check_workflow_links(
+                    payload.get("workflow_observations", []),
                     payload.get("workflow_stage_observations", []),
+                    payload.get("workflow_step_observations", []),
                     entity_types_by_local_id,
                 )
             )
@@ -114,21 +120,67 @@ class ExtractionGate:
 
     @staticmethod
     def _check_workflow_links(
+        workflow_observations: List[Dict[str, Any]],
         workflow_stage_observations: List[Dict[str, Any]],
+        workflow_step_observations: List[Dict[str, Any]],
         entity_types_by_local_id: Dict[str, Any],
     ) -> List[str]:
         issues: List[str] = []
+        for workflow in workflow_observations:
+            workflow_local_id = workflow.get("workflow_local_id")
+            if workflow_local_id:
+                issues.extend(
+                    ExtractionGate._check_entity_link(
+                        local_id=workflow_local_id,
+                        expected_type="workflow_template",
+                        entity_types_by_local_id=entity_types_by_local_id,
+                        label=f"Workflow observation {workflow.get('local_id', '<unknown>')}",
+                    )
+                )
         for stage in workflow_stage_observations:
             workflow_local_id = stage.get("workflow_local_id")
-            if not workflow_local_id:
-                continue
-            entity_type = entity_types_by_local_id.get(workflow_local_id)
-            if entity_type is None:
-                issues.append(
-                    f"Workflow stage {stage.get('local_id', '<unknown>')} references missing workflow_local_id {workflow_local_id}."
+            if workflow_local_id:
+                issues.extend(
+                    ExtractionGate._check_entity_link(
+                        local_id=workflow_local_id,
+                        expected_type="workflow_template",
+                        entity_types_by_local_id=entity_types_by_local_id,
+                        label=f"Workflow stage {stage.get('local_id', '<unknown>')}",
+                    )
                 )
-            elif entity_type != "workflow_template":
-                issues.append(
-                    f"Workflow stage {stage.get('local_id', '<unknown>')} references workflow_local_id {workflow_local_id} with unsupported type {entity_type}."
+        for step in workflow_step_observations:
+            workflow_local_id = step.get("workflow_local_id")
+            if workflow_local_id:
+                issues.extend(
+                    ExtractionGate._check_entity_link(
+                        local_id=workflow_local_id,
+                        expected_type="workflow_template",
+                        entity_types_by_local_id=entity_types_by_local_id,
+                        label=f"Workflow step {step.get('local_id', '<unknown>')}",
+                    )
+                )
+            for item_local_id in step.get("item_local_ids", []):
+                issues.extend(
+                    ExtractionGate._check_entity_link(
+                        local_id=item_local_id,
+                        expected_type="toolkit_item",
+                        entity_types_by_local_id=entity_types_by_local_id,
+                        label=f"Workflow step {step.get('local_id', '<unknown>')}",
+                    )
                 )
         return issues
+
+    @staticmethod
+    def _check_entity_link(
+        *,
+        local_id: str,
+        expected_type: str,
+        entity_types_by_local_id: Dict[str, Any],
+        label: str,
+    ) -> List[str]:
+        entity_type = entity_types_by_local_id.get(local_id)
+        if entity_type is None:
+            return [f"{label} references missing local_id {local_id}."]
+        if entity_type != expected_type:
+            return [f"{label} references local_id {local_id} with unsupported type {entity_type}."]
+        return []

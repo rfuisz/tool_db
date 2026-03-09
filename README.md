@@ -71,6 +71,13 @@ When the browse UI builds those branches, low-level items are rolled upward cons
 
 Those synthesized concepts are also available as dedicated app routes under `/mechanisms`, `/mechanisms/[slug]`, `/techniques`, and `/techniques/[slug]`.
 
+Paper ingestion now treats workflows as a two-layer model:
+
+- `paper-observed workflow` captures what a source actually did, why it ordered tests the way it did, and which mechanisms/techniques/properties it was optimizing for
+- `canonical workflow template` captures the reusable archetype promoted from multiple sources or curated evidence
+
+First-pass workflow extraction can now preserve workflow-level logic, stage observations, and ordered step observations instead of flattening everything into stage-only notes.
+
 ## Current Scope
 
 This initialization focuses on:

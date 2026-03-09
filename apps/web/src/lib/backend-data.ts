@@ -5,6 +5,7 @@ import { WORKFLOW_EXPLAINERS } from "./workflow-explainers";
 import type {
   ApprovedItemEvidence,
   FirstPassEntityDetail,
+  FirstPassExplainer,
   FirstPassEntitySummary,
   FirstPassItemDetail,
   FirstPassEvidenceSnippet,
@@ -28,6 +29,7 @@ import type {
   ValidationObservation,
   ValidationRollup,
   WorkflowFamily,
+  WorkflowRecommendation,
   WorkflowSearchModality,
   WorkflowStage,
   WorkflowStageKind,
@@ -81,6 +83,7 @@ type BackendItemFacet = ItemFacet;
 type BackendItemExplainer = ItemExplainer;
 type BackendItemComparison = ItemComparison;
 type BackendItemProblemLink = ItemProblemLink;
+type BackendWorkflowRecommendation = WorkflowRecommendation;
 type BackendValidationObservation = Omit<
   ValidationObservation,
   "item_id" | "metrics"
@@ -104,7 +107,7 @@ type BackendItemDetail = BackendItemSummary & {
   external_ids?: Record<string, unknown>;
   source_status?: Record<string, unknown>;
   citation_candidates?: CitationCandidate[];
-  workflow_recommendations?: Array<Record<string, unknown>>;
+  workflow_recommendations?: BackendWorkflowRecommendation[];
   claims?: BackendItemClaim[];
   validation_rollup?: BackendValidationRollup | null;
   validations?: BackendValidationObservation[];
@@ -131,7 +134,17 @@ type BackendWorkflowSummary = {
 type BackendWorkflowStepTemplate = {
   step_name: string;
   stage_name?: string | null;
+  step_order?: number | null;
   step_type: WorkflowStepType;
+  purpose?: string | null;
+  why_this_step_now?: string | null;
+  decision_gate_reason?: string | null;
+  advance_criteria?: string | null;
+  failure_criteria?: string | null;
+  validation_focus?: string | null;
+  target_property_axes?: string[];
+  target_mechanisms?: string[];
+  target_techniques?: string[];
   duration_typical_hours?: number | null;
   hands_on_hours?: number | null;
   direct_cost_usd_typical?: number | null;
@@ -154,14 +167,25 @@ type BackendWorkflowStageTemplate = {
   enriches_for_axes?: string[];
   guards_against_axes?: string[];
   preserves_downstream_property_axes?: string[];
+  why_stage_exists?: string | null;
   advance_criteria?: string | null;
+  decision_gate_reason?: string | null;
   bottleneck_risk?: string | null;
   higher_fidelity_than_previous?: boolean | null;
 };
 
 type BackendWorkflowDetail = BackendWorkflowSummary & {
+  protocol_family?: string | null;
+  engineered_system_family?: string | null;
+  why_workflow_works?: string | null;
+  priority_logic?: string | null;
+  validation_strategy?: string | null;
   recommended_for?: string[];
   default_parallelization_assumption?: string | null;
+  mechanisms?: string[];
+  techniques?: string[];
+  design_goals?: Array<Record<string, unknown>>;
+  item_roles?: Array<Record<string, unknown>>;
   stage_templates?: BackendWorkflowStageTemplate[];
   step_templates?: BackendWorkflowStepTemplate[];
   assumption_notes?: string[];
@@ -188,8 +212,15 @@ type RawFirstPassEvidenceSnippet =
       source_document?: FirstPassSourceDocument | null;
     };
 
+type RawFirstPassExplainer = Partial<FirstPassExplainer> & {
+  explainer_kind?: string;
+  body?: string | null;
+  source_document?: FirstPassSourceDocument | null;
+};
+
 type RawFirstPassEntityDetail = Omit<FirstPassEntityDetail, "evidence_snippets"> & {
   evidence_snippets?: RawFirstPassEvidenceSnippet[];
+  freeform_explainers?: RawFirstPassExplainer[];
 };
 
 type RawFirstPassEntitySummary = Partial<
@@ -385,6 +416,7 @@ function mapBackendItem(detail: BackendItemDetail): ToolkitItem {
     explainers: detail.explainers ?? [],
     comparisons: detail.comparisons ?? [],
     problem_links: detail.problem_links ?? [],
+    workflow_recommendations: detail.workflow_recommendations ?? [],
     approval_evidence: detail.approval_evidence ?? null,
     index_markdown: detail.index_markdown,
     evidence_markdown: detail.evidence_markdown,
@@ -438,6 +470,9 @@ function mapSeedItem(item: SeedBundleItem): ToolkitItem {
     explainers: [],
     comparisons: [],
     problem_links: [],
+    workflow_recommendations:
+      (structured.workflow_recommendations as ToolkitItem["workflow_recommendations"]) ??
+      [],
     approval_evidence: null,
     index_markdown:
       (structured.index_markdown as string | null | undefined) ?? null,
@@ -459,7 +494,17 @@ function mapWorkflowStep(
     id: `${slug}-step-${index + 1}`,
     step_name: step.step_name,
     stage_name: step.stage_name ?? null,
+    step_order: step.step_order ?? null,
     step_type: step.step_type,
+    purpose: step.purpose ?? null,
+    why_this_step_now: step.why_this_step_now ?? null,
+    decision_gate_reason: step.decision_gate_reason ?? null,
+    advance_criteria: step.advance_criteria ?? null,
+    failure_criteria: step.failure_criteria ?? null,
+    validation_focus: step.validation_focus ?? null,
+    target_property_axes: step.target_property_axes ?? [],
+    target_mechanisms: step.target_mechanisms ?? [],
+    target_techniques: step.target_techniques ?? [],
     duration_typical_hours: step.duration_typical_hours ?? null,
     hands_on_hours: step.hands_on_hours ?? null,
     direct_cost_usd_typical: step.direct_cost_usd_typical ?? null,
@@ -491,7 +536,9 @@ function mapWorkflowStage(
     guards_against_axes: stage.guards_against_axes ?? [],
     preserves_downstream_property_axes:
       stage.preserves_downstream_property_axes ?? [],
+    why_stage_exists: stage.why_stage_exists ?? null,
     advance_criteria: stage.advance_criteria ?? null,
+    decision_gate_reason: stage.decision_gate_reason ?? null,
     bottleneck_risk: stage.bottleneck_risk ?? null,
     higher_fidelity_than_previous: stage.higher_fidelity_than_previous ?? null,
   };
@@ -507,6 +554,15 @@ function mapBackendWorkflow(detail: BackendWorkflowDetail): WorkflowTemplate {
     objective: detail.objective,
     throughput_class: detail.throughput_class ?? null,
     recommended_for: detail.recommended_for?.join(", ") ?? null,
+    protocol_family: detail.protocol_family ?? null,
+    engineered_system_family: detail.engineered_system_family ?? null,
+    why_workflow_works: detail.why_workflow_works ?? null,
+    priority_logic: detail.priority_logic ?? null,
+    validation_strategy: detail.validation_strategy ?? null,
+    mechanisms: detail.mechanisms ?? [],
+    techniques: detail.techniques ?? [],
+    design_goals: detail.design_goals ?? [],
+    item_roles: detail.item_roles ?? [],
     stages: (detail.stage_templates ?? [])
       .map((stage, index) => mapWorkflowStage(detail.slug, stage, index))
       .sort((a, b) => a.stage_order - b.stage_order),
@@ -541,6 +597,23 @@ function mapSeedWorkflow(entry: SeedBundleWorkflow): WorkflowTemplate {
     recommended_for: Array.isArray(structured.recommended_for)
       ? (structured.recommended_for as string[]).join(", ")
       : null,
+    protocol_family:
+      (structured.protocol_family as string | null | undefined) ?? null,
+    engineered_system_family:
+      (structured.engineered_system_family as string | null | undefined) ?? null,
+    why_workflow_works:
+      (structured.why_workflow_works as string | null | undefined) ?? null,
+    priority_logic:
+      (structured.priority_logic as string | null | undefined) ?? null,
+    validation_strategy:
+      (structured.validation_strategy as string | null | undefined) ?? null,
+    mechanisms: (structured.mechanisms as string[] | undefined) ?? [],
+    techniques: (structured.techniques as string[] | undefined) ?? [],
+    design_goals:
+      (structured.design_goals as Array<Record<string, unknown>> | undefined) ??
+      [],
+    item_roles:
+      (structured.item_roles as Array<Record<string, unknown>> | undefined) ?? [],
     stages,
     steps,
     ...explainer,
@@ -571,6 +644,23 @@ function normalizeFirstPassEvidenceSnippet(
   };
 }
 
+function normalizeFirstPassExplainer(
+  explainer: RawFirstPassExplainer,
+): FirstPassExplainer | null {
+  if (!explainer.explainer_kind || !explainer.body || !explainer.source_document) {
+    return null;
+  }
+  const body = explainer.body.trim();
+  if (!body) {
+    return null;
+  }
+  return {
+    explainer_kind: explainer.explainer_kind,
+    body,
+    source_document: explainer.source_document,
+  };
+}
+
 function normalizeFirstPassEntityDetail(
   detail: RawFirstPassEntityDetail,
 ): FirstPassEntityDetail {
@@ -583,7 +673,12 @@ function normalizeFirstPassEntityDetail(
     ),
     source_documents: detail.source_documents ?? [],
     claims: detail.claims ?? [],
+    freeform_explainers: (detail.freeform_explainers ?? [])
+      .map(normalizeFirstPassExplainer)
+      .filter((explainer): explainer is FirstPassExplainer => explainer !== null),
+    workflow_observations: detail.workflow_observations ?? [],
     workflow_stage_observations: detail.workflow_stage_observations ?? [],
+    workflow_step_observations: detail.workflow_step_observations ?? [],
   };
 }
 

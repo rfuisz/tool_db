@@ -13,6 +13,7 @@ from tool_db_backend.models import (
     ApprovedItemSourceDocument,
     CanonicalClaim,
     CanonicalClaimMetric,
+    FirstPassExplainer,
     FirstPassEntityDetail,
     FirstPassEntitySummary,
     FirstPassEvidenceSnippet,
@@ -20,7 +21,9 @@ from tool_db_backend.models import (
     FirstPassItemDetail,
     FirstPassItemSummary,
     FirstPassSourceDocument,
+    FirstPassWorkflowObservation,
     FirstPassWorkflowStageObservation,
+    FirstPassWorkflowStepObservation,
     GapCapabilityDetail,
     GapCandidateTool,
     GapDetail,
@@ -445,15 +448,7 @@ class KnowledgeRepository:
                 evidence_snippets = [
                     FirstPassEvidenceSnippet(
                         text=snippet_row[0],
-                        source_document=FirstPassSourceDocument(
-                            id=str(snippet_row[1]),
-                            title=snippet_row[2],
-                            source_type=snippet_row[3],
-                            publication_year=snippet_row[4],
-                            journal_or_source=snippet_row[5],
-                            doi=snippet_row[6],
-                            pmid=snippet_row[7],
-                        ),
+                        source_document=self._map_first_pass_source_document(snippet_row, 1),
                     )
                     for snippet_row in cursor.fetchall()
                 ]
@@ -461,7 +456,7 @@ class KnowledgeRepository:
                 cursor.execute(
                     """
                     select
-                      stage_observation,
+                      e.raw_payload,
                       s.id,
                       s.title,
                       s.source_type::text,
@@ -470,24 +465,126 @@ class KnowledgeRepository:
                       s.doi,
                       s.pmid
                     from extracted_item_candidate e
-                    join extracted_packet p on p.packet_fingerprint = e.packet_fingerprint
                     join source_document s on s.id = e.source_document_id
-                    cross join lateral jsonb_array_elements(
-                      coalesce(p.packet_payload->'workflow_stage_observations', '[]'::jsonb)
-                    ) as stage_observation
                     where e.slug = %s
                       and e.candidate_type = %s
-                      and coalesce(stage_observation->>'workflow_local_id', '') = e.local_id
+                      and (
+                        e.candidate_type <> 'toolkit_item'
+                        or (
+                          e.matched_item_id is null
+                          and not exists (
+                            select 1
+                            from toolkit_item ti
+                            where ti.slug = e.slug
+                          )
+                        )
+                      )
+                      and (
+                        e.candidate_type <> 'workflow_template'
+                        or not exists (
+                          select 1
+                          from workflow_template wt
+                          where wt.slug = e.slug
+                        )
+                      )
+                    order by s.publication_year desc nulls last, s.title asc
+                    """,
+                    (slug, candidate_type),
+                )
+                freeform_explainers = [
+                    explainer
+                    for explainers_for_row in (
+                        self._extract_first_pass_explainers(explainer_row)
+                        for explainer_row in cursor.fetchall()
+                    )
+                    for explainer in explainers_for_row
+                ]
+
+                cursor.execute(
+                    """
+                    select
+                      o.raw_payload,
+                      s.id,
+                      s.title,
+                      s.source_type::text,
+                      s.publication_year,
+                      s.journal_or_source,
+                      s.doi,
+                      s.pmid
+                    from extracted_item_candidate e
+                    join extracted_workflow_observation o on (
+                      o.workflow_candidate_id = e.id
+                      or (o.packet_fingerprint = e.packet_fingerprint and coalesce(o.workflow_local_id, '') = e.local_id)
+                    )
+                    join source_document s on s.id = o.source_document_id
+                    where e.slug = %s and e.candidate_type = %s
+                    order by s.publication_year desc nulls last, coalesce(o.local_id, '') asc
+                    """,
+                    (slug, candidate_type),
+                )
+                workflow_observations = [
+                    self._map_first_pass_workflow_observation(workflow_row)
+                    for workflow_row in cursor.fetchall()
+                ]
+
+                cursor.execute(
+                    """
+                    select
+                      stage.raw_payload,
+                      s.id,
+                      s.title,
+                      s.source_type::text,
+                      s.publication_year,
+                      s.journal_or_source,
+                      s.doi,
+                      s.pmid
+                    from extracted_item_candidate e
+                    join extracted_workflow_stage_observation stage on (
+                      stage.workflow_candidate_id = e.id
+                      or (stage.packet_fingerprint = e.packet_fingerprint and coalesce(stage.workflow_local_id, '') = e.local_id)
+                    )
+                    join source_document s on s.id = stage.source_document_id
+                    where e.slug = %s and e.candidate_type = %s
                     order by
                       s.publication_year desc nulls last,
-                      coalesce((stage_observation->>'stage_order')::int, 2147483647) asc,
-                      coalesce(stage_observation->>'stage_name', '') asc
+                      stage.stage_order asc,
+                      stage.stage_name asc
                     """,
                     (slug, candidate_type),
                 )
                 workflow_stage_observations = [
                     self._map_first_pass_workflow_stage_observation(stage_row)
                     for stage_row in cursor.fetchall()
+                ]
+
+                cursor.execute(
+                    """
+                    select
+                      step.raw_payload,
+                      s.id,
+                      s.title,
+                      s.source_type::text,
+                      s.publication_year,
+                      s.journal_or_source,
+                      s.doi,
+                      s.pmid
+                    from extracted_item_candidate e
+                    join extracted_workflow_step_observation step on (
+                      step.workflow_candidate_id = e.id
+                      or (step.packet_fingerprint = e.packet_fingerprint and coalesce(step.workflow_local_id, '') = e.local_id)
+                    )
+                    join source_document s on s.id = step.source_document_id
+                    where e.slug = %s and e.candidate_type = %s
+                    order by
+                      s.publication_year desc nulls last,
+                      step.step_order asc,
+                      step.step_name asc
+                    """,
+                    (slug, candidate_type),
+                )
+                workflow_step_observations = [
+                    self._map_first_pass_workflow_step_observation(step_row)
+                    for step_row in cursor.fetchall()
                 ]
 
         return FirstPassEntityDetail(
@@ -508,7 +605,10 @@ class KnowledgeRepository:
             evidence_snippets=evidence_snippets,
             source_documents=source_documents,
             claims=claims,
+            freeform_explainers=freeform_explainers,
+            workflow_observations=workflow_observations,
             workflow_stage_observations=workflow_stage_observations,
+            workflow_step_observations=workflow_step_observations,
         )
 
     def get_first_pass_item(self, slug: str) -> FirstPassItemDetail:
@@ -758,8 +858,17 @@ class KnowledgeRepository:
             workflow_family=structured["workflow_family"],
             objective=structured["objective"],
             throughput_class=structured.get("throughput_class"),
+            protocol_family=structured.get("protocol_family"),
+            engineered_system_family=structured.get("engineered_system_family"),
+            why_workflow_works=structured.get("why_workflow_works"),
+            priority_logic=structured.get("priority_logic"),
+            validation_strategy=structured.get("validation_strategy"),
             recommended_for=structured.get("recommended_for", []),
             default_parallelization_assumption=structured.get("default_parallelization_assumption"),
+            mechanisms=structured.get("mechanisms", []),
+            techniques=structured.get("techniques", []),
+            design_goals=structured.get("design_goals", []),
+            item_roles=structured.get("item_roles", []),
             stage_templates=structured.get("stage_templates", []),
             step_templates=structured.get("step_templates", []),
             assumption_notes=structured.get("assumption_notes", []),
@@ -837,8 +946,9 @@ class KnowledgeRepository:
                 explainers = self._fetch_item_explainers(cursor, item_id)
                 comparisons = self._fetch_item_comparisons(cursor, item_id)
                 problem_links = self._fetch_item_problem_links(cursor, item_id)
+                workflow_recommendations = self._fetch_item_workflow_recommendations(cursor, item_id)
                 approval_evidence = self._fetch_item_approval_evidence(cursor, item_id, row[1])
-                markdown = self._get_item_markdown(slug, row[2], row[6])
+                markdown = self._get_item_markdown(slug, row[2], row[6], workflow_recommendations)
 
                 return ItemDetail(
                     slug=row[1],
@@ -875,7 +985,7 @@ class KnowledgeRepository:
                     external_ids=row[11] or {},
                     source_status={},
                     citation_candidates=citations,
-                    workflow_recommendations=[],
+                    workflow_recommendations=workflow_recommendations,
                     claims=claims,
                     validation_rollup=validation_rollup,
                     validations=validations,
@@ -1079,6 +1189,11 @@ class KnowledgeRepository:
                       workflow_family::text,
                       objective,
                       throughput_class::text,
+                      protocol_family,
+                      engineered_system_family,
+                      why_workflow_works,
+                      priority_logic,
+                      validation_strategy,
                       recommended_for,
                       default_parallelization_assumption
                     from workflow_template
@@ -1098,8 +1213,17 @@ class KnowledgeRepository:
                     workflow_family=row[3],
                     objective=row[4],
                     throughput_class=row[5],
-                    recommended_for=self._split_multiline_text(row[6]),
-                    default_parallelization_assumption=row[7],
+                    protocol_family=row[6],
+                    engineered_system_family=row[7],
+                    why_workflow_works=row[8],
+                    priority_logic=row[9],
+                    validation_strategy=row[10],
+                    recommended_for=self._split_multiline_text(row[11]),
+                    default_parallelization_assumption=row[12],
+                    mechanisms=self._fetch_workflow_mechanisms(cursor, workflow_id),
+                    techniques=self._fetch_workflow_techniques(cursor, workflow_id),
+                    design_goals=self._fetch_workflow_design_goals(cursor, workflow_id),
+                    item_roles=self._fetch_workflow_item_roles(cursor, workflow_id),
                     stage_templates=self._fetch_workflow_stages(cursor, workflow_id),
                     step_templates=self._fetch_workflow_steps(cursor, workflow_id),
                     assumption_notes=self._fetch_workflow_assumptions(cursor, workflow_id),
@@ -1501,7 +1625,9 @@ class KnowledgeRepository:
               enriches_for_axes,
               guards_against_axes,
               preserves_downstream_property_axes,
+              why_stage_exists,
               advance_criteria,
+              decision_gate_reason,
               bottleneck_risk,
               higher_fidelity_than_previous
             from workflow_stage_template
@@ -1524,9 +1650,11 @@ class KnowledgeRepository:
                 "enriches_for_axes": row[9] or [],
                 "guards_against_axes": row[10] or [],
                 "preserves_downstream_property_axes": row[11] or [],
-                "advance_criteria": row[12],
-                "bottleneck_risk": row[13],
-                "higher_fidelity_than_previous": row[14],
+                "why_stage_exists": row[12],
+                "advance_criteria": row[13],
+                "decision_gate_reason": row[14],
+                "bottleneck_risk": row[15],
+                "higher_fidelity_than_previous": row[16],
             }
             for row in cursor.fetchall()
         ]
@@ -1534,107 +1662,61 @@ class KnowledgeRepository:
     def _fetch_workflow_steps(self, cursor: Any, workflow_id: Any) -> List[Dict[str, Any]]:
         cursor.execute(
             """
-            with recursive step_chain as (
-              select
-                wst.id,
-                wst.step_name,
-                wst.step_type::text,
-                wst.duration_typical_hours,
-                wst.hands_on_hours,
-                wst.direct_cost_usd_typical,
-                wst.parallelizable,
-                wst.failure_probability,
-                wst.input_artifact,
-                wst.output_artifact,
-                stage.stage_name,
-                1 as sort_order
-              from workflow_step_template wst
-              left join workflow_stage_template stage on stage.id = wst.workflow_stage_template_id
-              where wst.workflow_template_id = %s
-                and not exists (
-                  select 1
-                  from workflow_edge edge
-                  where edge.workflow_template_id = wst.workflow_template_id
-                    and edge.to_step_id = wst.id
-                )
-              union all
-              select
-                next_step.id,
-                next_step.step_name,
-                next_step.step_type::text,
-                next_step.duration_typical_hours,
-                next_step.hands_on_hours,
-                next_step.direct_cost_usd_typical,
-                next_step.parallelizable,
-                next_step.failure_probability,
-                next_step.input_artifact,
-                next_step.output_artifact,
-                next_stage.stage_name,
-                step_chain.sort_order + 1
-              from step_chain
-              join workflow_edge edge on edge.from_step_id = step_chain.id
-              join workflow_step_template next_step on next_step.id = edge.to_step_id
-              left join workflow_stage_template next_stage on next_stage.id = next_step.workflow_stage_template_id
-              where edge.workflow_template_id = %s
-            )
-            select distinct on (id)
-              id,
-              step_name,
-              stage_name,
-              step_type,
-              duration_typical_hours,
-              hands_on_hours,
-              direct_cost_usd_typical,
-              parallelizable,
-              failure_probability,
-              input_artifact,
-              output_artifact,
-              sort_order
-            from step_chain
-            order by id, sort_order
+            select
+              wst.id,
+              wst.step_name,
+              stage.stage_name,
+              wst.step_order,
+              wst.step_type::text,
+              wst.purpose,
+              wst.why_this_step_now,
+              wst.decision_gate_reason,
+              wst.advance_criteria,
+              wst.failure_criteria,
+              wst.validation_focus,
+              wst.target_property_axes,
+              wst.target_mechanisms,
+              wst.target_techniques,
+              wst.duration_typical_hours,
+              wst.hands_on_hours,
+              wst.direct_cost_usd_typical,
+              wst.parallelizable,
+              wst.failure_probability,
+              wst.input_artifact,
+              wst.output_artifact
+            from workflow_step_template wst
+            left join workflow_stage_template stage on stage.id = wst.workflow_stage_template_id
+            where wst.workflow_template_id = %s
+            order by
+              coalesce(wst.step_order, 999999),
+              coalesce(stage.stage_order, 999999),
+              wst.step_name
             """,
-            (workflow_id, workflow_id),
+            (workflow_id,),
         )
         rows = cursor.fetchall()
-        if not rows:
-            cursor.execute(
-                """
-                select
-                  wst.id,
-                  wst.step_name,
-                  stage.stage_name,
-                  wst.step_type::text,
-                  wst.duration_typical_hours,
-                  wst.hands_on_hours,
-                  wst.direct_cost_usd_typical,
-                  wst.parallelizable,
-                  wst.failure_probability,
-                  wst.input_artifact,
-                  wst.output_artifact,
-                  coalesce(stage.stage_order, 999999),
-                  wst.step_name
-                from workflow_step_template wst
-                left join workflow_stage_template stage on stage.id = wst.workflow_stage_template_id
-                where wst.workflow_template_id = %s
-                order by coalesce(stage.stage_order, 999999), wst.step_name
-                """,
-                (workflow_id,),
-            )
-            rows = cursor.fetchall()
-
-        rows = sorted(rows, key=lambda row: (row[11], row[1]))
         return [
             {
                 "step_name": row[1],
                 "stage_name": row[2],
-                "step_type": row[3],
-                "duration_typical_hours": float(row[4]) if row[4] is not None else None,
-                "hands_on_hours": float(row[5]) if row[5] is not None else None,
-                "direct_cost_usd_typical": float(row[6]) if row[6] is not None else None,
-                "parallelizable": row[7],
-                "failure_probability": float(row[8]) if row[8] is not None else None,
-                "input_artifact": row[9],
-                "output_artifact": row[10],
+                "step_order": row[3],
+                "step_type": row[4],
+                "purpose": row[5],
+                "why_this_step_now": row[6],
+                "decision_gate_reason": row[7],
+                "advance_criteria": row[8],
+                "failure_criteria": row[9],
+                "validation_focus": row[10],
+                "target_property_axes": row[11] or [],
+                "target_mechanisms": row[12] or [],
+                "target_techniques": row[13] or [],
+                "duration_typical_hours": float(row[14]) if row[14] is not None else None,
+                "hands_on_hours": float(row[15]) if row[15] is not None else None,
+                "direct_cost_usd_typical": float(row[16]) if row[16] is not None else None,
+                "parallelizable": row[17],
+                "failure_probability": float(row[18]) if row[18] is not None else None,
+                "input_artifact": row[19],
+                "output_artifact": row[20],
             }
             for row in rows
         ]
@@ -1651,6 +1733,118 @@ class KnowledgeRepository:
             (workflow_id,),
         )
         return [row[0] for row in cursor.fetchall()]
+
+    @staticmethod
+    def _fetch_workflow_mechanisms(cursor: Any, workflow_id: Any) -> List[str]:
+        cursor.execute(
+            """
+            select mechanism_name
+            from workflow_mechanism
+            where workflow_template_id = %s
+            order by mechanism_name asc
+            """,
+            (workflow_id,),
+        )
+        return [row[0] for row in cursor.fetchall()]
+
+    @staticmethod
+    def _fetch_workflow_techniques(cursor: Any, workflow_id: Any) -> List[str]:
+        cursor.execute(
+            """
+            select technique_name
+            from workflow_technique
+            where workflow_template_id = %s
+            order by technique_name asc
+            """,
+            (workflow_id,),
+        )
+        return [row[0] for row in cursor.fetchall()]
+
+    @staticmethod
+    def _fetch_workflow_design_goals(cursor: Any, workflow_id: Any) -> List[Dict[str, Any]]:
+        cursor.execute(
+            """
+            select goal_name, goal_kind, rationale
+            from workflow_design_goal
+            where workflow_template_id = %s
+            order by goal_kind asc, goal_name asc
+            """,
+            (workflow_id,),
+        )
+        return [
+            {
+                "goal_name": row[0],
+                "goal_kind": row[1],
+                "rationale": row[2],
+            }
+            for row in cursor.fetchall()
+        ]
+
+    @staticmethod
+    def _fetch_workflow_item_roles(cursor: Any, workflow_id: Any) -> List[Dict[str, Any]]:
+        cursor.execute(
+            """
+            select
+              ti.slug,
+              ti.canonical_name,
+              wir.role_name,
+              stage.stage_name,
+              step.step_name,
+              wir.notes
+            from workflow_item_role wir
+            join toolkit_item ti on ti.id = wir.item_id
+            left join workflow_stage_template stage on stage.id = wir.workflow_stage_template_id
+            left join workflow_step_template step on step.id = wir.workflow_step_template_id
+            where wir.workflow_template_id = %s
+            order by wir.role_name asc, ti.canonical_name asc
+            """,
+            (workflow_id,),
+        )
+        return [
+            {
+                "item_slug": row[0],
+                "item_name": row[1],
+                "role_name": row[2],
+                "stage_name": row[3],
+                "step_name": row[4],
+                "notes": row[5],
+            }
+            for row in cursor.fetchall()
+        ]
+
+    @staticmethod
+    def _fetch_item_workflow_recommendations(cursor: Any, item_id: Any) -> List[Dict[str, Any]]:
+        cursor.execute(
+            """
+            select
+              wt.slug,
+              wt.name,
+              wir.role_name,
+              stage.stage_name,
+              step.step_name,
+              wir.notes,
+              wt.objective
+            from workflow_item_role wir
+            join workflow_template wt on wt.id = wir.workflow_template_id
+            left join workflow_stage_template stage on stage.id = wir.workflow_stage_template_id
+            left join workflow_step_template step on step.id = wir.workflow_step_template_id
+            where wir.item_id = %s
+            order by wt.name asc, wir.role_name asc, coalesce(step.step_name, '') asc
+            """,
+            (item_id,),
+        )
+        return [
+            {
+                "workflow_slug": row[0],
+                "workflow_name": row[1],
+                "role_name": row[2],
+                "stage_name": row[3],
+                "step_name": row[4],
+                "notes": row[5],
+                "objective": row[6],
+            }
+            for row in cursor.fetchall()
+        ]
 
     @staticmethod
     def _fetch_item_components(cursor: Any, item_id: Any) -> List[str]:
@@ -1723,6 +1917,72 @@ class KnowledgeRepository:
         ]
 
     @staticmethod
+    def _map_first_pass_source_document(row: Any, offset: int = 0) -> FirstPassSourceDocument:
+        return FirstPassSourceDocument(
+            id=str(row[offset]),
+            title=row[offset + 1],
+            source_type=row[offset + 2],
+            publication_year=row[offset + 3],
+            journal_or_source=row[offset + 4],
+            doi=row[offset + 5],
+            pmid=row[offset + 6],
+        )
+
+    @classmethod
+    def _extract_first_pass_explainers(cls, row: Any) -> List[FirstPassExplainer]:
+        payload = row[0] or {}
+        if not isinstance(payload, dict):
+            return []
+        explainers = payload.get("freeform_explainers") or {}
+        if not isinstance(explainers, dict):
+            return []
+        source_document = cls._map_first_pass_source_document(row, 1)
+        ordered_keys = (
+            "what_it_does",
+            "resources_required",
+            "problem_it_solves",
+            "problem_it_does_not_solve",
+            "alternatives",
+        )
+        results: List[FirstPassExplainer] = []
+        for key in ordered_keys:
+            value = explainers.get(key)
+            if value is None:
+                continue
+            body = str(value).strip()
+            if not body:
+                continue
+            results.append(
+                FirstPassExplainer(
+                    explainer_kind=key,
+                    body=body,
+                    source_document=source_document,
+                )
+            )
+        return results
+
+    @staticmethod
+    def _map_first_pass_workflow_observation(row: Any) -> FirstPassWorkflowObservation:
+        payload = row[0] or {}
+        return FirstPassWorkflowObservation(
+            local_id=str(payload.get("local_id", "")),
+            workflow_local_id=payload.get("workflow_local_id"),
+            workflow_objective=payload.get("workflow_objective"),
+            protocol_family=payload.get("protocol_family"),
+            engineered_system_family=payload.get("engineered_system_family"),
+            target_property_axes=list(payload.get("target_property_axes") or []),
+            target_mechanisms=list(payload.get("target_mechanisms") or []),
+            target_techniques=list(payload.get("target_techniques") or []),
+            why_workflow_works=payload.get("why_workflow_works"),
+            workflow_priority_logic=payload.get("workflow_priority_logic"),
+            validation_strategy=payload.get("validation_strategy"),
+            decision_gate_strategy=payload.get("decision_gate_strategy"),
+            evidence_text=payload.get("evidence_text"),
+            source_locator=payload.get("source_locator") or {},
+            source_document=KnowledgeRepository._map_first_pass_source_document(row, 1),
+        )
+
+    @staticmethod
     def _map_first_pass_workflow_stage_observation(row: Any) -> FirstPassWorkflowStageObservation:
         payload = row[0] or {}
         return FirstPassWorkflowStageObservation(
@@ -1739,22 +1999,55 @@ class KnowledgeRepository:
             preserves_downstream_property_axes=list(
                 payload.get("preserves_downstream_property_axes") or []
             ),
+            why_stage_exists=payload.get("why_stage_exists"),
             advance_criteria=payload.get("advance_criteria"),
+            decision_gate_reason=payload.get("decision_gate_reason"),
             bottleneck_risk=payload.get("bottleneck_risk"),
             higher_fidelity_than_previous=payload.get("higher_fidelity_than_previous"),
             source_locator=payload.get("source_locator") or {},
-            source_document=FirstPassSourceDocument(
-                id=str(row[1]),
-                title=row[2],
-                source_type=row[3],
-                publication_year=row[4],
-                journal_or_source=row[5],
-                doi=row[6],
-                pmid=row[7],
-            ),
+            source_document=KnowledgeRepository._map_first_pass_source_document(row, 1),
         )
 
-    def _get_item_markdown(self, slug: str, canonical_name: str, summary: Optional[str]) -> Dict[str, str]:
+    @staticmethod
+    def _map_first_pass_workflow_step_observation(row: Any) -> FirstPassWorkflowStepObservation:
+        payload = row[0] or {}
+        return FirstPassWorkflowStepObservation(
+            local_id=str(payload.get("local_id", "")),
+            workflow_local_id=payload.get("workflow_local_id"),
+            workflow_observation_local_id=payload.get("workflow_observation_local_id"),
+            stage_local_id=payload.get("stage_local_id"),
+            stage_name=payload.get("stage_name"),
+            step_name=str(payload.get("step_name", "")),
+            step_order=int(payload.get("step_order", 0) or 0),
+            step_type=payload.get("step_type"),
+            item_local_ids=list(payload.get("item_local_ids") or []),
+            item_role=payload.get("item_role"),
+            purpose=payload.get("purpose"),
+            why_this_step_now=payload.get("why_this_step_now"),
+            decision_gate_reason=payload.get("decision_gate_reason"),
+            advance_criteria=payload.get("advance_criteria"),
+            failure_criteria=payload.get("failure_criteria"),
+            validation_focus=payload.get("validation_focus"),
+            target_property_axes=list(payload.get("target_property_axes") or []),
+            target_mechanisms=list(payload.get("target_mechanisms") or []),
+            target_techniques=list(payload.get("target_techniques") or []),
+            input_artifact=payload.get("input_artifact"),
+            output_artifact=payload.get("output_artifact"),
+            duration_hours=float(payload["duration_hours"]) if payload.get("duration_hours") is not None else None,
+            queue_time_hours=float(payload["queue_time_hours"]) if payload.get("queue_time_hours") is not None else None,
+            direct_cost_usd=float(payload["direct_cost_usd"]) if payload.get("direct_cost_usd") is not None else None,
+            success=payload.get("success"),
+            source_locator=payload.get("source_locator") or {},
+            source_document=KnowledgeRepository._map_first_pass_source_document(row, 1),
+        )
+
+    def _get_item_markdown(
+        self,
+        slug: str,
+        canonical_name: str,
+        summary: Optional[str],
+        workflow_recommendations: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, str]:
         item_dir = self.settings.knowledge_root / "items" / slug
         if item_dir.exists():
             return {
@@ -1765,11 +2058,20 @@ class KnowledgeRepository:
             }
 
         summary_text = summary or "Postgres-backed canonical item record."
+        workflow_lines = [
+            f"- `{recommendation['workflow_slug']}`: {recommendation.get('notes') or recommendation.get('objective') or recommendation['role_name']}"
+            for recommendation in (workflow_recommendations or [])
+        ]
+        workflow_body = (
+            "\n".join(workflow_lines)
+            if workflow_lines
+            else "Workflow fit notes are not yet available for this Postgres-backed record."
+        )
         return {
             "index_markdown": f"# {canonical_name}\n\n{summary_text}\n",
             "evidence_markdown": f"# {canonical_name} Evidence\n\nEvidence is currently being served from the hosted Postgres canonical store.\n",
             "replication_markdown": f"# {canonical_name} Replication\n\nReplication details are currently being served from the hosted Postgres canonical store.\n",
-            "workflow_fit_markdown": f"# {canonical_name} Workflow Fit\n\nWorkflow fit notes are not yet available for this Postgres-backed record.\n",
+            "workflow_fit_markdown": f"# {canonical_name} Workflow Fit\n\n{workflow_body}\n",
         }
 
     def _get_workflow_index_markdown(self, slug: str, name: str, objective: str) -> str:

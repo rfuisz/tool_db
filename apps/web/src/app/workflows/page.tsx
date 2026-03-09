@@ -10,7 +10,8 @@ export default async function WorkflowsPage() {
         <h1 className="mb-3">Workflows</h1>
         <p className="max-w-xl text-lg text-ink-secondary">
           Design&#x2013;Build&#x2013;Test&#x2013;Learn loop archetypes with
-          step-level timing and cost estimates.
+          step-level timing, testing order, and rationale for how mechanism and
+          technique choices come together.
         </p>
       </header>
 

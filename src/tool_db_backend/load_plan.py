@@ -63,7 +63,12 @@ class LoadPlanBuilder:
         workflow_actions = self._build_workflow_actions(
             workflow_candidates,
             workflow_resolutions,
+            payload.get("workflow_observations", []),
             payload.get("workflow_stage_observations", []),
+            payload.get("workflow_step_observations", []),
+            resolutions,
+            candidate_key_to_local_ids,
+            auto_promotions,
         )
 
         return {
@@ -150,19 +155,21 @@ class LoadPlanBuilder:
             resolution = resolutions[local_id]
             status = resolution["resolution_status"]
             if status == "matched_existing":
+                promotion = auto_promotions.get(local_id, {})
                 actions.append(
                     {
                         "action": "attach_evidence_to_existing_item",
                         "local_id": local_id,
                         "target_slug": resolution["matched_slug"],
                         "canonical_name": candidate["canonical_name"],
-                        "item_type": candidate.get("item_type"),
+                        "item_type": promotion.get("item_type") or candidate.get("item_type"),
                         "aliases": candidate.get("aliases", []),
                         "external_ids": candidate.get("external_ids", {}),
-                        "mechanisms": auto_promotions.get(local_id, {}).get("mechanisms", []),
-                        "techniques": auto_promotions.get(local_id, {}).get("techniques", []),
-                        "target_processes": auto_promotions.get(local_id, {}).get("target_processes", []),
-                        "item_facets": auto_promotions.get(local_id, {}).get("item_facets", []),
+                        "mechanisms": promotion.get("mechanisms", []),
+                        "techniques": promotion.get("techniques", []),
+                        "target_processes": promotion.get("target_processes", []),
+                        "item_facets": promotion.get("item_facets", []),
+                        "classification_notes": promotion.get("classification_notes", []),
                     }
                 )
             elif status == "new_candidate":
@@ -430,11 +437,15 @@ class LoadPlanBuilder:
 
         for local_id, candidate in candidates.items():
             resolution = resolutions.get(local_id)
-            if not resolution or resolution.get("resolution_status") != "new_candidate":
+            if not resolution:
                 continue
-            proposed_slug = resolution.get("proposed_slug")
-            if not proposed_slug or proposed_slug in duplicate_slugs:
+            resolution_status = resolution.get("resolution_status")
+            if resolution_status not in {"new_candidate", "matched_existing"}:
                 continue
+            if resolution_status == "new_candidate":
+                proposed_slug = resolution.get("proposed_slug")
+                if not proposed_slug or proposed_slug in duplicate_slugs:
+                    continue
             combined_text = self._collect_candidate_text(candidate, claims_by_local_id.get(local_id, []), validations_by_local_id.get(local_id, []))
             item_type, _ = self._derive_item_type(candidate, combined_text)
             if item_type not in set(self._controlled_vocabularies.get("item_types", [])):
@@ -939,14 +950,30 @@ class LoadPlanBuilder:
         except Exception:
             return {}
 
-    @staticmethod
     def _build_workflow_actions(
+        self,
         candidates: Dict[str, Dict[str, Any]],
         resolutions: Dict[str, Dict[str, Any]],
+        workflow_observations: List[Dict[str, Any]],
         workflow_stage_observations: List[Dict[str, Any]],
+        workflow_step_observations: List[Dict[str, Any]],
+        item_resolutions: Dict[str, Dict[str, Any]],
+        item_candidate_key_to_local_ids: Dict[str, List[str]],
+        auto_promotions: Dict[str, Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
+        grouped_observations: Dict[str, List[Dict[str, Any]]] = {}
         grouped_stages: Dict[str, List[Dict[str, Any]]] = {}
+        grouped_steps: Dict[str, List[Dict[str, Any]]] = {}
+        orphan_observations: List[Dict[str, Any]] = []
         orphan_stages: List[Dict[str, Any]] = []
+        orphan_steps: List[Dict[str, Any]] = []
+
+        for observation in workflow_observations:
+            workflow_candidate_key = observation.get("workflow_candidate_key")
+            if not workflow_candidate_key:
+                orphan_observations.append(observation)
+                continue
+            grouped_observations.setdefault(workflow_candidate_key, []).append(observation)
 
         for observation in workflow_stage_observations:
             workflow_candidate_key = observation.get("workflow_candidate_key")
@@ -955,24 +982,57 @@ class LoadPlanBuilder:
                 continue
             grouped_stages.setdefault(workflow_candidate_key, []).append(observation)
 
+        for observation in workflow_step_observations:
+            workflow_candidate_key = observation.get("workflow_candidate_key")
+            if not workflow_candidate_key:
+                orphan_steps.append(observation)
+                continue
+            grouped_steps.setdefault(workflow_candidate_key, []).append(observation)
+
         actions = []
         for local_id, candidate in candidates.items():
             resolution = resolutions[local_id]
             candidate_key = candidate["candidate_key"]
+            observations = grouped_observations.get(candidate_key, [])
             stages = sorted(
                 grouped_stages.get(candidate_key, []),
                 key=lambda stage: (stage.get("stage_order", 999999), stage.get("local_id", "")),
             )
+            steps = sorted(
+                grouped_steps.get(candidate_key, []),
+                key=lambda step: (step.get("step_order", 999999), step.get("local_id", "")),
+            )
             status = resolution["resolution_status"]
+            workflow_mechanisms = self._filter_to_vocab(
+                self._collect_workflow_tags(observations, steps, "target_mechanisms"),
+                "mechanism_families",
+            )
+            workflow_techniques = self._filter_to_vocab(
+                self._collect_workflow_tags(observations, steps, "target_techniques"),
+                "technique_families",
+            )
+            design_goals = self._build_workflow_design_goals(observations, steps)
+            item_roles = self._build_workflow_item_roles(
+                steps,
+                item_resolutions,
+                item_candidate_key_to_local_ids,
+                auto_promotions,
+            )
 
             if status == "matched_existing":
                 actions.append(
                     {
-                        "action": "upsert_workflow_stages_for_existing_workflow",
+                        "action": "upsert_workflow_for_existing_workflow",
                         "local_id": local_id,
                         "target_slug": resolution["matched_slug"],
                         "canonical_name": candidate["canonical_name"],
+                        "workflow_observations": observations,
                         "stages": stages,
+                        "steps": steps,
+                        "workflow_mechanisms": workflow_mechanisms,
+                        "workflow_techniques": workflow_techniques,
+                        "design_goals": design_goals,
+                        "item_roles": item_roles,
                     }
                 )
             elif status == "new_candidate":
@@ -982,7 +1042,13 @@ class LoadPlanBuilder:
                         "local_id": local_id,
                         "proposed_slug": resolution["proposed_slug"],
                         "canonical_name": candidate["canonical_name"],
+                        "workflow_observations": observations,
                         "stages": stages,
+                        "steps": steps,
+                        "workflow_mechanisms": workflow_mechanisms,
+                        "workflow_techniques": workflow_techniques,
+                        "design_goals": design_goals,
+                        "item_roles": item_roles,
                     }
                 )
             else:
@@ -991,10 +1057,24 @@ class LoadPlanBuilder:
                         "action": "manual_workflow_resolution_required",
                         "local_id": local_id,
                         "candidate_matches": resolution["candidate_matches"],
+                        "workflow_observations": observations,
                         "stages": stages,
+                        "steps": steps,
+                        "workflow_mechanisms": workflow_mechanisms,
+                        "workflow_techniques": workflow_techniques,
+                        "design_goals": design_goals,
+                        "item_roles": item_roles,
                     }
                 )
 
+        if orphan_observations:
+            actions.append(
+                {
+                    "action": "manual_workflow_observation_review_required",
+                    "reason": "Workflow observations were extracted without a resolvable workflow candidate.",
+                    "workflow_observations": orphan_observations,
+                }
+            )
         if orphan_stages:
             actions.append(
                 {
@@ -1006,5 +1086,113 @@ class LoadPlanBuilder:
                     ),
                 }
             )
+        if orphan_steps:
+            actions.append(
+                {
+                    "action": "manual_workflow_step_review_required",
+                    "reason": "Workflow steps were extracted without a resolvable workflow candidate.",
+                    "steps": sorted(
+                        orphan_steps,
+                        key=lambda step: (step.get("step_order", 999999), step.get("local_id", "")),
+                    ),
+                }
+            )
 
         return actions
+
+    @staticmethod
+    def _collect_workflow_tags(
+        workflow_observations: List[Dict[str, Any]],
+        workflow_steps: List[Dict[str, Any]],
+        field_name: str,
+    ) -> List[str]:
+        values: List[str] = []
+        seen: Set[str] = set()
+        for record in [*workflow_observations, *workflow_steps]:
+            for value in record.get(field_name, []) or []:
+                if not value or value in seen:
+                    continue
+                seen.add(value)
+                values.append(value)
+        return values
+
+    @staticmethod
+    def _build_workflow_design_goals(
+        workflow_observations: List[Dict[str, Any]],
+        workflow_steps: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        goals: List[Dict[str, Any]] = []
+        seen: Set[tuple[str, str]] = set()
+        for observation in workflow_observations:
+            rationale = observation.get("why_workflow_works") or observation.get("workflow_priority_logic")
+            for goal_name in observation.get("target_property_axes", []) or []:
+                key = ("property_axis", goal_name)
+                if key in seen:
+                    continue
+                seen.add(key)
+                goals.append(
+                    {
+                        "goal_kind": "property_axis",
+                        "goal_name": goal_name,
+                        "rationale": rationale,
+                    }
+                )
+        for step in workflow_steps:
+            rationale = step.get("purpose") or step.get("why_this_step_now") or step.get("validation_focus")
+            for goal_name in step.get("target_property_axes", []) or []:
+                key = ("property_axis", goal_name)
+                if key in seen:
+                    continue
+                seen.add(key)
+                goals.append(
+                    {
+                        "goal_kind": "property_axis",
+                        "goal_name": goal_name,
+                        "rationale": rationale,
+                    }
+                )
+        return goals
+
+    @staticmethod
+    def _build_workflow_item_roles(
+        workflow_steps: List[Dict[str, Any]],
+        item_resolutions: Dict[str, Dict[str, Any]],
+        item_candidate_key_to_local_ids: Dict[str, List[str]],
+        auto_promotions: Dict[str, Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        roles: List[Dict[str, Any]] = []
+        seen: Set[tuple[str, str, str, str]] = set()
+        for step in workflow_steps:
+            role_name = str(step.get("item_role") or step.get("step_type") or "referenced_item").strip()
+            note = step.get("purpose") or step.get("validation_focus") or step.get("why_this_step_now")
+            for candidate_key in step.get("item_candidate_keys", []) or []:
+                for local_id in item_candidate_key_to_local_ids.get(candidate_key, []):
+                    resolution = item_resolutions.get(local_id)
+                    if not resolution:
+                        continue
+                    target_slug: Optional[str] = None
+                    if resolution.get("resolution_status") == "matched_existing":
+                        target_slug = resolution.get("matched_slug")
+                    elif resolution.get("resolution_status") == "new_candidate" and local_id in auto_promotions:
+                        target_slug = resolution.get("proposed_slug")
+                    if not target_slug:
+                        continue
+                    key = (
+                        target_slug,
+                        role_name,
+                        str(step.get("stage_name") or ""),
+                        str(step.get("step_name") or ""),
+                    )
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    roles.append(
+                        {
+                            "target_slug": target_slug,
+                            "role_name": role_name,
+                            "stage_name": step.get("stage_name"),
+                            "step_name": step.get("step_name"),
+                            "notes": note,
+                        }
+                    )
+        return roles

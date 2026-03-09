@@ -11,7 +11,9 @@
     "entity_candidates",
     "claims",
     "validation_observations",
+    "workflow_observations",
     "workflow_stage_observations",
+    "workflow_step_observations",
     "replication_signals",
     "unresolved_ambiguities"
   ],
@@ -35,10 +37,22 @@
         "$ref": "common.v1.schema.json#/$defs/validation_observation"
       }
     },
+    "workflow_observations": {
+      "type": "array",
+      "items": {
+        "$ref": "common.v1.schema.json#/$defs/workflow_observation"
+      }
+    },
     "workflow_stage_observations": {
       "type": "array",
       "items": {
         "$ref": "common.v1.schema.json#/$defs/workflow_stage_observation"
+      }
+    },
+    "workflow_step_observations": {
+      "type": "array",
+      "items": {
+        "$ref": "common.v1.schema.json#/$defs/workflow_step_observation"
       }
     },
     "replication_signals": {

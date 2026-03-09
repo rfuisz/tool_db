@@ -728,7 +728,9 @@ class RealExtractionArtifactBuilder:
                 "review_scope": "Metadata scaffold from literature search result.",
                 "entity_candidates": [],
                 "claims": [],
+                "workflow_observations": [],
                 "workflow_stage_observations": [],
+                "workflow_step_observations": [],
                 "recommended_seed_item_local_ids": [],
                 "unresolved_ambiguities": [
                     {
@@ -749,7 +751,9 @@ class RealExtractionArtifactBuilder:
                 "entity_candidates": [],
                 "claims": [],
                 "validation_observations": [],
+                "workflow_observations": [],
                 "workflow_stage_observations": [],
+                "workflow_step_observations": [],
                 "replication_signals": {},
                 "unresolved_ambiguities": [
                     {

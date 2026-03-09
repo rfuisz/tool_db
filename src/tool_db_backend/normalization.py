@@ -88,9 +88,19 @@ class PacketNormalizer:
         item_candidates, rejected_item_candidates = self._normalize_item_candidates(payload.get("entity_candidates", []))
         workflow_candidates = self._normalize_workflow_candidates(payload.get("entity_candidates", []))
         claim_index = self._normalize_claims(payload.get("claims", []), item_candidates)
+        workflow_observations = self._normalize_workflow_observations(
+            payload.get("workflow_observations", []),
+            workflow_candidates,
+        )
         workflow_stage_observations = self._normalize_workflow_stage_observations(
             payload.get("workflow_stage_observations", []),
             workflow_candidates,
+        )
+        workflow_step_observations = self._normalize_workflow_step_observations(
+            payload.get("workflow_step_observations", []),
+            workflow_candidates,
+            workflow_observations,
+            item_candidates,
         )
         return {
             "normalized_packet_type": "review_extract_normalized_v1",
@@ -101,7 +111,9 @@ class PacketNormalizer:
             "canonical_item_candidates": item_candidates,
             "canonical_workflow_candidates": workflow_candidates,
             "claims": claim_index,
+            "workflow_observations": workflow_observations,
             "workflow_stage_observations": workflow_stage_observations,
+            "workflow_step_observations": workflow_step_observations,
             "recommended_seed_item_keys": self._map_local_ids(
                 payload.get("recommended_seed_item_local_ids", []),
                 item_candidates,
@@ -125,9 +137,19 @@ class PacketNormalizer:
                 }
             )
         validations.extend(self._infer_validation_observations(payload.get("claims", []), item_candidates, validations))
+        workflow_observations = self._normalize_workflow_observations(
+            payload.get("workflow_observations", []),
+            workflow_candidates,
+        )
         workflow_stage_observations = self._normalize_workflow_stage_observations(
             payload.get("workflow_stage_observations", []),
             workflow_candidates,
+        )
+        workflow_step_observations = self._normalize_workflow_step_observations(
+            payload.get("workflow_step_observations", []),
+            workflow_candidates,
+            workflow_observations,
+            item_candidates,
         )
         return {
             "normalized_packet_type": "primary_paper_extract_normalized_v1",
@@ -139,7 +161,9 @@ class PacketNormalizer:
             "canonical_workflow_candidates": workflow_candidates,
             "claims": claims,
             "validation_observations": validations,
+            "workflow_observations": workflow_observations,
             "workflow_stage_observations": workflow_stage_observations,
+            "workflow_step_observations": workflow_step_observations,
             "replication_signals": self._normalize_replication_signals(payload.get("replication_signals", {})),
             "rejected_item_candidates": rejected_item_candidates,
             "unresolved_ambiguities": payload.get("unresolved_ambiguities", []),
@@ -222,6 +246,9 @@ class PacketNormalizer:
                     entity.get("implementation_constraints", [])
                 ),
                 "facet_hints": self._normalize_facet_hints(entity.get("facet_hints")),
+                "freeform_explainers": self._normalize_freeform_explainers(
+                    entity.get("freeform_explainers")
+                ),
             }
         return normalized, rejected
 
@@ -397,6 +424,99 @@ class PacketNormalizer:
             normalized.append(
                 {
                     **observation,
+                    "why_stage_exists": self._normalize_optional_text(observation.get("why_stage_exists")),
+                    "decision_gate_reason": self._normalize_optional_text(
+                        observation.get("decision_gate_reason")
+                    ),
+                    "workflow_candidate_key": workflow_candidate_key,
+                }
+            )
+        return normalized
+
+    def _normalize_workflow_observations(
+        self,
+        observations: List[Dict[str, Any]],
+        workflow_candidates: Dict[str, Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        normalized = []
+        for observation in observations:
+            workflow_local_id = observation.get("workflow_local_id")
+            workflow_candidate_key = (
+                workflow_candidates.get(workflow_local_id, {}).get("candidate_key")
+                if workflow_local_id
+                else None
+            )
+            normalized.append(
+                {
+                    **observation,
+                    "workflow_objective": self._normalize_optional_text(
+                        observation.get("workflow_objective")
+                    ),
+                    "protocol_family": self._normalize_optional_text(observation.get("protocol_family")),
+                    "engineered_system_family": self._normalize_optional_text(
+                        observation.get("engineered_system_family")
+                    ),
+                    "target_property_axes": _dedupe_strings(observation.get("target_property_axes", [])),
+                    "target_mechanisms": _dedupe_strings(observation.get("target_mechanisms", [])),
+                    "target_techniques": _dedupe_strings(observation.get("target_techniques", [])),
+                    "why_workflow_works": self._normalize_optional_text(observation.get("why_workflow_works")),
+                    "workflow_priority_logic": self._normalize_optional_text(
+                        observation.get("workflow_priority_logic")
+                    ),
+                    "validation_strategy": self._normalize_optional_text(
+                        observation.get("validation_strategy")
+                    ),
+                    "decision_gate_strategy": self._normalize_optional_text(
+                        observation.get("decision_gate_strategy")
+                    ),
+                    "evidence_text": self._normalize_optional_text(observation.get("evidence_text")),
+                    "workflow_candidate_key": workflow_candidate_key,
+                }
+            )
+        return normalized
+
+    def _normalize_workflow_step_observations(
+        self,
+        observations: List[Dict[str, Any]],
+        workflow_candidates: Dict[str, Dict[str, Any]],
+        workflow_observations: List[Dict[str, Any]],
+        item_candidates: Dict[str, Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        candidate_key_by_observation_id = {
+            observation.get("local_id"): observation.get("workflow_candidate_key")
+            for observation in workflow_observations
+            if observation.get("local_id")
+        }
+        normalized = []
+        for observation in observations:
+            workflow_local_id = observation.get("workflow_local_id")
+            workflow_candidate_key = (
+                workflow_candidates.get(workflow_local_id, {}).get("candidate_key")
+                if workflow_local_id
+                else None
+            )
+            if workflow_candidate_key is None:
+                workflow_candidate_key = candidate_key_by_observation_id.get(
+                    observation.get("workflow_observation_local_id")
+                )
+            normalized.append(
+                {
+                    **observation,
+                    "item_candidate_keys": self._map_local_ids(
+                        observation.get("item_local_ids", []),
+                        item_candidates,
+                    ),
+                    "purpose": self._normalize_optional_text(observation.get("purpose")),
+                    "why_this_step_now": self._normalize_optional_text(observation.get("why_this_step_now")),
+                    "decision_gate_reason": self._normalize_optional_text(
+                        observation.get("decision_gate_reason")
+                    ),
+                    "advance_criteria": self._normalize_optional_text(observation.get("advance_criteria")),
+                    "failure_criteria": self._normalize_optional_text(observation.get("failure_criteria")),
+                    "validation_focus": self._normalize_optional_text(observation.get("validation_focus")),
+                    "target_property_axes": _dedupe_strings(observation.get("target_property_axes", [])),
+                    "target_mechanisms": _dedupe_strings(observation.get("target_mechanisms", [])),
+                    "target_techniques": _dedupe_strings(observation.get("target_techniques", [])),
                     "workflow_candidate_key": workflow_candidate_key,
                 }
             )
@@ -443,5 +563,26 @@ class PacketNormalizer:
             cleaned_key = str(key).strip()
             cleaned_value = str(value).strip() if value is not None else ""
             if cleaned_key and cleaned_value:
+                normalized[cleaned_key] = cleaned_value
+        return normalized
+
+    @staticmethod
+    def _normalize_freeform_explainers(freeform_explainers: Optional[Dict[str, Any]]) -> Dict[str, str]:
+        if not isinstance(freeform_explainers, dict):
+            return {}
+        allowed_keys = {
+            "what_it_does",
+            "resources_required",
+            "problem_it_solves",
+            "problem_it_does_not_solve",
+            "alternatives",
+        }
+        normalized: Dict[str, str] = {}
+        for key, value in freeform_explainers.items():
+            cleaned_key = str(key).strip()
+            if cleaned_key not in allowed_keys:
+                continue
+            cleaned_value = str(value).strip() if value is not None else ""
+            if cleaned_value:
                 normalized[cleaned_key] = cleaned_value
         return normalized

@@ -151,6 +151,9 @@ export function WorkflowAccordion({
                 </div>
 
                 {(workflow.simple_summary ||
+                  workflow.why_workflow_works ||
+                  workflow.priority_logic ||
+                  workflow.validation_strategy ||
                   (workflow.how_to_implement &&
                     workflow.how_to_implement.length > 0) ||
                   (workflow.used_when && workflow.used_when.length > 0) ||
@@ -162,6 +165,33 @@ export function WorkflowAccordion({
                         <p className="small-caps mb-3">Simple Summary</p>
                         <p className="text-sm leading-6 text-ink-secondary">
                           {workflow.simple_summary}
+                        </p>
+                      </div>
+                    )}
+
+                    {workflow.why_workflow_works && (
+                      <div className="rounded-lg border border-edge bg-surface-alt p-5">
+                        <p className="small-caps mb-3">Why This Workflow Works</p>
+                        <p className="text-sm leading-6 text-ink-secondary">
+                          {workflow.why_workflow_works}
+                        </p>
+                      </div>
+                    )}
+
+                    {workflow.priority_logic && (
+                      <div className="rounded-lg border border-edge bg-surface-alt p-5">
+                        <p className="small-caps mb-3">Testing Priority Logic</p>
+                        <p className="text-sm leading-6 text-ink-secondary">
+                          {workflow.priority_logic}
+                        </p>
+                      </div>
+                    )}
+
+                    {workflow.validation_strategy && (
+                      <div className="rounded-lg border border-edge bg-surface-alt p-5">
+                        <p className="small-caps mb-3">Validation Strategy</p>
+                        <p className="text-sm leading-6 text-ink-secondary">
+                          {workflow.validation_strategy}
                         </p>
                       </div>
                     )}
@@ -226,6 +256,48 @@ export function WorkflowAccordion({
                             </li>
                           ))}
                         </ul>
+                      </div>
+                    )}
+
+                    {((workflow.mechanisms && workflow.mechanisms.length > 0) ||
+                      (workflow.techniques && workflow.techniques.length > 0) ||
+                      (workflow.design_goals && workflow.design_goals.length > 0) ||
+                      (workflow.item_roles && workflow.item_roles.length > 0)) && (
+                      <div className="rounded-lg border border-edge bg-surface-alt p-5 lg:col-span-2">
+                        <p className="small-caps mb-3">Workflow Targets & Roles</p>
+                        <div className="space-y-3 text-sm leading-6 text-ink-secondary">
+                          {workflow.mechanisms && workflow.mechanisms.length > 0 ? (
+                            <p>
+                              <span className="font-semibold text-ink">Mechanisms:</span>{" "}
+                              {workflow.mechanisms.join(", ")}
+                            </p>
+                          ) : null}
+                          {workflow.techniques && workflow.techniques.length > 0 ? (
+                            <p>
+                              <span className="font-semibold text-ink">Techniques:</span>{" "}
+                              {workflow.techniques.join(", ")}
+                            </p>
+                          ) : null}
+                          {workflow.design_goals && workflow.design_goals.length > 0 ? (
+                            <p>
+                              <span className="font-semibold text-ink">Design goals:</span>{" "}
+                              {workflow.design_goals
+                                .map((goal) => String(goal.goal_name ?? goal))
+                                .join(", ")}
+                            </p>
+                          ) : null}
+                          {workflow.item_roles && workflow.item_roles.length > 0 ? (
+                            <p>
+                              <span className="font-semibold text-ink">Item roles:</span>{" "}
+                              {workflow.item_roles
+                                .map(
+                                  (role) =>
+                                    `${String(role.item_name ?? role.item_slug ?? "item")} (${String(role.role_name ?? "role")})`,
+                                )
+                                .join(", ")}
+                            </p>
+                          ) : null}
+                        </div>
                       </div>
                     )}
                   </div>

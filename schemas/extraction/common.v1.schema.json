@@ -99,6 +99,17 @@
         }
       }
     },
+    "freeform_explainers": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "what_it_does": { "type": "string" },
+        "resources_required": { "type": "string" },
+        "problem_it_solves": { "type": "string" },
+        "problem_it_does_not_solve": { "type": "string" },
+        "alternatives": { "type": "string" }
+      }
+    },
     "entity_candidate": {
       "type": "object",
       "additionalProperties": false,
@@ -153,6 +164,9 @@
         "facet_hints": {
           "type": "object",
           "additionalProperties": { "type": ["string", "number", "boolean"] }
+        },
+        "freeform_explainers": {
+          "$ref": "#/$defs/freeform_explainers"
         },
         "external_ids": {
           "type": "object",
@@ -333,7 +347,9 @@
           "items": { "type": "string" },
           "default": []
         },
+        "why_stage_exists": { "type": "string" },
         "advance_criteria": { "type": "string" },
+        "decision_gate_reason": { "type": "string" },
         "bottleneck_risk": { "type": "string" },
         "higher_fidelity_than_previous": { "type": "boolean" },
         "context": { "$ref": "#/$defs/context" },
@@ -341,6 +357,118 @@
         "unresolved_ambiguities": {
           "type": "array",
           "items": { "type": "string" },
+          "default": []
+        }
+      }
+    },
+    "workflow_observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["local_id"],
+      "properties": {
+        "local_id": { "type": "string", "minLength": 1 },
+        "workflow_local_id": { "type": "string" },
+        "workflow_objective": { "type": "string" },
+        "protocol_family": { "type": "string" },
+        "engineered_system_family": { "type": "string" },
+        "target_property_axes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "target_mechanisms": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "target_techniques": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "why_workflow_works": { "type": "string" },
+        "workflow_priority_logic": { "type": "string" },
+        "validation_strategy": { "type": "string" },
+        "decision_gate_strategy": { "type": "string" },
+        "evidence_text": { "type": "string" },
+        "context": { "$ref": "#/$defs/context" },
+        "source_locator": { "$ref": "#/$defs/source_locator" },
+        "unresolved_ambiguities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ambiguity" },
+          "default": []
+        }
+      }
+    },
+    "workflow_step_observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["local_id", "step_name", "step_order"],
+      "properties": {
+        "local_id": { "type": "string", "minLength": 1 },
+        "workflow_local_id": { "type": "string" },
+        "workflow_observation_local_id": { "type": "string" },
+        "stage_local_id": { "type": "string" },
+        "stage_name": { "type": "string" },
+        "step_name": { "type": "string", "minLength": 1 },
+        "step_order": { "type": "integer", "minimum": 1 },
+        "step_type": {
+          "type": "string",
+          "enum": [
+            "design",
+            "dna_acquisition",
+            "assembly",
+            "transformation",
+            "colony_screen",
+            "sequence_verification",
+            "transfection",
+            "expression",
+            "selection_round",
+            "assay",
+            "analysis",
+            "decision",
+            "packaging",
+            "delivery"
+          ]
+        },
+        "item_local_ids": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "item_role": { "type": "string" },
+        "purpose": { "type": "string" },
+        "why_this_step_now": { "type": "string" },
+        "decision_gate_reason": { "type": "string" },
+        "advance_criteria": { "type": "string" },
+        "failure_criteria": { "type": "string" },
+        "validation_focus": { "type": "string" },
+        "target_property_axes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "target_mechanisms": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "target_techniques": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "input_artifact": { "type": "string" },
+        "output_artifact": { "type": "string" },
+        "duration_hours": { "type": "number" },
+        "queue_time_hours": { "type": "number" },
+        "direct_cost_usd": { "type": "number" },
+        "success": { "type": "boolean" },
+        "context": { "$ref": "#/$defs/context" },
+        "source_locator": { "$ref": "#/$defs/source_locator" },
+        "unresolved_ambiguities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ambiguity" },
           "default": []
         }
       }

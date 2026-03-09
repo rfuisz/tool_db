@@ -275,6 +275,16 @@ export interface ItemProblemLink {
   evidence_payload?: Record<string, unknown>;
 }
 
+export interface WorkflowRecommendation {
+  workflow_slug: string;
+  workflow_name: string;
+  role_name: string;
+  stage_name?: string | null;
+  step_name?: string | null;
+  notes?: string | null;
+  objective?: string | null;
+}
+
 export interface ValidationMetric {
   metric_name: string;
   value_num: number | null;
@@ -308,6 +318,7 @@ export interface ToolkitItem {
   explainers?: ItemExplainer[];
   comparisons?: ItemComparison[];
   problem_links?: ItemProblemLink[];
+  workflow_recommendations?: WorkflowRecommendation[];
   approval_evidence?: ApprovedItemEvidence | null;
   index_markdown?: string | null;
   evidence_markdown?: string | null;
@@ -319,7 +330,17 @@ export interface WorkflowStep {
   id: string;
   step_name: string;
   stage_name?: string | null;
+  step_order?: number | null;
   step_type: WorkflowStepType;
+  purpose?: string | null;
+  why_this_step_now?: string | null;
+  decision_gate_reason?: string | null;
+  advance_criteria?: string | null;
+  failure_criteria?: string | null;
+  validation_focus?: string | null;
+  target_property_axes?: string[];
+  target_mechanisms?: string[];
+  target_techniques?: string[];
   duration_typical_hours: number | null;
   hands_on_hours: number | null;
   direct_cost_usd_typical: number | null;
@@ -343,7 +364,9 @@ export interface WorkflowStage {
   enriches_for_axes: string[];
   guards_against_axes: string[];
   preserves_downstream_property_axes: string[];
+  why_stage_exists?: string | null;
   advance_criteria: string | null;
+  decision_gate_reason?: string | null;
   bottleneck_risk: string | null;
   higher_fidelity_than_previous: boolean | null;
 }
@@ -362,6 +385,15 @@ export interface WorkflowTemplate {
   objective: string;
   throughput_class: string | null;
   recommended_for: string | null;
+  protocol_family?: string | null;
+  engineered_system_family?: string | null;
+  why_workflow_works?: string | null;
+  priority_logic?: string | null;
+  validation_strategy?: string | null;
+  mechanisms?: string[];
+  techniques?: string[];
+  design_goals?: Array<Record<string, unknown>>;
+  item_roles?: Array<Record<string, unknown>>;
   stages?: WorkflowStage[];
   steps: WorkflowStep[];
   simple_summary?: string | null;
@@ -453,6 +485,24 @@ export interface FirstPassClaim {
   source_document: FirstPassSourceDocument;
 }
 
+export interface FirstPassWorkflowObservation {
+  local_id: string;
+  workflow_local_id: string | null;
+  workflow_objective: string | null;
+  protocol_family: string | null;
+  engineered_system_family: string | null;
+  target_property_axes: string[];
+  target_mechanisms: string[];
+  target_techniques: string[];
+  why_workflow_works: string | null;
+  workflow_priority_logic: string | null;
+  validation_strategy: string | null;
+  decision_gate_strategy: string | null;
+  evidence_text: string | null;
+  source_locator: Record<string, unknown>;
+  source_document: FirstPassSourceDocument;
+}
+
 export interface FirstPassWorkflowStageObservation {
   local_id: string;
   workflow_local_id: string | null;
@@ -465,10 +515,48 @@ export interface FirstPassWorkflowStageObservation {
   enriches_for_axes: string[];
   guards_against_axes: string[];
   preserves_downstream_property_axes: string[];
+  why_stage_exists: string | null;
   advance_criteria: string | null;
+  decision_gate_reason: string | null;
   bottleneck_risk: string | null;
   higher_fidelity_than_previous: boolean | null;
   source_locator: Record<string, unknown>;
+  source_document: FirstPassSourceDocument;
+}
+
+export interface FirstPassWorkflowStepObservation {
+  local_id: string;
+  workflow_local_id: string | null;
+  workflow_observation_local_id: string | null;
+  stage_local_id: string | null;
+  stage_name: string | null;
+  step_name: string;
+  step_order: number;
+  step_type: string | null;
+  item_local_ids: string[];
+  item_role: string | null;
+  purpose: string | null;
+  why_this_step_now: string | null;
+  decision_gate_reason: string | null;
+  advance_criteria: string | null;
+  failure_criteria: string | null;
+  validation_focus: string | null;
+  target_property_axes: string[];
+  target_mechanisms: string[];
+  target_techniques: string[];
+  input_artifact: string | null;
+  output_artifact: string | null;
+  duration_hours: number | null;
+  queue_time_hours: number | null;
+  direct_cost_usd: number | null;
+  success: boolean | null;
+  source_locator: Record<string, unknown>;
+  source_document: FirstPassSourceDocument;
+}
+
+export interface FirstPassExplainer {
+  explainer_kind: string;
+  body: string;
   source_document: FirstPassSourceDocument;
 }
 
@@ -490,7 +578,10 @@ export interface FirstPassEntityDetail extends FirstPassEntitySummary {
   evidence_snippets: FirstPassEvidenceSnippet[];
   source_documents: FirstPassSourceDocument[];
   claims: FirstPassClaim[];
+  freeform_explainers: FirstPassExplainer[];
+  workflow_observations: FirstPassWorkflowObservation[];
   workflow_stage_observations: FirstPassWorkflowStageObservation[];
+  workflow_step_observations: FirstPassWorkflowStepObservation[];
 }
 
 export type FirstPassItemSummary = FirstPassEntitySummary;

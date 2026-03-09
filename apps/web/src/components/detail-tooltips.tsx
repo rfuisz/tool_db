@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { Tooltip } from "./tooltip";
 import {
+  ITEM_TYPE_DESCRIPTIONS,
   MATURITY_DESCRIPTIONS,
   STATUS_DESCRIPTIONS,
   MODALITY_DESCRIPTIONS,
   MECHANISM_DESCRIPTIONS,
   TECHNIQUE_DESCRIPTIONS,
-  ITEM_TYPE_DESCRIPTIONS,
 } from "@/lib/explanations";
 import {
   ITEM_TYPE_LABELS,
@@ -78,9 +78,9 @@ export function MechanismTag({ mechanism }: { mechanism: string }) {
   const description = MECHANISM_DESCRIPTIONS[mechanism];
   const label = MECHANISM_LABELS[mechanism] ?? mechanism.replace(/_/g, " ");
   return (
-    <Tooltip content={description ?? `Filter by mechanism: ${label}`} position="bottom">
+    <Tooltip content={description ?? `View mechanism concept: ${label}`} position="bottom">
       <Link
-        href={`/items?mechanism=${mechanism}`}
+        href={`/mechanisms/${mechanism}`}
         className="mr-2 cursor-help border-b border-dotted border-ink-faint text-ink-secondary transition-colors hover:text-accent hover:border-accent"
       >
         {label}
@@ -93,9 +93,9 @@ export function TechniqueTag({ technique }: { technique: string }) {
   const description = TECHNIQUE_DESCRIPTIONS[technique];
   const label = TECHNIQUE_LABELS[technique] ?? technique.replace(/_/g, " ");
   return (
-    <Tooltip content={description ?? `Filter by technique: ${label}`} position="bottom">
+    <Tooltip content={description ?? `View technique concept: ${label}`} position="bottom">
       <Link
-        href={`/items?technique=${technique}`}
+        href={`/techniques/${technique}`}
         className="mr-2 cursor-help border-b border-dotted border-ink-faint text-ink-secondary transition-colors hover:text-accent hover:border-accent"
       >
         {label}

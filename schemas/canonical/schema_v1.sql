@@ -271,12 +271,49 @@ create table item_related_item (
   notes text
 );
 
+create table item_facet (
+  id uuid primary key default gen_random_uuid(),
+  item_id uuid not null references toolkit_item(id) on delete cascade,
+  facet_name text not null,
+  facet_value text not null,
+  evidence_note text,
+  unique (item_id, facet_name, facet_value)
+);
+
+create table item_explainer (
+  id uuid primary key default gen_random_uuid(),
+  item_id uuid not null references toolkit_item(id) on delete cascade,
+  explainer_kind text not null,
+  title text,
+  body text not null,
+  evidence_payload jsonb not null default '{}'::jsonb,
+  derived_version text not null default 'v1',
+  updated_at timestamptz not null default now(),
+  unique (item_id, explainer_kind)
+);
+
+create table item_comparison (
+  id uuid primary key default gen_random_uuid(),
+  item_id uuid not null references toolkit_item(id) on delete cascade,
+  related_item_id uuid not null references toolkit_item(id) on delete cascade,
+  relation_type text not null,
+  summary text not null,
+  strengths jsonb not null default '[]'::jsonb,
+  weaknesses jsonb not null default '[]'::jsonb,
+  overlap_reasons jsonb not null default '[]'::jsonb,
+  evidence_payload jsonb not null default '{}'::jsonb,
+  derived_version text not null default 'v1',
+  updated_at timestamptz not null default now(),
+  unique (item_id, related_item_id, relation_type)
+);
+
 create table source_document (
   id uuid primary key default gen_random_uuid(),
   source_type source_type not null,
   title text not null,
   doi text,
   pmid text,
+  pmcid text,
   openalex_id text,
   semantic_scholar_id text,
   nct_id text,
@@ -323,7 +360,10 @@ create table extracted_claim (
   polarity claim_polarity not null default 'neutral',
   confidence_model numeric(4,3),
   confidence_curator numeric(4,3),
-  needs_review boolean not null default true
+  needs_review boolean not null default true,
+  context jsonb not null default '{}'::jsonb,
+  source_locator jsonb not null default '{}'::jsonb,
+  unresolved_ambiguities jsonb not null default '[]'::jsonb
 );
 
 create table claim_subject_link (
@@ -380,7 +420,8 @@ create table validation_observation (
   assay_description text,
   independent_lab_cluster_id text,
   institution_cluster_id text,
-  notes text
+  notes text,
+  source_locator jsonb not null default '{}'::jsonb
 );
 
 create table validation_metric_value (
@@ -549,6 +590,20 @@ create table gap_capability_resource (
   gap_capability_id uuid not null references gap_capability(id) on delete cascade,
   gap_resource_id uuid not null references gap_resource(id) on delete cascade,
   primary key (gap_capability_id, gap_resource_id)
+);
+
+create table item_problem_link (
+  id uuid primary key default gen_random_uuid(),
+  item_id uuid not null references toolkit_item(id) on delete cascade,
+  gap_item_id uuid references gap_item(id) on delete set null,
+  problem_label text not null,
+  why_this_item_helps text not null,
+  source_kind text not null,
+  overall_score numeric(8,3),
+  evidence_payload jsonb not null default '{}'::jsonb,
+  derived_version text not null default 'v1',
+  updated_at timestamptz not null default now(),
+  unique (item_id, problem_label, source_kind)
 );
 
 create table item_gap_link (

@@ -7,7 +7,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from tool_db_backend.candidate_filtering import assess_toolkit_item_candidate, load_controlled_vocabularies
 from tool_db_backend.config import Settings
 from tool_db_backend.entity_resolution import EntityResolver
-from tool_db_backend.postgres_loader import LoadPlanExecutionError, PostgresLoadPlanExecutor
+from tool_db_backend.errors import LoadPlanExecutionError
+from tool_db_backend.postgres_loader import PostgresLoadPlanExecutor
 from tool_db_backend.schema_validation import PACKET_TO_SCHEMA, PacketValidationError, validate_packet
 
 

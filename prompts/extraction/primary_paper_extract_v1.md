@@ -21,6 +21,18 @@ Convert one literature source into a `primary_paper_extract_v1` packet.
 - Do not invent stage counts, gating criteria, or counterselection logic if the source only implies that screening happened.
 - Leave `replication_signals` as `{}` unless a field is directly supported by the provided evidence.
 - If you set `item_type`, use only canonical-safe values such as `protein_domain`, `multi_component_switch`, `rna_element`, `construct_pattern`, `engineering_method`, `assay_method`, `computation_method`, or `delivery_harness`; otherwise omit `item_type`.
+- When choosing `item_type`, prefer the thing itself over the fact that it was engineered:
+  - use `engineering_method`, `assay_method`, or `computation_method` for named practices, protocols, algorithms, or measurement methods
+  - use `multi_component_switch` or `construct_pattern` for named engineered systems, circuits, modules, or constructs
+  - use `delivery_harness` for named delivery strategies or vehicles such as AAV, LNP, viral vectors, or electroporation-based deployment packages
+- Do not label a named engineered system as `engineering_method` just because the paper describes how it was built.
+- For every emitted `toolkit_item`, explicitly ask yourself:
+  - how is this useful?
+  - what problem does it solve?
+  - what are the main implementation constraints or prerequisites?
+  - what makes it stronger or weaker than nearby alternatives mentioned in the same source?
+- If those answers are directly supported by the source, store them on the entity candidate using `useful_for`, `problem_solved`, `strengths`, `limitations`, `implementation_constraints`, and `facet_hints`.
+- Keep those fields source-backed and terse; use empty arrays when the abstract does not support them.
 - Set `citation_role_suggestion` only when the source clearly fits an existing canonical citation role such as `foundational`, `best_review`, `independent_validation`, `benchmark`, `protocol`, `therapeutic`, `negative_result`, `structural`, or `database_reference`; otherwise omit it.
 - If you emit any `validation_observations`, every observation must include `success_outcome` with one of: `success`, `mixed`, or `failed`.
 - Do not create partial validation observations; if the abstract does not support a full schema-valid observation, return `validation_observations: []` instead.

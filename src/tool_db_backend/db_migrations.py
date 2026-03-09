@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
 from tool_db_backend.config import Settings
-from tool_db_backend.postgres_loader import LoadPlanExecutionError
+from tool_db_backend.errors import LoadPlanExecutionError
 
 
 class MigrationRunner:

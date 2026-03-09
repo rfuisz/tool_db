@@ -5,9 +5,11 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from tool_db_backend.clients.europe_pmc import EuropePMCClient
 from tool_db_backend.clients.gap_map import GapMapClient
 from tool_db_backend.clients.openalex import OpenAlexClient
 from tool_db_backend.clients.optobase import OptoBaseClient
+from tool_db_backend.clients.pmc import PMCClient
 from tool_db_backend.clients.semantic_scholar import SemanticScholarClient
 from tool_db_backend.config import Settings
 from tool_db_backend.raw_store import RawPayloadStore
@@ -92,6 +94,7 @@ def build_first_pass_query_sets(settings: Settings, seed_query_limit: int = 24) 
         _append_unique(semantic_scholar_queries, query)
 
     return {
+        "europe_pmc": literature_queries,
         "openalex": literature_queries,
         "semantic_scholar": semantic_scholar_queries,
         "optobase": optobase_terms[:seed_query_limit],
@@ -106,6 +109,8 @@ class RealDataHarvester:
     def __init__(
         self,
         settings: Settings,
+        europe_pmc_client: Optional[EuropePMCClient] = None,
+        pmc_client: Optional[PMCClient] = None,
         openalex_client: Optional[OpenAlexClient] = None,
         semantic_scholar_client: Optional[SemanticScholarClient] = None,
         gap_map_client: Optional[GapMapClient] = None,
@@ -113,6 +118,8 @@ class RealDataHarvester:
         raw_store: Optional[RawPayloadStore] = None,
     ) -> None:
         self.settings = settings
+        self.europe_pmc_client = europe_pmc_client or EuropePMCClient(settings)
+        self.pmc_client = pmc_client or PMCClient(settings)
         self.openalex_client = openalex_client or OpenAlexClient(settings)
         self.semantic_scholar_client = semantic_scholar_client or SemanticScholarClient(settings)
         self.gap_map_client = gap_map_client or GapMapClient(settings)
@@ -121,6 +128,8 @@ class RealDataHarvester:
         self.optobase_parser = OptoBaseSearchParser()
 
     def close(self) -> None:
+        self.europe_pmc_client.close()
+        self.pmc_client.close()
         self.openalex_client.close()
         self.semantic_scholar_client.close()
         self.gap_map_client.close()
@@ -130,6 +139,10 @@ class RealDataHarvester:
         self,
         artifact_dir: Optional[Path] = None,
         *,
+        europe_pmc_queries: List[str],
+        europe_pmc_pages: int,
+        europe_pmc_page_size: int,
+        pmc_fulltext_limit: int,
         openalex_queries: List[str],
         openalex_pages: int,
         openalex_per_page: int,
@@ -142,6 +155,21 @@ class RealDataHarvester:
         artifact_root.mkdir(parents=True, exist_ok=True)
 
         gap_map_summary = self._safe_fetch(self._fetch_gap_map, "gap_map")
+        europe_pmc_summary = self._safe_fetch(
+            lambda: self._fetch_europe_pmc(
+                queries=europe_pmc_queries,
+                page_size=europe_pmc_page_size,
+                pages=europe_pmc_pages,
+            ),
+            "europe_pmc",
+        )
+        pmc_summary = self._safe_fetch(
+            lambda: self._fetch_pmc_fulltexts(
+                europe_pmc_summary.get("raw_paths", {}),
+                limit=pmc_fulltext_limit,
+            ),
+            "pmc",
+        )
         openalex_summary = self._safe_fetch(
             lambda: self._fetch_openalex(
                 queries=openalex_queries,
@@ -165,6 +193,8 @@ class RealDataHarvester:
 
         total_entries = (
             gap_map_summary["entry_count"]
+            + europe_pmc_summary["entry_count"]
+            + pmc_summary["entry_count"]
             + openalex_summary["entry_count"]
             + semantic_scholar_summary["entry_count"]
         )
@@ -172,6 +202,10 @@ class RealDataHarvester:
         manifest = {
             "manifest_type": "real_data_harvest_v1",
             "config": {
+                "europe_pmc_query_count": len(europe_pmc_queries),
+                "europe_pmc_pages": europe_pmc_pages,
+                "europe_pmc_page_size": europe_pmc_page_size,
+                "pmc_fulltext_limit": pmc_fulltext_limit,
                 "openalex_query_count": len(openalex_queries),
                 "openalex_pages": openalex_pages,
                 "openalex_per_page": openalex_per_page,
@@ -182,6 +216,8 @@ class RealDataHarvester:
             },
             "sources": {
                 "gap_map": gap_map_summary,
+                "europe_pmc": europe_pmc_summary,
+                "pmc": pmc_summary,
                 "openalex": openalex_summary,
                 "semantic_scholar": semantic_scholar_summary,
                 "optobase": optobase_summary,
@@ -227,6 +263,82 @@ class RealDataHarvester:
             "datasets": counts,
             "entry_count": total,
             "raw_paths": raw_paths,
+        }
+
+    def _fetch_europe_pmc(self, queries: List[str], page_size: int, pages: int) -> Dict[str, Any]:
+        seen_ids = set()
+        counts: Dict[str, int] = {}
+        raw_paths: Dict[str, str] = {}
+        for query in queries:
+            query_total = 0
+            for page in range(1, pages + 1):
+                payload = self.europe_pmc_client.search(
+                    query=query,
+                    page_size=page_size,
+                    page=page,
+                    result_type="core",
+                )
+                results = ((payload.get("resultList") or {}).get("result") or [])
+                counts[f"{query} [page {page}]"] = len(results)
+                query_total += len(results)
+                for result in results:
+                    result_id = result.get("id") or result.get("pmid") or result.get("doi")
+                    if result_id:
+                        seen_ids.add(str(result_id))
+                raw_path = self.raw_store.write_json_payload(
+                    source_key="europe_pmc",
+                    resource_type="search",
+                    external_id=f"{_slugify(query)}-page-{page}",
+                    payload=payload,
+                )
+                raw_paths[f"{query} [page {page}]"] = str(raw_path)
+                if not results:
+                    break
+            counts[query] = query_total
+        return {
+            "queries": counts,
+            "entry_count": len(seen_ids),
+            "raw_paths": raw_paths,
+        }
+
+    def _fetch_pmc_fulltexts(self, europe_pmc_raw_paths: Dict[str, str], limit: int) -> Dict[str, Any]:
+        raw_paths: Dict[str, str] = {}
+        errors: Dict[str, str] = {}
+        pmcids: List[str] = []
+        for raw_path in europe_pmc_raw_paths.values():
+            try:
+                payload = json.loads(Path(raw_path).read_text())
+            except (OSError, json.JSONDecodeError):
+                continue
+            results = ((payload.get("payload") or {}).get("resultList") or {}).get("result") or []
+            for result in results:
+                pmcid = str(result.get("pmcid") or "").strip()
+                if not pmcid or pmcid in pmcids:
+                    continue
+                pmcids.append(pmcid)
+                if limit > 0 and len(pmcids) >= limit:
+                    break
+            if limit > 0 and len(pmcids) >= limit:
+                break
+
+        for pmcid in pmcids:
+            try:
+                payload = self.pmc_client.fetch_bioc_fulltext(pmcid)
+            except (httpx.HTTPError, ValueError) as exc:
+                errors[pmcid] = str(exc)
+                continue
+            raw_path = self.raw_store.write_json_payload(
+                source_key="pmc",
+                resource_type="bioc_fulltext",
+                external_id=pmcid,
+                payload=payload,
+            )
+            raw_paths[pmcid] = str(raw_path)
+        return {
+            "entry_count": len(raw_paths),
+            "requested_pmcids": pmcids,
+            "raw_paths": raw_paths,
+            "errors": errors,
         }
 
     def _fetch_openalex(self, queries: List[str], per_page: int, pages: int) -> Dict[str, Any]:
@@ -338,6 +450,8 @@ class RealDataSmokeTester:
     def __init__(
         self,
         settings: Settings,
+        europe_pmc_client: Optional[EuropePMCClient] = None,
+        pmc_client: Optional[PMCClient] = None,
         openalex_client: Optional[OpenAlexClient] = None,
         semantic_scholar_client: Optional[SemanticScholarClient] = None,
         gap_map_client: Optional[GapMapClient] = None,
@@ -346,6 +460,8 @@ class RealDataSmokeTester:
     ) -> None:
         self.harvester = RealDataHarvester(
             settings=settings,
+            europe_pmc_client=europe_pmc_client,
+            pmc_client=pmc_client,
             openalex_client=openalex_client,
             semantic_scholar_client=semantic_scholar_client,
             gap_map_client=gap_map_client,
@@ -359,6 +475,19 @@ class RealDataSmokeTester:
     def run(self, artifact_dir: Optional[Path] = None) -> Dict[str, Any]:
         return self.harvester.run(
             artifact_dir=artifact_dir or (self.harvester.settings.pipeline_artifact_root / "real-data-smoke-test"),
+            europe_pmc_queries=[
+                "\"optogenetic tools\"",
+                "\"optogenetic switch\"",
+                "AsLOV2 OR LOV2",
+                "CRY2 CIB1",
+                "PhyB PIF",
+                "\"optogenetic protein clustering\"",
+                "\"light-controlled gene expression\"",
+                "\"photoactivatable CRISPR\"",
+            ],
+            europe_pmc_pages=1,
+            europe_pmc_page_size=25,
+            pmc_fulltext_limit=10,
             openalex_queries=[
                 "\"optogenetic tools\"",
                 "\"optogenetic switch\"",

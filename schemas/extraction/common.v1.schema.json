@@ -24,6 +24,7 @@
         "title": { "type": "string", "minLength": 1 },
         "doi": { "type": "string" },
         "pmid": { "type": "string" },
+        "pmcid": { "type": "string" },
         "openalex_id": { "type": "string" },
         "semantic_scholar_id": { "type": "string" },
         "nct_id": { "type": "string" },
@@ -124,6 +125,35 @@
           "default": []
         },
         "evidence_text": { "type": "string" },
+        "useful_for": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "problem_solved": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "strengths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "limitations": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "implementation_constraints": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "facet_hints": {
+          "type": "object",
+          "additionalProperties": { "type": ["string", "number", "boolean"] }
+        },
         "external_ids": {
           "type": "object",
           "additionalProperties": { "type": ["string", "number", "boolean"] }

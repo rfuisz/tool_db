@@ -3,6 +3,7 @@ import "server-only";
 import seedBundle from "./seed-bundle.json";
 import { WORKFLOW_EXPLAINERS } from "./workflow-explainers";
 import type {
+  ApprovedItemEvidence,
   FirstPassEntityDetail,
   FirstPassEntitySummary,
   FirstPassItemDetail,
@@ -10,9 +11,15 @@ import type {
   FirstPassSourceDocument,
   FirstPassItemSummary,
   CitationRole,
+  ClaimMetric,
   GapDetail,
   GapSummary,
+  ItemClaim,
+  ItemComparison,
   ItemCitation,
+  ItemExplainer,
+  ItemFacet,
+  ItemProblemLink,
   ItemStatus,
   MaturityStage,
   Modality,
@@ -36,21 +43,61 @@ type BackendItemSummary = {
   status: ItemStatus;
   family?: string | null;
   summary?: string | null;
+  first_publication_year?: number | null;
   primary_input_modality?: string | null;
   primary_output_modality?: string | null;
 };
 
 type CitationCandidate = {
   citation_role?: CitationRole;
+  importance_rank?: number;
+  why_this_matters?: string;
+  source_document_id?: string;
   label?: string;
   status?: string;
+  source_type?: string;
+  publication_year?: number | null;
   url?: string;
   doi?: string;
+  pmid?: string | null;
+  is_retracted?: boolean;
 };
+
+type BackendClaimMetric = ClaimMetric;
+
+type BackendItemClaim = {
+  id: string;
+  claim_type: string;
+  claim_text_normalized: string;
+  polarity: ItemClaim["polarity"];
+  needs_review: boolean;
+  context?: Record<string, unknown>;
+  source_locator?: Record<string, unknown>;
+  metrics?: BackendClaimMetric[];
+  source_document: SourceDocument;
+};
+
+type BackendItemFacet = ItemFacet;
+type BackendItemExplainer = ItemExplainer;
+type BackendItemComparison = ItemComparison;
+type BackendItemProblemLink = ItemProblemLink;
+type BackendValidationObservation = Omit<
+  ValidationObservation,
+  "item_id" | "metrics"
+> & {
+  item_id?: string;
+  metrics?: ValidationObservation["metrics"];
+  source_locator?: Record<string, unknown>;
+  source_document?: SourceDocument | null;
+};
+
+type BackendReplicationSummary = ToolkitItem["replication_summary"];
+type BackendValidationRollup = ValidationRollup;
 
 type BackendItemDetail = BackendItemSummary & {
   maturity_stage?: MaturityStage | null;
   synonyms?: string[];
+  components?: string[];
   mechanisms?: string[];
   techniques?: string[];
   target_processes?: string[];
@@ -58,6 +105,15 @@ type BackendItemDetail = BackendItemSummary & {
   source_status?: Record<string, unknown>;
   citation_candidates?: CitationCandidate[];
   workflow_recommendations?: Array<Record<string, unknown>>;
+  claims?: BackendItemClaim[];
+  validation_rollup?: BackendValidationRollup | null;
+  validations?: BackendValidationObservation[];
+  replication_summary?: BackendReplicationSummary | null;
+  item_facets?: BackendItemFacet[];
+  explainers?: BackendItemExplainer[];
+  comparisons?: BackendItemComparison[];
+  problem_links?: BackendItemProblemLink[];
+  approval_evidence?: ApprovedItemEvidence | null;
   index_markdown: string;
   evidence_markdown: string;
   replication_markdown: string;
@@ -199,11 +255,35 @@ function coerceModality(value: string | null | undefined): Modality | null {
   return value as Modality;
 }
 
-function buildValidationRollup(
-  observations: ValidationObservation[],
-): ValidationRollup | null {
-  void observations;
-  return null;
+function normalizeItemType(
+  rawType: ToolkitItem["item_type"],
+  canonicalName: string,
+  summary: string | null | undefined,
+  synonyms: string[] | undefined,
+): ToolkitItem["item_type"] {
+  if (rawType !== "engineering_method") {
+    return rawType;
+  }
+
+  const text = [canonicalName, summary ?? "", ...(synonyms ?? [])]
+    .join(" ")
+    .toLowerCase();
+
+  const architectureHint =
+    /\b(system|circuit|construct|platform|module)\b/.test(text) &&
+    !/\b(method|methods|assay|protocol|workflow|algorithm|framework|analysis|optimization)\b/.test(
+      text,
+    );
+
+  if (!architectureHint) {
+    return rawType;
+  }
+
+  if (/\b(switch|split|dimerization|dimerisation|recruitment|inducible)\b/.test(text)) {
+    return "multi_component_switch";
+  }
+
+  return "construct_pattern";
 }
 
 function buildCitationDocument(
@@ -211,19 +291,19 @@ function buildCitationDocument(
   citation: CitationCandidate,
   index: number,
 ): SourceDocument {
-  const sourceType =
-    citation.citation_role === "database_reference"
-      ? "database_entry"
-      : "primary_paper";
   return {
-    id: `${itemSlug}-citation-doc-${index + 1}`,
-    source_type: sourceType,
+    id: citation.source_document_id ?? `${itemSlug}-citation-doc-${index + 1}`,
+    source_type:
+      citation.source_type ??
+      (citation.citation_role === "database_reference"
+        ? "database_entry"
+        : "primary_paper"),
     title: citation.label ?? `Citation ${index + 1}`,
     doi: citation.doi ?? null,
-    pmid: null,
-    publication_year: null,
+    pmid: citation.pmid ?? null,
+    publication_year: citation.publication_year ?? null,
     journal_or_source: citation.url ?? null,
-    is_retracted: false,
+    is_retracted: citation.is_retracted ?? false,
   };
 }
 
@@ -233,51 +313,103 @@ function mapCitationCandidates(
 ): ItemCitation[] {
   return (citations ?? []).map((citation, index) => ({
     id: `${itemSlug}-citation-${index + 1}`,
-    source_document_id: `${itemSlug}-citation-doc-${index + 1}`,
+    source_document_id:
+      citation.source_document_id ?? `${itemSlug}-citation-doc-${index + 1}`,
     citation_role: citation.citation_role ?? "foundational",
-    importance_rank: index + 1,
+    importance_rank: citation.importance_rank ?? index + 1,
     why_this_matters:
-      citation.status === "needs_curation"
+      citation.why_this_matters ??
+      (citation.status === "needs_curation"
         ? "Citation placeholder kept to show the next curator target for this dossier."
-        : "Citation promoted into the dossier from the current backend curation layer.",
+        : "Citation promoted into the dossier from the current backend curation layer."),
     document: buildCitationDocument(itemSlug, citation, index),
   }));
 }
 
-function mapBackendItem(detail: BackendItemDetail): ToolkitItem {
-  const validations: ValidationObservation[] = [];
+function mapValidationObservation(
+  itemId: string,
+  observation: BackendValidationObservation,
+): ValidationObservation {
   return {
-    id: `item_${detail.slug.replace(/-/g, "_")}`,
+    ...observation,
+    item_id: observation.item_id ?? itemId,
+    metrics: observation.metrics ?? [],
+    source_locator: observation.source_locator ?? {},
+    source_document: observation.source_document ?? null,
+  };
+}
+
+function mapItemClaim(claim: BackendItemClaim): ItemClaim {
+  return {
+    ...claim,
+    context: claim.context ?? {},
+    source_locator: claim.source_locator ?? {},
+    metrics: claim.metrics ?? [],
+  };
+}
+
+function mapBackendItem(detail: BackendItemDetail): ToolkitItem {
+  const itemId = `item_${detail.slug.replace(/-/g, "_")}`;
+  const validations = (detail.validations ?? []).map((observation) =>
+    mapValidationObservation(itemId, observation),
+  );
+  const synonyms = detail.synonyms ?? [];
+  return {
+    id: itemId,
     slug: detail.slug,
     canonical_name: detail.canonical_name,
-    item_type: detail.item_type,
+    item_type: normalizeItemType(
+      detail.item_type,
+      detail.canonical_name,
+      detail.summary,
+      synonyms,
+    ),
     family: detail.family ?? null,
     summary: detail.summary ?? null,
     status: detail.status,
     maturity_stage: detail.maturity_stage ?? "research",
-    first_publication_year: null,
+    first_publication_year: detail.first_publication_year ?? null,
     primary_input_modality: coerceModality(detail.primary_input_modality),
     primary_output_modality: coerceModality(detail.primary_output_modality),
+    components: detail.components ?? [],
     mechanisms: detail.mechanisms ?? [],
     techniques: detail.techniques ?? [],
     target_processes: detail.target_processes ?? [],
-    synonyms: detail.synonyms ?? [],
-    validation_rollup: buildValidationRollup(validations),
-    replication_summary: null,
+    synonyms,
+    validation_rollup: detail.validation_rollup ?? null,
+    replication_summary: detail.replication_summary ?? null,
     citations: mapCitationCandidates(detail.slug, detail.citation_candidates),
     validations,
+    claims: (detail.claims ?? []).map(mapItemClaim),
+    item_facets: detail.item_facets ?? [],
+    explainers: detail.explainers ?? [],
+    comparisons: detail.comparisons ?? [],
+    problem_links: detail.problem_links ?? [],
+    approval_evidence: detail.approval_evidence ?? null,
+    index_markdown: detail.index_markdown,
+    evidence_markdown: detail.evidence_markdown,
+    replication_markdown: detail.replication_markdown,
+    workflow_fit_markdown: detail.workflow_fit_markdown,
   };
 }
 
 function mapSeedItem(item: SeedBundleItem): ToolkitItem {
   const structured = item.structured;
+  const synonyms = (structured.synonyms as string[] | undefined) ?? [];
+  const canonicalName = String(structured.canonical_name ?? item.slug);
+  const summary = (structured.summary as string | null | undefined) ?? null;
   return {
     id: String(structured.id ?? `item_${item.slug.replace(/-/g, "_")}`),
     slug: String(structured.slug ?? item.slug),
-    canonical_name: String(structured.canonical_name ?? item.slug),
-    item_type: structured.item_type as ToolkitItem["item_type"],
+    canonical_name: canonicalName,
+    item_type: normalizeItemType(
+      structured.item_type as ToolkitItem["item_type"],
+      canonicalName,
+      summary,
+      synonyms,
+    ),
     family: (structured.family as string | null | undefined) ?? null,
-    summary: (structured.summary as string | null | undefined) ?? null,
+    summary,
     status: structured.status as ItemStatus,
     maturity_stage:
       (structured.maturity_stage as MaturityStage | undefined) ?? "research",
@@ -288,11 +420,12 @@ function mapSeedItem(item: SeedBundleItem): ToolkitItem {
     primary_output_modality: coerceModality(
       (structured.primary_output_modality as string | null | undefined) ?? null,
     ),
+    components: (structured.components as string[] | undefined) ?? [],
     mechanisms: (structured.mechanisms as string[] | undefined) ?? [],
     techniques: (structured.techniques as string[] | undefined) ?? [],
     target_processes:
       (structured.target_processes as string[] | undefined) ?? [],
-    synonyms: (structured.synonyms as string[] | undefined) ?? [],
+    synonyms,
     validation_rollup: null,
     replication_summary: null,
     citations: mapCitationCandidates(
@@ -300,6 +433,20 @@ function mapSeedItem(item: SeedBundleItem): ToolkitItem {
       (structured.citation_candidates as CitationCandidate[] | undefined) ?? [],
     ),
     validations: [],
+    claims: [],
+    item_facets: [],
+    explainers: [],
+    comparisons: [],
+    problem_links: [],
+    approval_evidence: null,
+    index_markdown:
+      (structured.index_markdown as string | null | undefined) ?? null,
+    evidence_markdown:
+      (structured.evidence_markdown as string | null | undefined) ?? null,
+    replication_markdown:
+      (structured.replication_markdown as string | null | undefined) ?? null,
+    workflow_fit_markdown:
+      (structured.workflow_fit_markdown as string | null | undefined) ?? null,
   };
 }
 
@@ -465,6 +612,15 @@ function normalizeFirstPassEntitySummary(
   };
 }
 
+function normalizeGapDetail(detail: BackendGapDetail): GapDetail {
+  return {
+    ...detail,
+    tags: detail.tags ?? [],
+    capabilities: detail.capabilities ?? [],
+    candidate_tools: detail.candidate_tools ?? [],
+  };
+}
+
 export async function getItems(): Promise<ToolkitItem[]> {
   try {
     const summaries =
@@ -513,13 +669,14 @@ export async function getWorkflows(): Promise<WorkflowTemplate[]> {
 export async function getGaps(): Promise<GapDetail[]> {
   try {
     const summaries = await fetchBackendJson<BackendGapSummary[]>("/api/v1/gaps");
-    return await Promise.all(
+    const details = await Promise.all(
       summaries
         .filter((summary) => summary.slug)
         .map((summary) =>
           fetchBackendJson<BackendGapDetail>(`/api/v1/gaps/${summary.slug}`),
         ),
     );
+    return details.map(normalizeGapDetail);
   } catch {
     return [];
   }

@@ -169,6 +169,7 @@ class PacketNormalizer:
                 "title": source_document.get("title"),
                 "doi": source_document.get("doi"),
                 "pmid": source_document.get("pmid"),
+                "pmcid": source_document.get("pmcid"),
                 "openalex_id": source_document.get("openalex_id"),
                 "semantic_scholar_id": source_document.get("semantic_scholar_id"),
                 "nct_id": source_document.get("nct_id"),
@@ -213,6 +214,14 @@ class PacketNormalizer:
                 "aliases": aliases,
                 "external_ids": entity.get("external_ids", {}),
                 "evidence_text": entity.get("evidence_text"),
+                "useful_for": _dedupe_strings(entity.get("useful_for", [])),
+                "problem_solved": _dedupe_strings(entity.get("problem_solved", [])),
+                "strengths": _dedupe_strings(entity.get("strengths", [])),
+                "limitations": _dedupe_strings(entity.get("limitations", [])),
+                "implementation_constraints": _dedupe_strings(
+                    entity.get("implementation_constraints", [])
+                ),
+                "facet_hints": self._normalize_facet_hints(entity.get("facet_hints")),
             }
         return normalized, rejected
 
@@ -424,3 +433,15 @@ class PacketNormalizer:
             "negative_or_mixed_follow_up": bool(replication_signals.get("negative_or_mixed_follow_up", False)),
             "practicality_penalties": _dedupe_strings(replication_signals.get("practicality_penalties", [])),
         }
+
+    @staticmethod
+    def _normalize_facet_hints(facet_hints: Optional[Dict[str, Any]]) -> Dict[str, str]:
+        if not isinstance(facet_hints, dict):
+            return {}
+        normalized: Dict[str, str] = {}
+        for key, value in facet_hints.items():
+            cleaned_key = str(key).strip()
+            cleaned_value = str(value).strip() if value is not None else ""
+            if cleaned_key and cleaned_value:
+                normalized[cleaned_key] = cleaned_value
+        return normalized

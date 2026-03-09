@@ -181,7 +181,7 @@ export interface WorkflowTemplate {
 `heterodimerization`, `oligomerization`, `conformational_uncaging`, `membrane_recruitment`, `photocleavage`, `dna_binding`, `rna_binding`, `degradation`, `translation_control`
 
 ### technique_families
-`computational_design`, `selection_enrichment`, `directed_evolution`, `sequence_verification`, `functional_assay`, `structural_characterization`, `delivery_optimization`
+`computational_design`, `selection_enrichment`, `directed_evolution`, `sequence_verification`, `functional_assay`, `structural_characterization`
 
 ### target_processes
 `transcription`, `translation`, `localization`, `degradation`, `signaling`, `editing`, `selection`, `manufacturing`, `diagnostic`

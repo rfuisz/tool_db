@@ -135,8 +135,39 @@
     "directed_evolution",
     "sequence_verification",
     "functional_assay",
-    "structural_characterization",
-    "delivery_optimization"
+    "structural_characterization"
+  ],
+  "item_role_facets": [
+    "actuator",
+    "sensor",
+    "regulator",
+    "reporter",
+    "delivery",
+    "builder"
+  ],
+  "switch_architecture_facets": [
+    "single_chain",
+    "multi_component",
+    "split",
+    "recruitment",
+    "uncaging",
+    "cleavage"
+  ],
+  "encoding_mode_facets": [
+    "genetically_encoded",
+    "externally_supplied",
+    "hybrid"
+  ],
+  "cofactor_dependency_facets": [
+    "requires_exogenous_cofactor",
+    "compatible_with_endogenous_cofactor",
+    "cofactor_requirement_unknown"
+  ],
+  "implementation_constraint_facets": [
+    "multi_component_delivery_burden",
+    "payload_burden",
+    "spectral_hardware_requirement",
+    "context_specific_validation"
   ],
   "target_processes": [
     "transcription",

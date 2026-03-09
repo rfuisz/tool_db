@@ -53,6 +53,7 @@ class RealExtractionArtifactBuilder:
         manifest_path: Path,
         output_dir: Path,
         gap_limit: int = 80,
+        europe_pmc_limit: int = 200,
         openalex_limit: int = 200,
         semantic_scholar_limit: int = 200,
     ) -> Dict[str, Any]:
@@ -66,6 +67,16 @@ class RealExtractionArtifactBuilder:
             resources_raw_path=Path(manifest["sources"]["gap_map"]["raw_paths"]["resources"]),
             output_dir=output_dir / "gap_map",
             limit=gap_limit,
+        )
+        europe_pmc_outputs = self._build_europe_pmc_packets_and_jobs(
+            raw_search_paths=[
+                Path(path)
+                for path in manifest["sources"].get("europe_pmc", {}).get("raw_paths", {}).values()
+            ],
+            pmc_raw_paths=manifest["sources"].get("pmc", {}).get("raw_paths", {}),
+            output_dir=output_dir / "europe_pmc",
+            limit=europe_pmc_limit,
+            seen_document_keys=seen_document_keys,
         )
         openalex_outputs = self._build_openalex_packets_and_jobs(
             raw_search_paths=[
@@ -104,6 +115,8 @@ class RealExtractionArtifactBuilder:
         result = {
             "artifact_type": "real_extraction_seed_v1",
             "gap_map_packet_count": len(gap_packets),
+            "europe_pmc_packet_count": len(europe_pmc_outputs["packets"]),
+            "europe_pmc_job_count": len(europe_pmc_outputs["jobs"]),
             "openalex_packet_count": len(openalex_outputs["packets"]),
             "openalex_job_count": len(openalex_outputs["jobs"]),
             "semantic_scholar_packet_count": len(semantic_scholar_outputs["packets"]),
@@ -111,6 +124,8 @@ class RealExtractionArtifactBuilder:
             "semantic_scholar_summary_count": len(semantic_scholar_summaries),
             "optobase_summary_count": len(optobase_summaries),
             "gap_map_packets": [str(path) for path in gap_packets],
+            "europe_pmc_packets": [str(path) for path in europe_pmc_outputs["packets"]],
+            "europe_pmc_jobs": [str(path) for path in europe_pmc_outputs["jobs"]],
             "openalex_packets": [str(path) for path in openalex_outputs["packets"]],
             "openalex_jobs": [str(path) for path in openalex_outputs["jobs"]],
             "semantic_scholar_packets": [str(path) for path in semantic_scholar_outputs["packets"]],
@@ -370,6 +385,104 @@ class RealExtractionArtifactBuilder:
 
         return {"packets": packet_paths, "jobs": job_paths}
 
+    def _build_europe_pmc_packets_and_jobs(
+        self,
+        raw_search_paths: List[Path],
+        pmc_raw_paths: Dict[str, str],
+        output_dir: Path,
+        limit: int,
+        seen_document_keys: Optional[set[str]] = None,
+    ) -> Dict[str, List[Path]]:
+        packets_dir = output_dir / "packets"
+        jobs_dir = output_dir / "jobs"
+        packets_dir.mkdir(parents=True, exist_ok=True)
+        jobs_dir.mkdir(parents=True, exist_ok=True)
+        self._clear_json_outputs(packets_dir)
+        self._clear_json_outputs(jobs_dir)
+
+        pmc_lookup = self._load_pmc_bioc_lookup(pmc_raw_paths)
+        seen_ids = set()
+        seen_document_keys = seen_document_keys if seen_document_keys is not None else set()
+        packet_paths: List[Path] = []
+        job_paths: List[Path] = []
+
+        for raw_path in raw_search_paths:
+            raw_wrapper = json.loads(raw_path.read_text())
+            for result in ((raw_wrapper.get("payload") or {}).get("resultList") or {}).get("result", []):
+                paper_id = str(result.get("id") or result.get("pmid") or result.get("doi") or "").strip()
+                if not paper_id or paper_id in seen_ids:
+                    continue
+                seen_ids.add(paper_id)
+                if len(packet_paths) >= limit:
+                    break
+
+                pmcid = str(result.get("pmcid") or "").strip() or None
+                doi = self._normalize_doi(result.get("doi"))
+                pmid = str(result.get("pmid") or "").strip() or None
+                title = result.get("title") or result.get("titleText") or paper_id
+                source_document = _compact_dict(
+                    {
+                        "source_type": "review" if self._is_europe_pmc_review(result) else "primary_paper",
+                        "title": title,
+                        "doi": doi,
+                        "pmid": pmid,
+                        "pmcid": pmcid,
+                        "publication_year": self._coerce_int(result.get("pubYear")),
+                        "journal_or_source": self._extract_europe_pmc_source_name(result),
+                        "abstract_text": result.get("abstractText"),
+                        "fulltext_license_status": "open_access" if result.get("isOpenAccess") == "Y" else None,
+                        "raw_payload_ref": str(raw_path),
+                    }
+                )
+                document_key = self._document_key_from_fields(
+                    title=title,
+                    doi=doi,
+                    pmid=pmid,
+                    provider_id=paper_id,
+                    provider_name="europe_pmc",
+                )
+                if document_key in seen_document_keys:
+                    continue
+                seen_document_keys.add(document_key)
+
+                pmc_bioc_payload = pmc_lookup.get((pmcid or "").strip().upper())
+                slug = _slugify(title)
+                packet_path, job_path = self._write_literature_packet_and_job(
+                    packets_dir=packets_dir,
+                    jobs_dir=jobs_dir,
+                    slug=slug,
+                    external_id=pmcid or pmid or doi or paper_id,
+                    source_document=source_document,
+                    abstract_text=result.get("abstractText") or "",
+                    is_review=source_document["source_type"] == "review",
+                    unresolved_detail="Prepared from Europe PMC search results for later LLM extraction.",
+                    input_context={
+                        "title": title,
+                        "abstract_text": result.get("abstractText"),
+                        "europe_pmc_metadata": {
+                            "id": result.get("id"),
+                            "source": result.get("source"),
+                            "pmid": pmid,
+                            "pmcid": pmcid,
+                            "doi": doi,
+                            "pubType": result.get("pubType"),
+                            "journalTitle": result.get("journalTitle"),
+                            "authorString": result.get("authorString"),
+                            "citedByCount": self._coerce_int(result.get("citedByCount")),
+                            "isOpenAccess": result.get("isOpenAccess"),
+                        },
+                        "pmc_bioc_preview_text": self._summarize_pmc_bioc_payload(pmc_bioc_payload),
+                        "pmc_bioc_available": pmc_bioc_payload is not None,
+                    },
+                )
+                packet_paths.append(packet_path)
+                job_paths.append(job_path)
+
+            if len(packet_paths) >= limit:
+                break
+
+        return {"packets": packet_paths, "jobs": job_paths}
+
     def _build_semantic_scholar_packets_and_jobs(
         self,
         raw_search_paths: List[Path],
@@ -480,6 +593,10 @@ class RealExtractionArtifactBuilder:
         return source.get("display_name")
 
     @staticmethod
+    def _extract_europe_pmc_source_name(result: Dict[str, Any]) -> Optional[str]:
+        return result.get("journalTitle") or result.get("journal") or result.get("source")
+
+    @staticmethod
     def _extract_semantic_scholar_source_name(result: Dict[str, Any]) -> Optional[str]:
         journal = result.get("journal") or {}
         if isinstance(journal, dict):
@@ -493,6 +610,53 @@ class RealExtractionArtifactBuilder:
     def _is_semantic_scholar_review(result: Dict[str, Any]) -> bool:
         publication_types = [str(value).strip().casefold() for value in (result.get("publicationTypes") or [])]
         return any("review" in value for value in publication_types)
+
+    @staticmethod
+    def _is_europe_pmc_review(result: Dict[str, Any]) -> bool:
+        pub_type = str(result.get("pubType") or "").casefold()
+        title = str(result.get("title") or "").casefold()
+        return "review" in pub_type or "review" in title
+
+    @staticmethod
+    def _load_pmc_bioc_lookup(raw_paths: Dict[str, str]) -> Dict[str, Dict[str, Any]]:
+        lookup: Dict[str, Dict[str, Any]] = {}
+        for pmcid, raw_path in raw_paths.items():
+            try:
+                raw_wrapper = json.loads(Path(raw_path).read_text())
+            except (OSError, json.JSONDecodeError):
+                continue
+            payload = raw_wrapper.get("payload")
+            if isinstance(payload, dict):
+                lookup[pmcid.strip().upper()] = payload
+        return lookup
+
+    @staticmethod
+    def _coerce_int(value: Any) -> Optional[int]:
+        try:
+            return int(value) if value not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _summarize_pmc_bioc_payload(payload: Optional[Dict[str, Any]], max_chars: int = 12000) -> Optional[str]:
+        if not payload:
+            return None
+        passages: List[str] = []
+        for document in payload.get("documents", []):
+            for passage in document.get("passages", []):
+                text = str(passage.get("text") or "").strip()
+                if text:
+                    passages.append(text)
+                if sum(len(chunk) for chunk in passages) >= max_chars:
+                    break
+            if sum(len(chunk) for chunk in passages) >= max_chars:
+                break
+        if not passages:
+            return None
+        joined = "\n\n".join(passages)
+        if len(joined) <= max_chars:
+            return joined
+        return joined[: max_chars - 20].rstrip() + "\n\n[truncated]"
 
     @staticmethod
     def _clear_json_outputs(directory: Path) -> None:

@@ -3,12 +3,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from tool_db_backend.config import Settings
+from tool_db_backend.errors import LoadPlanExecutionError
 from tool_db_backend.review_queue import ReviewQueueWriter
-
-
-class LoadPlanExecutionError(RuntimeError):
-    pass
-
 
 def _strip_nul_bytes(value: Any) -> Any:
     if isinstance(value, str):
@@ -176,6 +172,7 @@ class PostgresLoadPlanExecutor:
     def _get_or_create_source_document(self, cursor: Any, source_document: Dict[str, Any]) -> Any:
         query_specs = [
             ("doi", "select id from source_document where doi = %s"),
+            ("pmcid", "select id from source_document where pmcid = %s"),
             ("openalex_id", "select id from source_document where openalex_id = %s"),
             ("semantic_scholar_id", "select id from source_document where semantic_scholar_id = %s"),
             ("nct_id", "select id from source_document where nct_id = %s"),
@@ -207,11 +204,11 @@ class PostgresLoadPlanExecutor:
         cursor.execute(
             """
             insert into source_document (
-              source_type, title, doi, pmid, openalex_id, semantic_scholar_id, nct_id,
+              source_type, title, doi, pmid, pmcid, openalex_id, semantic_scholar_id, nct_id,
               publication_year, journal_or_source, abstract_text, fulltext_license_status,
               is_retracted, retraction_metadata, raw_payload_ref
             )
-            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
             returning id
             """,
             (
@@ -219,6 +216,7 @@ class PostgresLoadPlanExecutor:
                 source_document.get("title"),
                 source_document.get("doi"),
                 source_document.get("pmid"),
+                source_document.get("pmcid"),
                 source_document.get("openalex_id"),
                 source_document.get("semantic_scholar_id"),
                 source_document.get("nct_id"),
@@ -243,6 +241,7 @@ class PostgresLoadPlanExecutor:
               title = coalesce(%s, title),
               doi = coalesce(%s, doi),
               pmid = coalesce(%s, pmid),
+              pmcid = coalesce(%s, pmcid),
               openalex_id = coalesce(%s, openalex_id),
               semantic_scholar_id = coalesce(%s, semantic_scholar_id),
               nct_id = coalesce(%s, nct_id),
@@ -263,6 +262,7 @@ class PostgresLoadPlanExecutor:
                 source_document.get("title"),
                 source_document.get("doi"),
                 source_document.get("pmid"),
+                source_document.get("pmcid"),
                 source_document.get("openalex_id"),
                 source_document.get("semantic_scholar_id"),
                 source_document.get("nct_id"),
@@ -322,6 +322,11 @@ class PostgresLoadPlanExecutor:
                     slug_to_item_id[target_slug],
                     action.get("target_processes", []),
                 )
+                self._upsert_item_facets(
+                    cursor,
+                    slug_to_item_id[target_slug],
+                    action.get("item_facets", []),
+                )
                 continue
             if kind == "attach_evidence_to_existing_item":
                 target_slug = action["target_slug"]
@@ -331,6 +336,26 @@ class PostgresLoadPlanExecutor:
                     slug_to_item_id[target_slug],
                     action.get("aliases", []),
                     source_document_id,
+                )
+                self._upsert_item_mechanisms(
+                    cursor,
+                    slug_to_item_id[target_slug],
+                    action.get("mechanisms", []),
+                )
+                self._upsert_item_techniques(
+                    cursor,
+                    slug_to_item_id[target_slug],
+                    action.get("techniques", []),
+                )
+                self._upsert_item_target_processes(
+                    cursor,
+                    slug_to_item_id[target_slug],
+                    action.get("target_processes", []),
+                )
+                self._upsert_item_facets(
+                    cursor,
+                    slug_to_item_id[target_slug],
+                    action.get("item_facets", []),
                 )
                 continue
 
@@ -349,9 +374,10 @@ class PostgresLoadPlanExecutor:
             cursor.execute(
                 """
                 insert into extracted_claim (
-                  source_document_id, extraction_run_id, claim_type, claim_text_normalized, polarity, needs_review
+                  source_document_id, extraction_run_id, claim_type, claim_text_normalized, polarity, needs_review,
+                  context, source_locator, unresolved_ambiguities
                 )
-                values (%s, %s, %s, %s, %s, %s)
+                values (%s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb)
                 returning id
                 """,
                 (
@@ -361,6 +387,9 @@ class PostgresLoadPlanExecutor:
                     action["claim_text_normalized"],
                     action["polarity"],
                     True,
+                    json.dumps(action.get("context") or {}),
+                    json.dumps(action.get("source_locator") or {}),
+                    json.dumps(action.get("unresolved_ambiguities") or []),
                 ),
             )
             claim_id = cursor.fetchone()[0]
@@ -440,9 +469,9 @@ class PostgresLoadPlanExecutor:
                       item_id, source_document_id, construct_name, observation_type,
                       biological_system_level, species, strain_or_model, cell_type, tissue,
                       subcellular_target, delivery_mode, cargo_or_effector, success_outcome,
-                      assay_description, independent_lab_cluster_id, institution_cluster_id, notes
+                      assay_description, independent_lab_cluster_id, institution_cluster_id, notes, source_locator
                     )
-                    values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
                     returning id
                     """,
                     (
@@ -463,6 +492,7 @@ class PostgresLoadPlanExecutor:
                         action.get("independent_lab_cluster_id"),
                         action.get("institution_cluster_id"),
                         notes,
+                        json.dumps(action.get("source_locator") or {}),
                     ),
                 )
                 validation_observation_id = cursor.fetchone()[0]
@@ -722,6 +752,23 @@ class PostgresLoadPlanExecutor:
                 )
                 """,
                 (item_id, target_process, item_id, target_process),
+            )
+
+    @staticmethod
+    def _upsert_item_facets(cursor: Any, item_id: Any, item_facets: List[Dict[str, Any]]) -> None:
+        for facet in item_facets:
+            facet_name = str(facet.get("facet_name") or "").strip()
+            facet_value = str(facet.get("facet_value") or "").strip()
+            if not facet_name or not facet_value:
+                continue
+            cursor.execute(
+                """
+                insert into item_facet (item_id, facet_name, facet_value, evidence_note)
+                values (%s, %s, %s, %s)
+                on conflict (item_id, facet_name, facet_value) do update
+                set evidence_note = coalesce(item_facet.evidence_note, excluded.evidence_note)
+                """,
+                (item_id, facet_name, facet_value, facet.get("evidence_note")),
             )
 
     @staticmethod

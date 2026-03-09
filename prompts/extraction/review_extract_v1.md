@@ -21,6 +21,18 @@ Convert one review or synthesis source into a `review_extract_v1` packet.
 - If a broad class or topic is useful context but is not a collection-worthy item, emit it as `candidate_type: "concept_label"` instead of `toolkit_item`.
 - Do not emit toolkit-item candidates from concept metadata alone unless the same entity is also supported by the title or abstract text.
 - If you set `item_type`, use only canonical-safe values such as `protein_domain`, `multi_component_switch`, `rna_element`, `construct_pattern`, `engineering_method`, `assay_method`, `computation_method`, or `delivery_harness`; otherwise omit `item_type`.
+- When choosing `item_type`, prefer the thing itself over the fact that it was engineered:
+  - use method types for named practices, protocols, algorithms, or assays
+  - use `multi_component_switch` or `construct_pattern` for named engineered systems, circuits, modules, or constructs
+  - use `delivery_harness` for named delivery strategies or vehicles such as AAV, LNP, viral vectors, or electroporation-based deployment packages
+- Do not label a named engineered system as `engineering_method` just because the review discusses engineering it.
+- For every emitted `toolkit_item`, explicitly ask yourself:
+  - how is this useful?
+  - what problem does it solve?
+  - what are the main implementation constraints or prerequisites?
+  - what strengths or weaknesses relative to nearby alternatives are directly stated in the review?
+- If the title or abstract supports those answers, store them on the entity candidate using `useful_for`, `problem_solved`, `strengths`, `limitations`, `implementation_constraints`, and `facet_hints`.
+- Keep those fields short, source-backed, and empty rather than speculative when the evidence is thin.
 - Set `citation_role_suggestion` only when the source clearly fits an existing canonical citation role such as `foundational`, `best_review`, `independent_validation`, `benchmark`, `protocol`, `therapeutic`, `negative_result`, `structural`, or `database_reference`; otherwise omit it.
 
 ## Output Contract

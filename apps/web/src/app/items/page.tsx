@@ -35,6 +35,7 @@ export default async function ItemsPage({
 
   return (
     <ItemsBrowseClient
+      allItems={items}
       initialItems={initialResult.results}
       initialTotal={initialResult.total}
       initialFilters={initialFilters}

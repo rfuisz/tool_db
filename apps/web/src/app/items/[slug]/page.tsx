@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getItemBySlug } from "@/lib/backend-data";
+import { getItemTaxonomyPosition } from "@/lib/item-hierarchy";
 import { renderInlineTitle, stripInlineTitleMarkup } from "@/lib/render-inline-title";
+import { isSupportedTechnique } from "@/lib/vocabularies";
 import { ScoreBreakdown } from "@/components/score-bar";
 import { ValidationMatrix } from "@/components/validation-dots";
 import { CitationList } from "@/components/citation-list";
@@ -14,6 +16,7 @@ import {
   TechniqueTag,
 } from "@/components/detail-tooltips";
 import { ObservationRow } from "@/components/observation-row";
+import { PaperLink } from "@/components/paper-link";
 
 function Section({
   title,
@@ -41,13 +44,24 @@ export default async function ItemDetailPage({
 
   const rep = item.replication_summary;
   const plainTitle = stripInlineTitleMarkup(item.canonical_name);
+  const explainers = item.explainers ?? [];
+  const claims = item.claims ?? [];
+  const itemFacets = item.item_facets ?? [];
+  const comparisons = item.comparisons ?? [];
+  const problemLinks = item.problem_links ?? [];
+  const explainerByKind = new Map(
+    explainers.map((explainer) => [explainer.explainer_kind, explainer]),
+  );
+  const taxonomyPosition = getItemTaxonomyPosition(item.item_type);
+  const visibleTechniques = item.techniques.filter(isSupportedTechnique);
+  const approvalEvidence = item.approval_evidence;
 
   return (
     <div>
       {/* Breadcrumb */}
       <p className="mb-8 font-ui text-sm text-ink-muted">
         <Link href="/items" className="hover:text-accent">
-          Collection
+          Toolkit
         </Link>
         <span className="mx-2 text-ink-faint">/</span>
         <span className="text-ink-secondary">{plainTitle}</span>
@@ -90,6 +104,11 @@ export default async function ItemDetailPage({
             ))}
           </p>
         )}
+        <p className="mt-3 font-ui text-sm text-ink-secondary">
+          Taxonomy: {taxonomyPosition.axisTitle} / {taxonomyPosition.layerTitle}.
+          Workflows sit above the mechanism and technique branches rather than
+          replacing them.
+        </p>
       </header>
 
       <div className="grid gap-16 lg:grid-cols-[1fr_280px]">
@@ -102,49 +121,163 @@ export default async function ItemDetailPage({
             </p>
           </Section>
 
-          {/* Mechanism, Technique & Modality */}
-          <Section title="Mechanism, Technique & Modality">
-            <div className="grid gap-6 font-ui text-sm sm:grid-cols-3">
-              {item.mechanisms.length > 0 && (
-                <div>
-                  <p className="mb-1 text-xs text-ink-muted">Mechanisms</p>
-                  {item.mechanisms.map((m) => (
-                    <MechanismTag key={m} mechanism={m} />
-                  ))}
-                </div>
-              )}
-              {item.techniques.length > 0 && (
-                <div>
-                  <p className="mb-1 text-xs text-ink-muted">Techniques</p>
-                  {item.techniques.map((t) => (
-                    <TechniqueTag key={t} technique={t} />
-                  ))}
-                </div>
-              )}
+          {(explainerByKind.get("usefulness") ||
+            explainerByKind.get("problem_solved") ||
+            problemLinks.length > 0) && (
+            <Section title="Usefulness & Problems">
+              <div className="space-y-5">
+                {explainerByKind.get("usefulness") && (
+                  <div>
+                    <p className="mb-1 text-xs uppercase tracking-wide text-ink-muted">
+                      Why this is useful
+                    </p>
+                    <p className="text-sm leading-relaxed text-ink-secondary">
+                      {explainerByKind.get("usefulness")?.body}
+                    </p>
+                  </div>
+                )}
+                {explainerByKind.get("problem_solved") && (
+                  <div>
+                    <p className="mb-1 text-xs uppercase tracking-wide text-ink-muted">
+                      Problem solved
+                    </p>
+                    <p className="text-sm leading-relaxed text-ink-secondary">
+                      {explainerByKind.get("problem_solved")?.body}
+                    </p>
+                  </div>
+                )}
+                {problemLinks.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs uppercase tracking-wide text-ink-muted">
+                      Problem links
+                    </p>
+                    <div className="space-y-3">
+                      {problemLinks.map((problem) => (
+                        <div
+                          key={`${problem.source_kind}-${problem.problem_label}`}
+                          className="rounded border border-edge px-4 py-3"
+                        >
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <p className="font-ui text-sm font-medium text-ink">
+                              {problem.problem_label}
+                            </p>
+                            <span className="text-xs text-ink-faint">
+                              {problem.source_kind === "gap_map"
+                                ? "Gap map"
+                                : "Derived"}
+                            </span>
+                            {problem.gap_slug && (
+                              <Link
+                                href={`/gaps/${problem.gap_slug}`}
+                                className="text-xs text-accent hover:underline"
+                              >
+                                View gap
+                              </Link>
+                            )}
+                          </div>
+                          <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
+                            {problem.why_this_item_helps}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Section>
+          )}
+
+          {/* Taxonomy, mechanism, technique, modality */}
+          <Section title="Taxonomy & Function">
+            <div className="grid gap-6 font-ui text-sm sm:grid-cols-2 lg:grid-cols-4">
               <div>
-                <p className="mb-1 text-xs text-ink-muted">Target processes</p>
-                {item.target_processes.map((p) => (
-                  <span key={p} className="mr-2 text-ink-secondary">
-                    {p}
-                  </span>
-                ))}
+                <p className="mb-1 text-xs text-ink-muted">Primary hierarchy</p>
+                <p className="text-ink">{taxonomyPosition.axisTitle}</p>
+                <p className="mt-1 text-ink-secondary">
+                  {taxonomyPosition.layerTitle}: {taxonomyPosition.description}
+                </p>
               </div>
               <div>
-                {item.primary_input_modality && (
-                  <ModalityLabel
-                    modality={item.primary_input_modality}
-                    direction="Input"
-                  />
+                <p className="mb-1 text-xs text-ink-muted">Mechanisms</p>
+                {item.mechanisms.length > 0 ? (
+                  item.mechanisms.map((m) => (
+                    <MechanismTag key={m} mechanism={m} />
+                  ))
+                ) : (
+                  <p className="text-ink-muted">No mechanism tags yet.</p>
                 )}
-                {item.primary_output_modality && (
-                  <ModalityLabel
-                    modality={item.primary_output_modality}
-                    direction="Output"
-                  />
+              </div>
+              <div>
+                <p className="mb-1 text-xs text-ink-muted">Techniques</p>
+                {visibleTechniques.length > 0 ? (
+                  visibleTechniques.map((t) => (
+                    <TechniqueTag key={t} technique={t} />
+                  ))
+                ) : (
+                  <p className="text-ink-muted">No technique tags yet.</p>
                 )}
+              </div>
+              <div>
+                <p className="mb-1 text-xs text-ink-muted">Target processes</p>
+                {item.target_processes.length > 0 ? (
+                  item.target_processes.map((p) => (
+                    <span key={p} className="mr-2 text-ink-secondary">
+                      {p}
+                    </span>
+                  ))
+                ) : (
+                  <p className="text-ink-muted">No target processes tagged yet.</p>
+                )}
+                <div className="mt-3 space-y-1">
+                  {item.primary_input_modality && (
+                    <ModalityLabel
+                      modality={item.primary_input_modality}
+                      direction="Input"
+                    />
+                  )}
+                  {item.primary_output_modality && (
+                    <ModalityLabel
+                      modality={item.primary_output_modality}
+                      direction="Output"
+                    />
+                  )}
+                </div>
               </div>
             </div>
           </Section>
+
+          {(explainerByKind.get("implementation_constraints") ||
+            explainerByKind.get("limitations") ||
+            itemFacets.length > 0) && (
+            <Section title="Implementation Constraints">
+              <div className="space-y-5">
+                {itemFacets.length > 0 && (
+                  <div className="flex flex-wrap gap-2 font-ui text-xs">
+                    {itemFacets.map((facet) => (
+                      <span
+                        key={`${facet.facet_name}-${facet.facet_value}`}
+                        className="rounded bg-surface-alt px-2 py-1 text-ink-secondary"
+                        title={facet.evidence_note ?? undefined}
+                      >
+                        {facet.facet_name.replace(/_/g, " ")}:{" "}
+                        {facet.facet_value.replace(/_/g, " ")}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {explainerByKind.get("implementation_constraints") && (
+                  <p className="text-sm leading-relaxed text-ink-secondary">
+                    {explainerByKind.get("implementation_constraints")?.body}
+                  </p>
+                )}
+                {explainerByKind.get("limitations") && (
+                  <p className="text-sm leading-relaxed text-ink-secondary">
+                    {explainerByKind.get("limitations")?.body}
+                  </p>
+                )}
+              </div>
+            </Section>
+          )}
 
           {/* Validation Matrix */}
           {item.validation_rollup && (
@@ -159,6 +292,216 @@ export default async function ItemDetailPage({
               <div>
                 {item.validations.map((obs) => (
                   <ObservationRow key={obs.id} obs={obs} />
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {claims.length > 0 && (
+            <Section title="Claims & Evidence">
+              <div className="space-y-4">
+                {claims.map((claim) => (
+                  <article
+                    key={claim.id}
+                    className="rounded border border-edge px-4 py-4"
+                  >
+                    <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-ui text-xs text-ink-muted">
+                      <span className="font-semibold text-ink-secondary">
+                        {claim.claim_type.replace(/_/g, " ")}
+                      </span>
+                      <span
+                        className={
+                          claim.polarity === "supports"
+                            ? "text-valid"
+                            : claim.polarity === "contradicts"
+                              ? "text-danger"
+                              : "text-ink-muted"
+                        }
+                      >
+                        {claim.polarity}
+                      </span>
+                      {claim.needs_review && (
+                        <span className="text-caution">needs review</span>
+                      )}
+                    </div>
+                    <p className="text-sm leading-relaxed text-ink">
+                      {claim.claim_text_normalized}
+                    </p>
+                    {typeof claim.source_locator?.quoted_text === "string" &&
+                      claim.source_locator.quoted_text && (
+                        <blockquote className="mt-3 border-l-2 border-edge pl-4 text-sm italic text-ink-secondary">
+                          {claim.source_locator.quoted_text}
+                        </blockquote>
+                      )}
+                    {claim.metrics.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-data text-xs text-ink-secondary">
+                        {claim.metrics.map((metric, index) => (
+                          <span key={`${claim.id}-metric-${index}`}>
+                            {metric.metric_name.replace(/_/g, " ")}
+                            {metric.value_num !== null
+                              ? ` ${metric.value_num}`
+                              : metric.value_text
+                                ? ` ${metric.value_text}`
+                                : ""}
+                            {metric.unit ? ` ${metric.unit}` : ""}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <p className="mt-3 font-ui text-xs text-ink-muted">
+                      Source:{" "}
+                      <PaperLink
+                        document={claim.source_document}
+                        className="font-medium text-ink-secondary"
+                      >
+                        {claim.source_document.title}
+                      </PaperLink>
+                    </p>
+                  </article>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {approvalEvidence &&
+            (approvalEvidence.evidence_snippets.length > 0 ||
+              approvalEvidence.claims.length > 0) && (
+              <Section title="Approval Evidence">
+                <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 font-ui text-xs text-ink-muted">
+                  <span>
+                    {approvalEvidence.source_document_count} source
+                    {approvalEvidence.source_document_count === 1 ? "" : "s"}
+                  </span>
+                  <span>
+                    {approvalEvidence.claim_count} linked approval claim
+                    {approvalEvidence.claim_count === 1 ? "" : "s"}
+                  </span>
+                  {approvalEvidence.matched_first_pass_slugs.length > 0 && (
+                    <span>
+                      first-pass slug
+                      {approvalEvidence.matched_first_pass_slugs.length === 1
+                        ? ""
+                        : "s"}{" "}
+                      {approvalEvidence.matched_first_pass_slugs.join(", ")}
+                    </span>
+                  )}
+                </div>
+
+                {approvalEvidence.evidence_snippets.length > 0 && (
+                  <div className="mb-6 space-y-3">
+                    {approvalEvidence.evidence_snippets.map((snippet, index) => (
+                      <article
+                        key={`${snippet.source_document.id}-${index}`}
+                        className="rounded border border-edge px-4 py-4"
+                      >
+                        <blockquote className="border-l-2 border-accent/30 pl-4 text-sm leading-relaxed text-ink-secondary">
+                          {snippet.text}
+                        </blockquote>
+                        <p className="mt-3 font-ui text-xs text-ink-muted">
+                          Source:{" "}
+                          <PaperLink
+                            document={snippet.source_document}
+                            className="font-medium text-ink-secondary"
+                          >
+                            {snippet.source_document.title}
+                          </PaperLink>
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                )}
+
+                {approvalEvidence.claims.length > 0 && (
+                  <div className="space-y-4">
+                    {approvalEvidence.claims.map((claim) => (
+                      <article
+                        key={claim.id}
+                        className="rounded border border-edge px-4 py-4"
+                      >
+                        <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-ui text-xs text-ink-muted">
+                          <span className="font-semibold text-ink-secondary">
+                            {claim.claim_type.replace(/_/g, " ")}
+                          </span>
+                          <span
+                            className={
+                              claim.polarity === "supports"
+                                ? "text-valid"
+                                : claim.polarity === "contradicts"
+                                  ? "text-danger"
+                                  : "text-ink-muted"
+                            }
+                          >
+                            {claim.polarity}
+                          </span>
+                        </div>
+                        <p className="text-sm leading-relaxed text-ink">
+                          {claim.claim_text_normalized}
+                        </p>
+                        {typeof claim.source_locator?.quoted_text === "string" &&
+                          claim.source_locator.quoted_text && (
+                            <blockquote className="mt-3 border-l-2 border-edge pl-4 text-sm italic text-ink-secondary">
+                              {claim.source_locator.quoted_text}
+                            </blockquote>
+                          )}
+                        <p className="mt-3 font-ui text-xs text-ink-muted">
+                          Source:{" "}
+                          <PaperLink
+                            document={claim.source_document}
+                            className="font-medium text-ink-secondary"
+                          >
+                            {claim.source_document.title}
+                          </PaperLink>
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </Section>
+            )}
+
+          {(explainerByKind.get("strengths") || comparisons.length > 0) && (
+            <Section title="Comparisons">
+              <div className="space-y-5">
+                {explainerByKind.get("strengths") && (
+                  <p className="text-sm leading-relaxed text-ink-secondary">
+                    {explainerByKind.get("strengths")?.body}
+                  </p>
+                )}
+                {comparisons.map((comparison) => (
+                  <div
+                    key={`${comparison.related_item_slug}-${comparison.relation_type}`}
+                    className="rounded border border-edge px-4 py-4"
+                  >
+                    <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <p className="font-ui text-sm font-medium text-ink">
+                        Compared with{" "}
+                        <Link
+                          href={`/items/${comparison.related_item_slug}`}
+                          className="text-accent hover:underline"
+                        >
+                          {renderInlineTitle(comparison.related_item_name)}
+                        </Link>
+                      </p>
+                    </div>
+                    <p className="text-sm leading-relaxed text-ink-secondary">
+                      {comparison.summary}
+                    </p>
+                    {comparison.overlap_reasons.length > 0 && (
+                      <p className="mt-2 font-ui text-xs text-ink-muted">
+                        Shared frame: {comparison.overlap_reasons.join("; ")}
+                      </p>
+                    )}
+                    {comparison.strengths.length > 0 && (
+                      <p className="mt-2 text-sm text-ink-secondary">
+                        Strengths here: {comparison.strengths.join("; ")}.
+                      </p>
+                    )}
+                    {comparison.weaknesses.length > 0 && (
+                      <p className="mt-1 text-sm text-ink-muted">
+                        Relative tradeoffs: {comparison.weaknesses.join("; ")}.
+                      </p>
+                    )}
+                  </div>
                 ))}
               </div>
             </Section>
@@ -252,6 +595,14 @@ export default async function ItemDetailPage({
                     </p>
                   )}
                 </dl>
+                {rep.explanation &&
+                  Object.keys(rep.explanation).length > 0 && (
+                    <p className="mt-3 text-xs leading-relaxed text-ink-muted">
+                      Computed from canonical claims, citations, validation
+                      observations, and practical penalties in the current
+                      database snapshot.
+                    </p>
+                  )}
               </div>
 
               {/* Practicality Penalties */}

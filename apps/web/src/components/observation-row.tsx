@@ -9,6 +9,7 @@ import {
   SUCCESS_OUTCOME_DESCRIPTIONS,
   METRIC_DESCRIPTIONS,
 } from "@/lib/explanations";
+import { PaperLink } from "./paper-link";
 
 export function ObservationRow({ obs }: { obs: ValidationObservation }) {
   const outcomeColor =
@@ -46,7 +47,9 @@ export function ObservationRow({ obs }: { obs: ValidationObservation }) {
           </span>
         </Tooltip>
         {obs.species && <span className="italic text-ink-muted">{obs.species}</span>}
+        {obs.strain_or_model && <span className="text-ink-muted">{obs.strain_or_model}</span>}
         {obs.cell_type && <span className="text-ink-muted">{obs.cell_type}</span>}
+        {obs.tissue && <span className="text-ink-muted">{obs.tissue}</span>}
         {obs.independent_lab_cluster_id && (
           <Tooltip content="This observation comes from a lab unaffiliated with the original authors" position="bottom">
             <span className="cursor-help text-brand">independent</span>
@@ -62,6 +65,17 @@ export function ObservationRow({ obs }: { obs: ValidationObservation }) {
 
       {obs.assay_description && (
         <p className="text-sm text-ink-muted">{obs.assay_description}</p>
+      )}
+
+      {obs.notes && <p className="mt-1 text-sm text-ink-muted">{obs.notes}</p>}
+
+      {obs.source_document && (
+        <p className="mt-1 font-ui text-xs text-ink-muted">
+          Source:{" "}
+          <PaperLink document={obs.source_document} className="font-medium text-ink-secondary">
+            {obs.source_document.title}
+          </PaperLink>
+        </p>
       )}
 
       {obs.metrics.length > 0 && (

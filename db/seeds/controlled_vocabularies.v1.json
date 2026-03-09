@@ -154,8 +154,7 @@
     "directed_evolution",
     "sequence_verification",
     "functional_assay",
-    "structural_characterization",
-    "delivery_optimization"
+    "structural_characterization"
   ],
   "target_processes": [
     "transcription",

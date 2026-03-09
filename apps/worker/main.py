@@ -13,12 +13,16 @@ if str(SRC) not in sys.path:
 
 from tool_db_backend.config import get_settings
 from tool_db_backend.clients.clinicaltrials import ClinicalTrialsClient
+from tool_db_backend.clients.europe_pmc import EuropePMCClient
 from tool_db_backend.clients.gap_map import GapMapClient
 from tool_db_backend.clients.openalex import OpenAlexClient
 from tool_db_backend.clients.optobase import OptoBaseClient
+from tool_db_backend.clients.pmc import PMCClient
 from tool_db_backend.clients.semantic_scholar import SemanticScholarClient
 from tool_db_backend.db_migrations import MigrationRunner
 from tool_db_backend.first_pass_loader import FirstPassExtractionLoader
+from tool_db_backend.gap_linking import GapLinkMaterializer
+from tool_db_backend.item_materialization import ItemMaterializer
 from tool_db_backend.llm_extractor import LLMExtractionError, LLMExtractionRunner
 from tool_db_backend.load_plan import LoadPlanBuilder
 from tool_db_backend.normalization import PacketNormalizer
@@ -98,6 +102,26 @@ def fetch_openalex_work(work_id: str, output_path: Optional[str] = None) -> int:
         client.close()
 
     return _write_payload("openalex", "work", work_id, payload, output_path)
+
+
+def fetch_europepmc_search(query: str, page_size: int = 25, page: int = 1, output_path: Optional[str] = None) -> int:
+    client = EuropePMCClient(get_settings())
+    try:
+        payload = client.search(query=query, page_size=page_size, page=page, result_type="core")
+    finally:
+        client.close()
+
+    return _write_payload("europe_pmc", "search", f"{query}-page-{page}", payload, output_path)
+
+
+def fetch_pmc_fulltext(pmcid: str, output_path: Optional[str] = None) -> int:
+    client = PMCClient(get_settings())
+    try:
+        payload = client.fetch_bioc_fulltext(pmcid)
+    finally:
+        client.close()
+
+    return _write_payload("pmc", "bioc_fulltext", pmcid, payload, output_path)
 
 
 def fetch_semantic_scholar_paper(
@@ -249,6 +273,7 @@ def populate_local_db(
     migration_runner = MigrationRunner(settings)
     seed_loader = SeedLoader(settings)
     first_pass_loader = FirstPassExtractionLoader(settings)
+    materializer = ItemMaterializer(settings)
 
     applied_migrations = migration_runner.apply_all()
     seed_result = seed_loader.load_bundle_file(Path("db/seeds/knowledge_seed_bundle.v1.json"))
@@ -271,6 +296,7 @@ def populate_local_db(
         glob_pattern="*.json",
         manifest_path=settings.pipeline_artifact_root / "populate-local-db" / "first-pass-report.json",
     )
+    materialization_report = materializer.refresh()
 
     report = {
         "applied_migrations": applied_migrations,
@@ -279,6 +305,7 @@ def populate_local_db(
         "gap_map_status": gap_status,
         "first_pass_selected_packet_count": first_pass_report["selected_packet_count"],
         "first_pass_failed_packet_count": len(first_pass_report["failed_packets"]),
+        "materialization_report": materialization_report,
     }
     if manifest_path:
         path = Path(manifest_path)
@@ -342,6 +369,39 @@ def run_migrations() -> int:
     return 0
 
 
+def materialize_item_details(item_slugs: Optional[List[str]] = None) -> int:
+    materializer = ItemMaterializer(get_settings())
+    result = materializer.refresh(item_slugs=item_slugs or None, include_related=True)
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+def materialize_gap_links(
+    gap_slugs: Optional[List[str]] = None,
+    item_slugs: Optional[List[str]] = None,
+    include_item_types: Optional[List[str]] = None,
+    exclude_item_types: Optional[List[str]] = None,
+    max_candidates_per_gap: int = 12,
+    max_links_per_gap: int = 6,
+    refresh_item_details: bool = True,
+) -> int:
+    materializer = GapLinkMaterializer(get_settings())
+    try:
+        result = materializer.refresh(
+            gap_slugs=gap_slugs or None,
+            item_slugs=item_slugs or None,
+            include_item_types=include_item_types or None,
+            exclude_item_types=exclude_item_types or None,
+            max_candidates_per_gap=max_candidates_per_gap,
+            max_links_per_gap=max_links_per_gap,
+            refresh_item_details=refresh_item_details,
+        )
+    finally:
+        materializer.close()
+    print(json.dumps(result, indent=2))
+    return 0
+
+
 def ingest_packet(
     packet_kind: str,
     packet_path: str,
@@ -382,6 +442,9 @@ def harvest_real_data(
     artifact_dir: Optional[str] = None,
     profile: str = "broad",
     seed_query_limit: int = 24,
+    europe_pmc_pages: int = 3,
+    europe_pmc_page_size: int = 25,
+    pmc_fulltext_limit: int = 50,
     openalex_pages: int = 3,
     openalex_per_page: int = 50,
     semantic_scholar_pages: int = 3,
@@ -403,6 +466,10 @@ def harvest_real_data(
     try:
         result = harvester.run(
             artifact_dir=Path(artifact_dir) if artifact_dir else None,
+            europe_pmc_queries=query_sets["europe_pmc"],
+            europe_pmc_pages=europe_pmc_pages,
+            europe_pmc_page_size=europe_pmc_page_size,
+            pmc_fulltext_limit=pmc_fulltext_limit,
             openalex_queries=query_sets["openalex"],
             openalex_pages=openalex_pages,
             openalex_per_page=openalex_per_page,
@@ -421,6 +488,7 @@ def build_real_extraction_artifacts(
     manifest_path: str,
     output_dir: str,
     gap_limit: int = 80,
+    europe_pmc_limit: int = 200,
     openalex_limit: int = 200,
     semantic_scholar_limit: int = 200,
 ) -> int:
@@ -430,6 +498,7 @@ def build_real_extraction_artifacts(
             manifest_path=Path(manifest_path),
             output_dir=Path(output_dir),
             gap_limit=gap_limit,
+            europe_pmc_limit=europe_pmc_limit,
             openalex_limit=openalex_limit,
             semantic_scholar_limit=semantic_scholar_limit,
         )
@@ -602,6 +671,22 @@ def main(argv: Optional[List[str]] = None) -> int:
     openalex_parser.add_argument("work_id")
     openalex_parser.add_argument("--output-path")
 
+    europepmc_parser = subparsers.add_parser(
+        "fetch-europepmc-search",
+        help="Fetch a Europe PMC search payload.",
+    )
+    europepmc_parser.add_argument("query")
+    europepmc_parser.add_argument("--page-size", type=int, default=25)
+    europepmc_parser.add_argument("--page", type=int, default=1)
+    europepmc_parser.add_argument("--output-path")
+
+    pmc_parser = subparsers.add_parser(
+        "fetch-pmc-fulltext",
+        help="Fetch a PMC BioC full-text payload.",
+    )
+    pmc_parser.add_argument("pmcid")
+    pmc_parser.add_argument("--output-path")
+
     semantic_scholar_parser = subparsers.add_parser(
         "fetch-semanticscholar-paper",
         help="Fetch a Semantic Scholar paper payload.",
@@ -673,6 +758,30 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="Apply SQL migrations to the configured Postgres database.",
     )
 
+    materialize_parser = subparsers.add_parser(
+        "materialize-item-details",
+        help="Recompute canonical item facets, explainers, comparisons, and scores.",
+    )
+    materialize_parser.add_argument("item_slugs", nargs="*")
+
+    gap_link_parser = subparsers.add_parser(
+        "materialize-gap-links",
+        help="Use GPT to map eligible collection items onto Gap Map problems and store ranked links.",
+    )
+    gap_link_parser.add_argument("--gap-slug", action="append", default=[])
+    gap_link_parser.add_argument("--item-slug", action="append", default=[])
+    gap_link_parser.add_argument("--include-item-type", action="append", default=[])
+    gap_link_parser.add_argument("--exclude-item-type", action="append", default=[])
+    gap_link_parser.add_argument("--max-candidates-per-gap", type=int, default=12)
+    gap_link_parser.add_argument("--max-links-per-gap", type=int, default=6)
+    gap_link_parser.add_argument(
+        "--no-refresh-item-details",
+        action="store_false",
+        dest="refresh_item_details",
+        help="Skip the follow-on item detail materialization pass.",
+    )
+    gap_link_parser.set_defaults(refresh_item_details=True)
+
     ingest_parser = subparsers.add_parser(
         "ingest-packet",
         help="Run validate -> normalize -> load-plan -> execute for an extraction packet.",
@@ -726,6 +835,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     harvest_parser.add_argument("--artifact-dir")
     harvest_parser.add_argument("--profile", choices=["smoke", "broad"], default="broad")
     harvest_parser.add_argument("--seed-query-limit", type=int, default=24)
+    harvest_parser.add_argument("--europe-pmc-pages", type=int, default=3)
+    harvest_parser.add_argument("--europe-pmc-page-size", type=int, default=25)
+    harvest_parser.add_argument("--pmc-fulltext-limit", type=int, default=50)
     harvest_parser.add_argument("--openalex-pages", type=int, default=3)
     harvest_parser.add_argument("--openalex-per-page", type=int, default=50)
     harvest_parser.add_argument("--semantic-scholar-pages", type=int, default=3)
@@ -739,6 +851,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     extraction_artifacts_parser.add_argument("manifest_path")
     extraction_artifacts_parser.add_argument("output_dir")
     extraction_artifacts_parser.add_argument("--gap-limit", type=int, default=80)
+    extraction_artifacts_parser.add_argument("--europe-pmc-limit", type=int, default=200)
     extraction_artifacts_parser.add_argument("--openalex-limit", type=int, default=200)
     extraction_artifacts_parser.add_argument("--semantic-scholar-limit", type=int, default=200)
 
@@ -796,6 +909,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         return load_seed_bundle(parsed.bundle_path)
     if parsed.command == "fetch-openalex-work":
         return fetch_openalex_work(parsed.work_id, parsed.output_path)
+    if parsed.command == "fetch-europepmc-search":
+        return fetch_europepmc_search(parsed.query, parsed.page_size, parsed.page, parsed.output_path)
+    if parsed.command == "fetch-pmc-fulltext":
+        return fetch_pmc_fulltext(parsed.pmcid, parsed.output_path)
     if parsed.command == "fetch-semanticscholar-paper":
         return fetch_semantic_scholar_paper(parsed.paper_id, parsed.output_path, parsed.fields)
     if parsed.command == "fetch-clinicaltrials-study":
@@ -816,6 +933,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         return execute_load_plan(parsed.load_plan_path, parsed.apply, parsed.review_output_path)
     if parsed.command == "run-migrations":
         return run_migrations()
+    if parsed.command == "materialize-item-details":
+        return materialize_item_details(parsed.item_slugs)
+    if parsed.command == "materialize-gap-links":
+        return materialize_gap_links(
+            gap_slugs=parsed.gap_slug,
+            item_slugs=parsed.item_slug,
+            include_item_types=parsed.include_item_type,
+            exclude_item_types=parsed.exclude_item_type,
+            max_candidates_per_gap=parsed.max_candidates_per_gap,
+            max_links_per_gap=parsed.max_links_per_gap,
+            refresh_item_details=parsed.refresh_item_details,
+        )
     if parsed.command == "ingest-packet":
         return ingest_packet(
             parsed.packet_kind,
@@ -855,6 +984,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             parsed.artifact_dir,
             parsed.profile,
             parsed.seed_query_limit,
+            parsed.europe_pmc_pages,
+            parsed.europe_pmc_page_size,
+            parsed.pmc_fulltext_limit,
             parsed.openalex_pages,
             parsed.openalex_per_page,
             parsed.semantic_scholar_pages,
@@ -866,6 +998,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             parsed.manifest_path,
             parsed.output_dir,
             parsed.gap_limit,
+            parsed.europe_pmc_limit,
             parsed.openalex_limit,
             parsed.semantic_scholar_limit,
         )

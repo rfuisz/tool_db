@@ -4,10 +4,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ToolkitItem } from "@/lib/types";
 import { renderInlineTitle, stripInlineTitleMarkup } from "@/lib/render-inline-title";
-import { ITEM_TYPE_LABELS, MECHANISM_LABELS, TECHNIQUE_LABELS } from "@/lib/vocabularies";
+import {
+  isSupportedTechnique,
+  ITEM_TYPE_LABELS,
+  MECHANISM_LABELS,
+  TECHNIQUE_LABELS,
+} from "@/lib/vocabularies";
 import { Tooltip } from "./tooltip";
 import { ValidationDots } from "./validation-dots";
-import { MECHANISM_DESCRIPTIONS, STATUS_DESCRIPTIONS, TECHNIQUE_DESCRIPTIONS, ITEM_TYPE_DESCRIPTIONS } from "@/lib/explanations";
+import { ITEM_TYPE_DESCRIPTIONS, MECHANISM_DESCRIPTIONS, STATUS_DESCRIPTIONS, TECHNIQUE_DESCRIPTIONS } from "@/lib/explanations";
 
 function Tag({
   label,
@@ -62,7 +67,10 @@ export function ItemCard({ item }: { item: ToolkitItem }) {
           {renderInlineTitle(item.canonical_name)}
         </h3>
         <Tooltip
-          content={ITEM_TYPE_DESCRIPTIONS[item.item_type] ?? `Filter by ${ITEM_TYPE_LABELS[item.item_type]}`}
+          content={
+            ITEM_TYPE_DESCRIPTIONS[item.item_type] ??
+            `Filter by ${ITEM_TYPE_LABELS[item.item_type]}`
+          }
           position="bottom"
         >
           <Link
@@ -99,7 +107,7 @@ export function ItemCard({ item }: { item: ToolkitItem }) {
             tooltip={MECHANISM_DESCRIPTIONS[m]}
           />
         ))}
-        {item.techniques.map((t) => (
+        {item.techniques.filter(isSupportedTechnique).map((t) => (
           <Tag
             key={t}
             label={TECHNIQUE_LABELS[t] ?? t.replace(/_/g, " ")}

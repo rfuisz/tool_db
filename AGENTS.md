@@ -32,20 +32,21 @@
 
 - Prefer additive changes over speculative rewrites.
 - Keep dossier files stable and legible for both humans and agents.
+- Keep Markdown harness files current when behavior changes. If you update agent workflows, extraction behavior, schemas, or pipeline contracts, also update the relevant `.md` sources such as `.cursor/agents/*.md`, `prompts/**/*.md`, `README.md`, and design/spec docs in the same change.
 - When in doubt, leave a `TODO` with the missing evidence boundary instead of inventing facts.
 
 ## Backend Subagent Routing
 
 Use these routes before changing `src/tool_db_backend/`, `schemas/`, or extraction-driven dossier flows.
 
-| Task | Primary subagent | Read first | Return before editing |
-| --- | --- | --- | --- |
-| Canonical schema or vocabulary change | `schema-critic` | `AGENTS.md`, `.cursor/rules/10-schema-safety.mdc`, `.cursor/rules/20-extraction-contracts.mdc` | schema delta, risks, migration/docs checklist |
-| Extraction packet, prompt, or normalization boundary | `literature-curator` + `schema-critic` | `.cursor/rules/20-extraction-contracts.mdc` | packet shape, ambiguities, canonical handoff notes |
-| Candidate matching, merge safety, or claim-subject resolution | `entity-resolution-auditor` | `AGENTS.md`, `.cursor/rules/10-schema-safety.mdc` | match/new/review recommendation with blockers |
-| Replication or practicality scoring | `replication-auditor` | `.cursor/rules/30-citation-and-replication.mdc` | score inputs, penalties, confidence blockers |
-| DBTL timing, cost, or workflow rollups | `workflow-modeler` | `AGENTS.md` | step table, assumptions, critical path |
-| Gap-to-tool ranking and explainability | `gap-linker` | `.cursor/rules/40-gap-map-linking.mdc` | score breakdown, missing evidence, blockers |
+| Task                                                          | Primary subagent                       | Read first                                                                                     | Return before editing                              |
+| ------------------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Canonical schema or vocabulary change                         | `schema-critic`                        | `AGENTS.md`, `.cursor/rules/10-schema-safety.mdc`, `.cursor/rules/20-extraction-contracts.mdc` | schema delta, risks, migration/docs checklist      |
+| Extraction packet, prompt, or normalization boundary          | `literature-curator` + `schema-critic` | `.cursor/rules/20-extraction-contracts.mdc`                                                    | packet shape, ambiguities, canonical handoff notes |
+| Candidate matching, merge safety, or claim-subject resolution | `entity-resolution-auditor`            | `AGENTS.md`, `.cursor/rules/10-schema-safety.mdc`                                              | match/new/review recommendation with blockers      |
+| Replication or practicality scoring                           | `replication-auditor`                  | `.cursor/rules/30-citation-and-replication.mdc`                                                | score inputs, penalties, confidence blockers       |
+| DBTL timing, cost, or workflow rollups                        | `workflow-modeler`                     | `AGENTS.md`                                                                                    | step table, assumptions, critical path             |
+| Gap-to-tool ranking and explainability                        | `gap-linker`                           | `.cursor/rules/40-gap-map-linking.mdc`                                                         | score breakdown, missing evidence, blockers        |
 
 If a task spans multiple rows, run the subagents in that order and pass forward the written output from the previous step.
 

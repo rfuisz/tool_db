@@ -94,15 +94,16 @@ class EntityResolver:
                 if item["slug"] in matches_by_slug:
                     continue
 
-            if candidate_item_type and item_type and candidate_item_type != item_type:
-                continue
-
             if item_slug == candidate_slug:
                 matches_by_slug[item["slug"]] = {"slug": item["slug"], "matched_by": "slug"}
                 continue
             if item_name == candidate_name:
                 matches_by_slug[item["slug"]] = {"slug": item["slug"], "matched_by": "canonical_name"}
                 continue
+
+            if candidate_item_type and item_type and not self._item_types_compatible(candidate_item_type, item_type):
+                continue
+
             if candidate_name and candidate_name in item_synonyms:
                 matches_by_slug[item["slug"]] = {"slug": item["slug"], "matched_by": "synonym"}
                 continue
@@ -112,6 +113,15 @@ class EntityResolver:
             if candidate_aliases.intersection(item_synonyms):
                 matches_by_slug[item["slug"]] = {"slug": item["slug"], "matched_by": "synonym"}
         return list(matches_by_slug.values())
+
+    @staticmethod
+    def _item_types_compatible(candidate_item_type: str, item_type: str) -> bool:
+        if candidate_item_type == item_type:
+            return True
+        switchish_types = {"construct_pattern", "protein_domain", "multi_component_switch"}
+        if candidate_item_type in switchish_types and item_type in switchish_types:
+            return True
+        return False
 
     def _match_workflow_candidate(self, candidate: Dict[str, Any]) -> List[Dict[str, str]]:
         matches = []

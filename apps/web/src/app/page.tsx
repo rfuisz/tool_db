@@ -2,7 +2,15 @@ import Link from "next/link";
 import { LocalRenderSyncButton } from "@/components/local-render-sync-button";
 import { isLocalAdminEnabled } from "@/lib/first-pass-access";
 import { getItems, getWorkflows } from "@/lib/backend-data";
-import { getAllFamilies, getAllMechanisms, getAllTechniques } from "@/lib/data";
+import { getAllFamilies } from "@/lib/data";
+import {
+  MECHANISM_HIERARCHY_SECTIONS,
+  buildMechanismConceptSummaries,
+  buildTechniqueConceptSummaries,
+  getItemTypeCount,
+  getOrderedItemTypes,
+  TECHNIQUE_HIERARCHY_SECTIONS,
+} from "@/lib/item-hierarchy";
 import {
   ITEM_TYPE_LABELS,
   MECHANISM_LABELS,
@@ -29,8 +37,8 @@ export default async function Home() {
     : null;
 
   const families = getAllFamilies(items);
-  const mechanisms = getAllMechanisms(items);
-  const techniques = getAllTechniques(items);
+  const mechanismConcepts = buildMechanismConceptSummaries(items);
+  const techniqueConcepts = buildTechniqueConceptSummaries(items);
 
   return (
     <div>
@@ -63,10 +71,10 @@ Or am I a wild storm, or a great song?`}
               Evidence-first engineering knowledge system
             </p>
             <p className="max-w-2xl text-lg leading-relaxed text-ink-secondary">
-              A structured reference for biological control surfaces,
-              engineering methods, assay methods, and
-              design&#x2013;build&#x2013;test&#x2013;learn workflows, built so
-              every claim remains traceable to source-backed evidence.
+              A structured reference for mechanisms, architectures, components,
+              methods, and design&#x2013;build&#x2013;test&#x2013;learn
+              workflows, built so every claim remains traceable to source-backed
+              evidence.
             </p>
           </div>
         </div>
@@ -101,87 +109,151 @@ Or am I a wild storm, or a great song?`}
 
       <hr className="mb-16" />
 
-      {/* The Collection */}
+      {/* Toolkit model */}
       <section className="mb-16">
-        <p className="small-caps mb-6">The Collection</p>
-        <div className="grid gap-x-12 gap-y-4 sm:grid-cols-2">
-          {Object.entries(typeCounts)
-            .sort(([, a], [, b]) => b - a)
-            .map(([type, count]) => (
-              <Link
-                key={type}
-                href={`/items?type=${type}`}
-                className="group flex items-baseline justify-between border-b border-edge py-3 transition-colors hover:border-accent"
-              >
-                <span className="font-display text-lg text-ink group-hover:text-accent">
-                  {ITEM_TYPE_LABELS[type as ItemType]}
-                </span>
-                <span className="font-data text-sm tabular-nums text-ink-muted">
-                  {count}
-                </span>
-              </Link>
-            ))}
-        </div>
-        <p className="mt-6">
-          <Link
-            href="/items"
-            className="small-caps text-accent hover:text-accent-hover"
-          >
-            Browse full collection &rarr;
-          </Link>
+        <p className="small-caps mb-4">Toolkit Model</p>
+        <p className="mb-8 max-w-3xl text-[15px] leading-relaxed text-ink-secondary">
+          The collection is best read as two hierarchies beneath workflows:
+          mechanisms and techniques. Within mechanisms, the hierarchy runs from
+          mechanism to architecture to component. Within techniques, the
+          hierarchy runs from technique to method.
         </p>
-      </section>
+        <div className="grid gap-8 lg:grid-cols-2">
+          <div className="border border-edge p-5">
+            <p className="small-caps mb-3 text-accent">Mechanism Branch</p>
+            <div className="space-y-6">
+              {MECHANISM_HIERARCHY_SECTIONS.map((section, index) => (
+                <div key={section.id}>
+                  <p className="small-caps mb-2 text-ink-muted">
+                    Layer {index + 1}
+                  </p>
+                  <h3 className="mb-2">{section.title}</h3>
+                  <p className="mb-3 text-sm leading-relaxed text-ink-secondary">
+                    {section.description}
+                  </p>
+                  {section.id === "mechanism" ? (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {mechanismConcepts.map((concept) => {
+                        return (
+                          <Link
+                            key={concept.key}
+                            href={`/mechanisms/${concept.key}`}
+                            className="group rounded border border-edge p-4 transition-colors hover:border-accent"
+                          >
+                            <div className="flex items-baseline justify-between gap-3">
+                              <span className="font-display text-lg text-ink group-hover:text-accent">
+                                {MECHANISM_LABELS[concept.key] ?? concept.label}
+                              </span>
+                              <span className="font-data text-xs text-ink-muted">
+                                {concept.totalCount}
+                              </span>
+                            </div>
+                            <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
+                              {concept.summary}
+                            </p>
+                            <p className="mt-3 font-ui text-xs text-ink-muted">
+                              {concept.architectureCount} architectures ·{" "}
+                              {concept.componentCount} components
+                            </p>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {getOrderedItemTypes(section.itemTypes ?? [])
+                        .filter((type) => typeCounts[type] > 0)
+                        .map((type) => (
+                          <Link
+                            key={type}
+                            href={`/items?type=${type}`}
+                            className="group flex items-baseline justify-between border-b border-edge py-2 transition-colors hover:border-accent"
+                          >
+                            <span className="font-display text-lg text-ink group-hover:text-accent">
+                              {ITEM_TYPE_LABELS[type as ItemType]}
+                            </span>
+                            <span className="font-data text-sm tabular-nums text-ink-muted">
+                              {getItemTypeCount(items, type)}
+                            </span>
+                          </Link>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
 
-      <hr className="mb-16" />
-
-      {/* Mechanisms */}
-      <section className="mb-16">
-        <p className="small-caps mb-6">Explore by Mechanism</p>
-        <div className="flex flex-wrap gap-x-6 gap-y-2">
-          {mechanisms.map((m) => {
-            const count = items.filter((i) => i.mechanisms.includes(m)).length;
-            return (
-              <Link
-                key={m}
-                href={`/items?mechanism=${m}`}
-                className="group font-body text-base text-ink-secondary transition-colors hover:text-accent"
-              >
-                {MECHANISM_LABELS[m] ?? m.replace(/_/g, " ")}
-                <sup className="ml-0.5 font-data text-xs text-ink-muted group-hover:text-accent">
-                  {count}
-                </sup>
-              </Link>
-            );
-          })}
+          <div className="border border-edge p-5">
+            <p className="small-caps mb-3 text-accent">Technique Branch</p>
+            <div className="space-y-6">
+              {TECHNIQUE_HIERARCHY_SECTIONS.map((section, index) => (
+                <div key={section.id}>
+                  <p className="small-caps mb-2 text-ink-muted">
+                    Layer {index + 1}
+                  </p>
+                  <h3 className="mb-2">{section.title}</h3>
+                  <p className="mb-3 text-sm leading-relaxed text-ink-secondary">
+                    {section.description}
+                  </p>
+                  {section.id === "technique" ? (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {techniqueConcepts.map((concept) => {
+                        return (
+                          <Link
+                            key={concept.key}
+                            href={`/techniques/${concept.key}`}
+                            className="group rounded border border-edge p-4 transition-colors hover:border-accent"
+                          >
+                            <div className="flex items-baseline justify-between gap-3">
+                              <span className="font-display text-lg text-ink group-hover:text-accent">
+                                {TECHNIQUE_LABELS[concept.key] ?? concept.label}
+                              </span>
+                              <span className="font-data text-xs text-ink-muted">
+                                {concept.totalCount}
+                              </span>
+                            </div>
+                            <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
+                              {concept.summary}
+                            </p>
+                            <p className="mt-3 font-ui text-xs text-ink-muted">
+                              {concept.methodCount} methods
+                            </p>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {getOrderedItemTypes(section.itemTypes ?? [])
+                        .filter((type) => typeCounts[type] > 0)
+                        .map((type) => (
+                          <Link
+                            key={type}
+                            href={`/items?type=${type}`}
+                            className="group flex items-baseline justify-between border-b border-edge py-2 transition-colors hover:border-accent"
+                          >
+                            <span className="font-display text-lg text-ink group-hover:text-accent">
+                              {ITEM_TYPE_LABELS[type as ItemType]}
+                            </span>
+                            <span className="font-data text-sm tabular-nums text-ink-muted">
+                              {getItemTypeCount(items, type)}
+                            </span>
+                          </Link>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-      </section>
-
-      {/* Techniques */}
-      <section className="mb-16">
-        <p className="small-caps mb-6">Explore by Technique</p>
-        <div className="flex flex-wrap gap-x-6 gap-y-2">
-          {techniques.map((t) => {
-            const count = items.filter((i) => i.techniques.includes(t)).length;
-            return (
-              <Link
-                key={t}
-                href={`/items?technique=${t}`}
-                className="group font-body text-base text-ink-secondary transition-colors hover:text-accent"
-              >
-                {TECHNIQUE_LABELS[t] ?? t.replace(/_/g, " ")}
-                <sup className="ml-0.5 font-data text-xs text-ink-muted group-hover:text-accent">
-                  {count}
-                </sup>
-              </Link>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* Families */}
-      <section className="mb-16">
-        <p className="small-caps mb-6">Explore by Family</p>
-        <div className="flex flex-wrap gap-x-6 gap-y-2">
+        <p className="mt-4 max-w-3xl text-sm leading-relaxed text-ink-secondary">
+          Families remain a useful supporting lens for browsing related lineages
+          like LOV, BLUF, phytochromes, or display platforms, but they are not
+          the top conceptual hierarchy.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
           {families.map((f) => {
             const count = items.filter((i) => i.family === f).length;
             return (
@@ -198,13 +270,26 @@ Or am I a wild storm, or a great song?`}
             );
           })}
         </div>
+        <p className="mt-6">
+          <Link
+            href="/items"
+            className="small-caps text-accent hover:text-accent-hover"
+          >
+            Browse toolkit items &rarr;
+          </Link>
+        </p>
       </section>
 
       <hr className="accent mb-16" />
 
       {/* Workflows */}
       <section className="mb-8">
-        <p className="small-caps mb-6">DBTL Workflow Templates</p>
+        <p className="small-caps mb-4">Workflow Layer</p>
+        <p className="mb-6 max-w-3xl text-[15px] leading-relaxed text-ink-secondary">
+          Workflows sit above both branches. They combine mechanisms and
+          techniques to obtain, optimize, verify, characterize, deliver, and
+          evaluate engineered systems.
+        </p>
         <div className="space-y-8">
           {workflows.map((w) => {
             const totalDays = Math.round(

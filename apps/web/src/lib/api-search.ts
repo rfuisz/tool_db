@@ -1,4 +1,5 @@
 import type { ToolkitItem, WorkflowTemplate } from "./types";
+import { buildItemHierarchyAssignments } from "./item-hierarchy";
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 500;
@@ -183,7 +184,12 @@ export function searchItems(
   items: ToolkitItem[],
   filters: ItemSearchFilters,
 ): SearchResult<ToolkitItem> {
+  const hierarchyAssignments = buildItemHierarchyAssignments(items);
   const filtered = items.filter((item) => {
+    const mechanismAssignments =
+      hierarchyAssignments.mechanismsBySlug.get(item.slug) ?? item.mechanisms;
+    const techniqueAssignments =
+      hierarchyAssignments.techniquesBySlug.get(item.slug) ?? item.techniques;
     if (
       !matchesQuery(
         [
@@ -193,10 +199,11 @@ export function searchItems(
           item.item_type,
           item.maturity_stage,
           item.status,
-          ...item.mechanisms,
-          ...item.techniques,
+          ...mechanismAssignments,
+          ...techniqueAssignments,
           ...item.target_processes,
           ...item.synonyms,
+          ...(item.components ?? []),
           ...item.citations.map((citation) => citation.document.title),
         ],
         filters.q,
@@ -209,11 +216,11 @@ export function searchItems(
       return false;
     }
 
-    if (!matchesAny(item.mechanisms, filters.mechanism)) {
+    if (!matchesAny(mechanismAssignments, filters.mechanism)) {
       return false;
     }
 
-    if (!matchesAny(item.techniques, filters.technique)) {
+    if (!matchesAny(techniqueAssignments, filters.technique)) {
       return false;
     }
 

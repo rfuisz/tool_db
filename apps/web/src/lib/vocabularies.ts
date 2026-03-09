@@ -16,8 +16,8 @@ export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   construct_pattern: "Construct Pattern",
   engineering_method: "Engineering Method",
   assay_method: "Assay Method",
-  computation_method: "Computation Method",
-  delivery_harness: "Delivery Harness",
+  computation_method: "Computational Method",
+  delivery_harness: "Delivery Strategy",
 };
 
 export const ITEM_TYPE_COLORS: Record<ItemType, string> = {
@@ -174,7 +174,6 @@ export const TECHNIQUE_FAMILIES = [
   "sequence_verification",
   "functional_assay",
   "structural_characterization",
-  "delivery_optimization",
 ] as const;
 
 export const TECHNIQUE_LABELS: Record<string, string> = {
@@ -184,5 +183,8 @@ export const TECHNIQUE_LABELS: Record<string, string> = {
   sequence_verification: "Sequence Verification",
   functional_assay: "Functional Assay",
   structural_characterization: "Structural Characterization",
-  delivery_optimization: "Delivery Optimization",
 };
+
+export function isSupportedTechnique(technique: string): boolean {
+  return Object.prototype.hasOwnProperty.call(TECHNIQUE_LABELS, technique);
+}

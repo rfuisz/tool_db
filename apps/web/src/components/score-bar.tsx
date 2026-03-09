@@ -1,7 +1,7 @@
 "use client";
 
 import { Tooltip } from "./tooltip";
-import { SCORE_DESCRIPTIONS } from "@/lib/explanations";
+import { PROBLEM_LINK_DESCRIPTIONS, SCORE_DESCRIPTIONS } from "@/lib/explanations";
 
 const LABEL_TO_KEY: Record<string, string> = {
   Evidence:        "evidence_strength_score",
@@ -20,10 +20,12 @@ export function ScoreBar({
   label,
   value,
   showValue = true,
+  explanationKey,
 }: {
   label: string;
   value: number | null;
   showValue?: boolean;
+  explanationKey?: string;
 }) {
   if (value === null) {
     return (
@@ -35,8 +37,10 @@ export function ScoreBar({
   }
 
   const pct = Math.round(value * 100);
-  const key = LABEL_TO_KEY[label];
-  const explanation = key ? SCORE_DESCRIPTIONS[key] : undefined;
+  const key = explanationKey || LABEL_TO_KEY[label];
+  const explanation =
+    (key ? SCORE_DESCRIPTIONS[key] : undefined) ||
+    (key ? PROBLEM_LINK_DESCRIPTIONS[key] : undefined);
 
   const labelEl = (
     <span className={`w-24 shrink-0 text-xs text-ink-muted ${explanation ? "cursor-help border-b border-dotted border-ink-faint" : ""}`}>
@@ -76,12 +80,17 @@ export function ScoreBar({
 export function ScoreBreakdown({
   scores,
 }: {
-  scores: { label: string; value: number | null }[];
+  scores: { label: string; value: number | null; explanationKey?: string }[];
 }) {
   return (
     <div className="space-y-2 font-ui">
       {scores.map((s) => (
-        <ScoreBar key={s.label} label={s.label} value={s.value} />
+        <ScoreBar
+          key={s.label}
+          label={s.label}
+          value={s.value}
+          explanationKey={s.explanationKey}
+        />
       ))}
     </div>
   );

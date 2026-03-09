@@ -6,14 +6,47 @@
   "item_types": {
     "values": ["protein_domain", "multi_component_switch", "rna_element", "construct_pattern", "engineering_method", "assay_method", "computation_method", "delivery_harness"],
     "described": {
-      "protein_domain":          { "label": "Protein Domain",          "description": "A single protein domain or engineered variant used as a modular building block in synthetic biology constructs." },
-      "multi_component_switch":  { "label": "Multi-Component Switch",  "description": "A system requiring two or more interacting molecular components to achieve stimulus-responsive behavior." },
-      "rna_element":             { "label": "RNA Element",             "description": "An RNA-based regulatory element such as a riboswitch, aptamer, or ribozyme used to control gene expression." },
-      "construct_pattern":       { "label": "Construct Pattern",       "description": "A reusable genetic architecture or design pattern for assembling functional circuits from parts." },
-      "engineering_method":      { "label": "Engineering Method",      "description": "A laboratory method for creating, modifying, or optimizing biological parts (e.g. directed evolution, computational design)." },
-      "assay_method":            { "label": "Assay Method",            "description": "A measurement technique for characterizing the performance of engineered biological parts." },
-      "computation_method":      { "label": "Computation Method",      "description": "A computational tool or algorithm for predicting, designing, or analyzing biological constructs." },
-      "delivery_harness":        { "label": "Delivery Harness",        "description": "A vehicle or strategy for delivering engineered constructs into target cells or tissues (e.g. AAV, LNP, electroporation)." }
+      "protein_domain":          { "label": "Protein Domain",          "description": "A low-level protein part or sequence-defined actuator used as a building block inside larger engineered compositions." },
+      "multi_component_switch":  { "label": "Multi-Component Switch",  "description": "An architecture-level composition assembled from multiple interacting parts to produce stimulus-responsive behavior." },
+      "rna_element":             { "label": "RNA Element",             "description": "A low-level RNA regulatory part, such as a riboswitch, aptamer, or ribozyme, used inside larger engineered compositions." },
+      "construct_pattern":       { "label": "Construct Pattern",       "description": "An architecture-level pattern for arranging parts into a reusable engineered composition." },
+      "engineering_method":      { "label": "Engineering Method",      "description": "A method-type item describing an experimental practice for building, optimizing, or evolving engineered systems." },
+      "assay_method":            { "label": "Assay Method",            "description": "A method-type item describing how engineered systems are measured, benchmarked, or characterized." },
+      "computation_method":      { "label": "Computational Method",    "description": "A method-type item describing a computational approach for designing, ranking, or analyzing engineered systems." },
+      "delivery_harness":        { "label": "Delivery Strategy",       "description": "An architecture-level delivery strategy describing how an engineered system is packaged, delivered, and made operational in a target context." }
+    }
+  },
+
+  "composition_hierarchy": {
+    "_note": "Mechanism branch for the thing being engineered. Mechanisms are the top conceptual layer; architectures are composed arrangements that realize or deploy mechanisms; components are the lowest-level parts or sequence-defined elements.",
+    "values": ["mechanism", "architecture", "component"],
+    "described": {
+      "mechanism":       { "label": "Mechanism",       "description": "A biophysical mode of action such as heterodimerization, photocleavage, RNA binding, or translation control." },
+      "architecture":    { "label": "Architecture",    "description": "A composed arrangement that realizes one or more mechanisms, such as a multi-component switch or reusable construct pattern." },
+      "component":       { "label": "Component",       "description": "A low-level part or sequence-defined element, such as a protein domain or RNA element, used within an architecture." }
+    }
+  },
+
+  "technique_hierarchy": {
+    "_note": "Separate hierarchy for methods of use. Techniques describe high-level engineering practices or approaches; methods are concrete methods, assays, or computational tools that instantiate those activities.",
+    "values": ["technique", "method"],
+    "described": {
+      "technique": { "label": "Approach", "description": "A high-level engineering practice or approach, such as computational design, sequence verification, or functional assay." },
+      "method":    { "label": "Method",    "description": "A concrete method-type item used to design, build, verify, or characterize an engineered system." }
+    }
+  },
+
+  "item_type_taxonomy": {
+    "_note": "Maps each item_type to the branch it primarily belongs to. Workflows combine the mechanism branch with the technique branch.",
+    "described": {
+      "protein_domain":          { "axis": "mechanism", "layer": "component",    "label": "Protein Domain",         "description": "Low-level protein component." },
+      "rna_element":             { "axis": "mechanism", "layer": "component",    "label": "RNA Element",            "description": "Low-level RNA component." },
+      "multi_component_switch":  { "axis": "mechanism", "layer": "architecture", "label": "Multi-Component Switch", "description": "Architecture-level composed switch." },
+      "construct_pattern":       { "axis": "mechanism", "layer": "architecture", "label": "Construct Pattern",      "description": "Architecture-level composition pattern." },
+      "delivery_harness":        { "axis": "mechanism", "layer": "architecture", "label": "Delivery Strategy",      "description": "Deployment architecture for getting a system into context." },
+      "engineering_method":      { "axis": "technique", "layer": "method",       "label": "Engineering Method",     "description": "Concrete build/optimization method." },
+      "assay_method":            { "axis": "technique", "layer": "method",       "label": "Assay Method",           "description": "Concrete measurement method." },
+      "computation_method":      { "axis": "technique", "layer": "method",       "label": "Computational Method",   "description": "Concrete computational method." }
     }
   },
 
@@ -176,15 +209,14 @@
   },
 
   "technique_families": {
-    "values": ["computational_design", "selection_enrichment", "directed_evolution", "sequence_verification", "functional_assay", "structural_characterization", "delivery_optimization"],
+    "values": ["computational_design", "selection_enrichment", "directed_evolution", "sequence_verification", "functional_assay", "structural_characterization"],
     "described": {
       "computational_design":         { "label": "Computational Design",         "description": "In silico design of protein sequences, structures, or circuits using algorithms or machine learning." },
       "selection_enrichment":         { "label": "Selection / Enrichment",       "description": "Experimental selection from a library to enrich for variants with desired properties." },
       "directed_evolution":           { "label": "Directed Evolution",           "description": "Iterative mutagenesis and selection to evolve improved biological parts." },
       "sequence_verification":        { "label": "Sequence Verification",        "description": "Confirming construct identity by Sanger or next-generation sequencing." },
       "functional_assay":             { "label": "Functional Assay",             "description": "Measuring the activity or performance of an engineered part in a biological context." },
-      "structural_characterization":  { "label": "Structural Characterization",  "description": "Determining 3D structure via X-ray crystallography, cryo-EM, or NMR." },
-      "delivery_optimization":        { "label": "Delivery Optimization",        "description": "Optimizing the vehicle, route, or formulation for delivering constructs to target cells or tissues." }
+      "structural_characterization":  { "label": "Structural Characterization",  "description": "Determining 3D structure via X-ray crystallography, cryo-EM, or NMR." }
     }
   },
 

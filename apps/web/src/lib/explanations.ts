@@ -2,14 +2,14 @@
 // Do not edit by hand — run: npm run generate:explanations
 
 export const ITEM_TYPE_DESCRIPTIONS: Record<string, string> = {
-  "protein_domain": "A single protein domain or engineered variant used as a modular building block in synthetic biology constructs.",
-  "multi_component_switch": "A system requiring two or more interacting molecular components to achieve stimulus-responsive behavior.",
-  "rna_element": "An RNA-based regulatory element such as a riboswitch, aptamer, or ribozyme used to control gene expression.",
-  "construct_pattern": "A reusable genetic architecture or design pattern for assembling functional circuits from parts.",
-  "engineering_method": "A laboratory method for creating, modifying, or optimizing biological parts (e.g. directed evolution, computational design).",
-  "assay_method": "A measurement technique for characterizing the performance of engineered biological parts.",
-  "computation_method": "A computational tool or algorithm for predicting, designing, or analyzing biological constructs.",
-  "delivery_harness": "A vehicle or strategy for delivering engineered constructs into target cells or tissues (e.g. AAV, LNP, electroporation).",
+  "protein_domain": "A low-level protein part or sequence-defined actuator used as a building block inside larger engineered compositions.",
+  "multi_component_switch": "An architecture-level composition assembled from multiple interacting parts to produce stimulus-responsive behavior.",
+  "rna_element": "A low-level RNA regulatory part, such as a riboswitch, aptamer, or ribozyme, used inside larger engineered compositions.",
+  "construct_pattern": "An architecture-level pattern for arranging parts into a reusable engineered composition.",
+  "engineering_method": "A method-type item describing an experimental practice for building, optimizing, or evolving engineered systems.",
+  "assay_method": "A method-type item describing how engineered systems are measured, benchmarked, or characterized.",
+  "computation_method": "A method-type item describing a computational approach for designing, ranking, or analyzing engineered systems.",
+  "delivery_harness": "An architecture-level delivery strategy describing how an engineered system is packaged, delivered, and made operational in a target context.",
 };
 
 export const STATUS_DESCRIPTIONS: Record<string, string> = {
@@ -141,7 +141,6 @@ export const TECHNIQUE_DESCRIPTIONS: Record<string, string> = {
   "sequence_verification": "Confirming construct identity by Sanger or next-generation sequencing.",
   "functional_assay": "Measuring the activity or performance of an engineered part in a biological context.",
   "structural_characterization": "Determining 3D structure via X-ray crystallography, cryo-EM, or NMR.",
-  "delivery_optimization": "Optimizing the vehicle, route, or formulation for delivering constructs to target cells or tissues.",
 };
 
 export const TARGET_PROCESS_DESCRIPTIONS: Record<string, string> = {

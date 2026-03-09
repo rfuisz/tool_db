@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any, Dict, Tuple
 
 from tool_db_backend.config import Settings
-from tool_db_backend.postgres_loader import LoadPlanExecutionError
+from tool_db_backend.errors import LoadPlanExecutionError
 
 
 class SeedLoader:
@@ -27,6 +27,8 @@ class SeedLoader:
                 with conn.cursor() as cursor:
                     for item_entry in bundle.get("items", []):
                         inserted_item_count += int(self._load_item(cursor, item_entry))
+
+                    self._load_item_components(cursor, bundle.get("items", []))
 
                     for workflow_entry in bundle.get("workflows", []):
                         workflow_inserted, stage_count, step_count = self._load_workflow(cursor, workflow_entry)
@@ -260,6 +262,55 @@ class SeedLoader:
             )
 
         return inserted, len(stage_ids_by_name), len(step_ids)
+
+    def _load_item_components(self, cursor: Any, item_entries: list[Dict[str, Any]]) -> None:
+        item_ids_by_slug: Dict[str, Any] = {}
+        item_ids_by_name: Dict[str, Any] = {}
+
+        cursor.execute("select id, slug, canonical_name from toolkit_item")
+        for item_id, slug, canonical_name in cursor.fetchall():
+            item_ids_by_slug[str(slug).casefold()] = item_id
+            item_ids_by_name[str(canonical_name).casefold()] = item_id
+
+        cursor.execute("select item_id, synonym from item_synonym")
+        for item_id, synonym in cursor.fetchall():
+            item_ids_by_name[str(synonym).casefold()] = item_id
+
+        for item_entry in item_entries:
+            structured = item_entry["structured"]
+            parent_slug = str(structured.get("slug") or "").strip()
+            if not parent_slug:
+                continue
+            parent_item_id = item_ids_by_slug.get(parent_slug.casefold())
+            if parent_item_id is None:
+                continue
+            for component_name in structured.get("components", []):
+                normalized = str(component_name or "").strip()
+                if not normalized:
+                    continue
+                component_item_id = item_ids_by_slug.get(normalized.casefold()) or item_ids_by_name.get(
+                    normalized.casefold()
+                )
+                if component_item_id is None or component_item_id == parent_item_id:
+                    continue
+                cursor.execute(
+                    """
+                    insert into item_component (parent_item_id, component_item_id, notes)
+                    select %s, %s, %s
+                    where not exists (
+                      select 1
+                      from item_component
+                      where parent_item_id = %s and component_item_id = %s
+                    )
+                    """,
+                    (
+                        parent_item_id,
+                        component_item_id,
+                        "Bootstrapped from knowledge seed bundle components list.",
+                        parent_item_id,
+                        component_item_id,
+                    ),
+                )
 
     @staticmethod
     def _insert_distinct_rows(

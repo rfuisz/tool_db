@@ -39,7 +39,77 @@ It should be modeled as a set of intersecting knowledge layers.
 
 ---
 
-## 3. The Five Data Models
+## 3. Taxonomy Philosophy
+
+The toolkit should not be presented as one flat list of item groups.
+
+It is better modeled as **two related hierarchies** that meet inside workflows.
+
+### 3.1 Mechanism branch
+
+This hierarchy describes **the thing being engineered**:
+
+- `mechanism` — the top conceptual layer; biophysical modes of action such as heterodimerization, photocleavage, DNA binding, RNA binding, degradation, translation control
+- `architecture` — composed arrangements that realize one or more mechanisms
+- `component` — low-level parts or sequence-defined elements used inside an architecture
+
+Examples:
+
+- mechanism: heterodimerization
+- architecture: multi-component switch
+- component: `AsLOV2`
+- component: riboswitch / aptamer / other RNA element
+
+Important implication:
+
+- protein domains and RNA elements are low in the mechanism branch
+- multi-component switches are above them
+- mechanisms are above architectures
+- when rendering or deriving hierarchy views, low-level components should roll up either directly to a tagged mechanism or to an architecture that itself rolls up to a mechanism
+- mechanism sections should summarize current toolkit coverage, including available architectures, available components, and the main capabilities those tools enable
+
+Delivery strategies likely belong on this side as well, as deployment architectures rather than techniques.
+
+### 3.2 Technique branch
+
+This hierarchy describes **methods of use** rather than the thing being engineered:
+
+- `technique` — high-level engineering practices or approaches
+- `method` — concrete methods, assays, and computational tools
+
+Examples:
+
+- technique: computational design
+- technique: sequence verification
+- method: `ProteinMPNN`
+- method: amplicon NGS
+
+Important implication:
+
+- assay methods are not the same kind of thing as architectures
+- computational methods are not the same kind of thing as mechanisms
+- delivery strategy should usually sit with the mechanism branch as an architecture of deployment, not under techniques
+- within the technique branch, the top level should stay abstract and practice-oriented, with concrete methods below it
+- when rendering or deriving hierarchy views, low-level methods should always roll up to one or more technique categories, using conservative inference only when explicit technique tags are missing
+- technique sections should summarize the currently available methods and the kinds of work they support
+
+### 3.3 Workflow as the joining layer
+
+Workflows sit above both hierarchies.
+
+A workflow uses one or more **techniques** to obtain, build, optimize, verify, deliver, or evaluate an engineered **composition**.
+
+In plain language:
+
+- mechanism says how the composition works
+- architecture says how the composition is arranged
+- components are the concrete parts used to instantiate that architecture
+- techniques say how the composition is designed, screened, measured, or deployed
+- workflows describe how those choices are combined into a DBTL campaign
+
+---
+
+## 4. The Five Data Models
 
 ### A. Toolkit Item Model
 
@@ -57,6 +127,22 @@ Subtypes:
 - `assay_method`
 - `computation_method`
 - `delivery_harness` (later phase)
+
+These subtypes are **not all siblings in the same conceptual hierarchy**.
+
+Recommended mapping:
+
+- mechanism branch / `component`
+  - `protein_domain`
+  - `rna_element`
+- mechanism branch / `architecture`
+  - `multi_component_switch`
+  - `construct_pattern`
+  - `delivery_harness`
+- technique branch / `method`
+  - `engineering_method`
+  - `assay_method`
+  - `computation_method`
 
 Examples:
 
@@ -148,9 +234,9 @@ This model lets you represent both:
 
 ---
 
-## 4. Recommended Canonical Schema
+## 5. Recommended Canonical Schema
 
-### 4.1 `toolkit_item`
+### 5.1 `toolkit_item`
 
 Core table for all cataloged entities.
 
@@ -170,7 +256,7 @@ Fields:
 - `external_ids` jsonb
 - `created_at`, `updated_at`
 
-### 4.2 Type-specific profile tables
+### 5.2 Type-specific profile tables
 
 #### `protein_domain_profile`
 
@@ -227,7 +313,7 @@ Fields:
 - `sample_type`
 - `outsourceable`
 
-### 4.3 Extensible property system
+### 5.3 Extensible property system
 
 #### `property_definition`
 
@@ -253,7 +339,7 @@ Fields:
 
 This is the main flex point that will let the system grow without weekly schema surgery.
 
-### 4.4 Relationship tables
+### 5.4 Relationship tables
 
 - `item_synonym`
 - `item_component`
@@ -265,9 +351,16 @@ This is the main flex point that will let the system grow without weekly schema 
 
 `item_component` is important because many useful constructs are composite rather than single domains.
 
+Taxonomy interpretation:
+
+- `item_mechanism` attaches an item to the **top mechanism layer**
+- `item_component` helps express how lower-level components instantiate an architecture
+- `item_technique` attaches an item to the **methods-of-use hierarchy**
+- workflows then connect technique choices to mechanism-branch choices
+
 ---
 
-## 5. Evidence and Citation Schema
+## 6. Evidence and Citation Schema
 
 ### 5.1 `source_document`
 
@@ -333,7 +426,7 @@ This table gives you the ranked citation list every item page should show.
 
 ---
 
-## 6. Validation Schema
+## 7. Validation Schema
 
 ### 6.1 `validation_observation`
 
@@ -397,7 +490,7 @@ Do **not** treat these as primary data. They are computed outputs from observati
 
 ---
 
-## 7. Replicability and Practicality Model
+## 8. Replicability and Practicality Model
 
 Create a computed table `replication_summary` with the following inputs:
 
@@ -453,7 +546,7 @@ A useful early rule:
 
 ---
 
-## 8. Workflow / DBTL Schema
+## 9. Workflow / DBTL Schema
 
 ### 8.1 `workflow_template`
 
@@ -543,7 +636,7 @@ Record real-world timings from your own lab or collaborators. This is what will 
 
 ---
 
-## 9. Concrete Workflow Archetypes to Seed
+## 10. Concrete Workflow Archetypes to Seed
 
 ### A. Fast no-cloning screen
 
@@ -594,7 +687,7 @@ This loop should be modeled as a separate family because vector prep, delivery, 
 
 ---
 
-## 10. When to Use Which Sequencing Mode
+## 11. When to Use Which Sequencing Mode
 
 Store sequencing as a first-class assay/method item, and also as workflow steps.
 
@@ -630,7 +723,7 @@ Do not encode “sequencing needed” as a single boolean. Encode it as a workfl
 
 ---
 
-## 11. Gap Map Integration Model
+## 12. Gap Map Integration Model
 
 Sync the Gap Map JSON into local cache tables:
 
@@ -665,7 +758,7 @@ Every `item_gap_link` should include:
 
 ---
 
-## 12. Ingestion Pipeline
+## 13. Ingestion Pipeline
 
 ### Stage 1: Source acquisition
 
@@ -673,6 +766,8 @@ Seed from:
 
 - review articles
 - OptoBase-like databases
+- Europe PMC search + identifiers
+- PubMed Central full text where allowed / available
 - OpenAlex works and citation graph
 - Semantic Scholar recommendations / citation graph
 - ClinicalTrials records
@@ -681,6 +776,14 @@ Seed from:
 ### Stage 2: Raw source store
 
 Store untouched API payloads and retrieved text chunks in object storage.
+
+Use a multi-source literature stack rather than forcing one provider to do everything:
+
+- `Europe PMC` for biomedical literature discovery, DOI/PMID/PMCID alignment, and open-access metadata
+- `PMC` for evidence-bearing full text and section-level extraction where available
+- `OpenAlex` for breadth, institution metadata, references, and cited-by graph structure
+- `Semantic Scholar` for related-paper expansion and additional citation graph signals
+- `OptoBase` plus curated reviews for high-signal seeding
 
 ### Stage 3: LLM extraction to typed JSON
 
@@ -731,7 +834,7 @@ Generate:
 
 ---
 
-## 13. Recommended Technical Architecture
+## 14. Recommended Technical Architecture
 
 ### Storage
 
@@ -766,33 +869,63 @@ Because most of the difficult work is evidence provenance, normalization, and ro
 
 ---
 
-## 14. Public Viewer Design
+## 15. Public Viewer Design
 
-The viewer should expose several top-level navigation modes:
+The viewer should explain the collection as **two branches plus workflows**, not as one flat set of browse buckets.
 
-1. **Explore by mechanism**  
-   Biophysical mechanisms of molecular tools: heterodimerization, oligomerization, conformational uncaging, membrane recruitment, photocleavage, DNA binding, RNA binding, degradation, translation control, etc.
+### 15.1 First-order navigation model
 
-2. **Explore by technique**  
-   Engineering methodology categories: computational design, selection / enrichment, directed evolution, sequence verification, functional assay, structural characterization, delivery optimization, etc.
+1. **Mechanism branch**
+   Start at the top conceptual layer and move downward:
+   `mechanism -> architecture -> component`
 
-3. **Explore by component family**  
-   LOV, BLUF, cryptochromes, phytochromes, fluorescent proteins, chemogenetic receptors, RNA elements, display platforms, etc.
+2. **Technique branch**
+   Browse methods of use separately:
+   high-level technique / approach -> concrete method
 
-4. **Explore by validation context**  
+3. **Workflow layer**
+   Show workflows as the place where technique choices are applied to obtain, screen, verify, characterize, deliver, or operationalize a target composition.
+
+### 15.2 Concrete browse modes
+
+1. **Explore by mechanism**
+   Heterodimerization, oligomerization, conformational uncaging, membrane recruitment, photocleavage, DNA binding, RNA binding, degradation, translation control, etc.
+
+2. **Explore by architecture**
+   Multi-component switches, construct patterns, split systems, recruitment systems, uncaging systems, cleavage systems, etc.
+
+3. **Explore by component**
+   Protein domains, RNA elements, and eventually more sequence-defined or part-level items.
+
+4. **Explore by technique**
+   Computational design, selection / enrichment, directed evolution, sequence verification, functional assay, structural characterization, etc.
+
+5. **Explore by method class**
+   Engineering methods, computational methods, assay methods.
+
+6. **Explore by family**
+   LOV, BLUF, cryptochromes, phytochromes, fluorescent proteins, chemogenetic receptors, RNA element families, display platforms, etc.
+
+7. **Explore by validation context**
    cell-free, bacteria, mammalian, in vivo mouse, human, therapeutic
 
-5. **Explore by workflow speed / cost**  
+8. **Explore by workflow speed / cost**
    fastest-to-first-test, cheapest-to-screen, hardest-to-debug, best for libraries
 
-6. **Explore by Gap Map problem**  
+9. **Explore by Gap Map problem**
    show candidate tools ranked by applicability and confidence
+
+### 15.3 Item-page framing
 
 Each item page should show:
 
 - summary
-- mechanism and/or technique
-- components
+- where the item sits in the taxonomy:
+  - mechanism branch / architecture / component, or
+  - technique branch / method
+- linked mechanisms
+- linked techniques
+- component structure where relevant
 - validation matrix
 - replication / practicality meter
 - workflow fit
@@ -802,7 +935,7 @@ Each item page should show:
 
 ---
 
-## 15. Repo Layout for Humans and Agents
+## 16. Repo Layout for Humans and Agents
 
 Recommended monorepo layout:
 
@@ -888,7 +1021,7 @@ This makes the repo legible to both humans and agents.
 
 ---
 
-## 16. Cursor Harness Engineering
+## 17. Cursor Harness Engineering
 
 Create:
 
@@ -951,7 +1084,7 @@ Reusable workflows such as:
 
 ---
 
-## 17. Scoring and Transparency Requirements
+## 18. Scoring and Transparency Requirements
 
 Every score shown publicly should expose its breakdown.
 
@@ -968,7 +1101,7 @@ No black-box leaderboard nonsense.
 
 ---
 
-## 18. First Build Plan
+## 19. First Build Plan
 
 ### Phase 0 - Ontology and schema
 
@@ -1010,7 +1143,7 @@ No black-box leaderboard nonsense.
 
 ---
 
-## 19. Most Important Non-Obvious Design Choice
+## 20. Most Important Non-Obvious Design Choice
 
 The most important choice is this:
 

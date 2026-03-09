@@ -142,6 +142,7 @@ export interface ReplicationSummary {
   replication_score: number | null;
   practicality_score: number | null;
   translatability_score: number | null;
+  explanation?: Record<string, unknown> | null;
 }
 
 export interface ItemCitation {
@@ -170,13 +171,108 @@ export interface ValidationObservation {
   observation_type: ObservationType;
   biological_system_level: BiologicalSystemLevel;
   species: string | null;
+  strain_or_model?: string | null;
   cell_type: string | null;
+  tissue?: string | null;
   delivery_mode: string | null;
   success_outcome: SuccessOutcome;
   assay_description: string | null;
   construct_name: string | null;
   independent_lab_cluster_id: string | null;
+  institution_cluster_id?: string | null;
+  notes?: string | null;
+  source_locator?: Record<string, unknown>;
+  source_document?: SourceDocument | null;
   metrics: ValidationMetric[];
+}
+
+export interface ClaimMetric {
+  metric_name: string;
+  operator: string | null;
+  value_num: number | null;
+  value_text: string | null;
+  unit: string | null;
+  condition_text: string | null;
+}
+
+export interface ItemClaim {
+  id: string;
+  claim_type: string;
+  claim_text_normalized: string;
+  polarity: "supports" | "contradicts" | "mixed" | "neutral";
+  needs_review: boolean;
+  context: Record<string, unknown>;
+  source_locator: Record<string, unknown>;
+  source_document: SourceDocument;
+  metrics: ClaimMetric[];
+}
+
+export interface ApprovedItemSourceDocument {
+  id: string;
+  title: string;
+  source_type: string;
+  publication_year: number | null;
+  journal_or_source: string | null;
+  doi: string | null;
+  pmid: string | null;
+  is_retracted: boolean;
+}
+
+export interface ApprovedItemEvidenceSnippet {
+  text: string;
+  source_document: ApprovedItemSourceDocument;
+}
+
+export interface ApprovedItemClaim {
+  id: string;
+  claim_type: string;
+  claim_text_normalized: string;
+  polarity: "supports" | "contradicts" | "mixed" | "neutral";
+  source_locator: Record<string, unknown>;
+  metrics: Array<Record<string, unknown>>;
+  source_document: ApprovedItemSourceDocument;
+}
+
+export interface ApprovedItemEvidence {
+  matched_first_pass_slugs: string[];
+  source_document_count: number;
+  claim_count: number;
+  evidence_snippets: ApprovedItemEvidenceSnippet[];
+  source_documents: ApprovedItemSourceDocument[];
+  claims: ApprovedItemClaim[];
+}
+
+export interface ItemFacet {
+  facet_name: string;
+  facet_value: string;
+  evidence_note?: string | null;
+}
+
+export interface ItemExplainer {
+  explainer_kind: string;
+  title?: string | null;
+  body: string;
+  evidence_payload?: Record<string, unknown>;
+}
+
+export interface ItemComparison {
+  related_item_slug: string;
+  related_item_name: string;
+  relation_type: string;
+  summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  overlap_reasons: string[];
+}
+
+export interface ItemProblemLink {
+  problem_label: string;
+  why_this_item_helps: string;
+  source_kind: string;
+  gap_slug?: string | null;
+  gap_title?: string | null;
+  overall_score?: number | null;
+  evidence_payload?: Record<string, unknown>;
 }
 
 export interface ValidationMetric {
@@ -198,6 +294,7 @@ export interface ToolkitItem {
   first_publication_year: number | null;
   primary_input_modality: Modality | null;
   primary_output_modality: Modality | null;
+  components?: string[];
   mechanisms: string[];
   techniques: string[];
   target_processes: string[];
@@ -206,6 +303,16 @@ export interface ToolkitItem {
   replication_summary: ReplicationSummary | null;
   citations: ItemCitation[];
   validations: ValidationObservation[];
+  claims?: ItemClaim[];
+  item_facets?: ItemFacet[];
+  explainers?: ItemExplainer[];
+  comparisons?: ItemComparison[];
+  problem_links?: ItemProblemLink[];
+  approval_evidence?: ApprovedItemEvidence | null;
+  index_markdown?: string | null;
+  evidence_markdown?: string | null;
+  replication_markdown?: string | null;
+  workflow_fit_markdown?: string | null;
 }
 
 export interface WorkflowStep {
@@ -295,10 +402,30 @@ export interface GapSummary {
   capability_count: number;
 }
 
+export interface GapCandidateTool {
+  item_slug: string;
+  canonical_name: string;
+  item_type: ItemType;
+  summary: string | null;
+  overall_gap_applicability_score: number | null;
+  mechanistic_match_score: number | null;
+  context_match_score: number | null;
+  throughput_match_score: number | null;
+  time_to_first_test_score: number | null;
+  cost_to_first_test_score: number | null;
+  replication_confidence_modifier: number | null;
+  practicality_modifier: number | null;
+  translatability_modifier: number | null;
+  why_it_might_help: string | null;
+  assumptions: string | null;
+  missing_evidence: string | null;
+}
+
 export interface GapDetail extends GapSummary {
   description: string | null;
   tags: string[];
   capabilities: GapCapabilityDetail[];
+  candidate_tools: GapCandidateTool[];
 }
 
 export interface FirstPassSourceDocument {

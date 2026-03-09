@@ -70,6 +70,18 @@ Fetch an OpenAlex work payload:
 .venv/bin/python -m apps.worker.main fetch-openalex-work W2741809807 --output-path tmp/openalex-work.json
 ```
 
+Fetch a Europe PMC search payload:
+
+```bash
+.venv/bin/python -m apps.worker.main fetch-europepmc-search "optogenetic switch" --page-size 25 --page 1 --output-path tmp/europepmc-search.json
+```
+
+Fetch a PMC BioC full-text payload:
+
+```bash
+.venv/bin/python -m apps.worker.main fetch-pmc-fulltext PMC1234567 --output-path tmp/pmc-bioc.json
+```
+
 Fetch a Semantic Scholar paper payload:
 
 ```bash
@@ -126,6 +138,18 @@ Apply database migrations:
 .venv/bin/python -m apps.worker.main run-migrations
 ```
 
+Recompute canonical item explainers, comparisons, facets, and scores after schema or derivation changes:
+
+```bash
+.venv/bin/python -m apps.worker.main materialize-item-details
+```
+
+Optionally scope the refresh to one or more item slugs:
+
+```bash
+.venv/bin/python -m apps.worker.main materialize-item-details licre phyb-pif
+```
+
 Run the packet ingest pipeline end to end:
 
 ```bash
@@ -152,6 +176,8 @@ Harvest a much broader first-pass corpus:
 
 This expands source queries from the checked-in seed bundle and controlled vocabularies, paginates across OpenAlex and Semantic Scholar, and pulls a much larger raw corpus than the smoke-test path.
 
+The broad harvester now also queries Europe PMC and can fetch a bounded set of PMC BioC full-text payloads for open-access papers discovered through Europe PMC.
+
 Build typed extraction artifacts from fetched real data:
 
 ```bash
@@ -161,6 +187,7 @@ Build typed extraction artifacts from fetched real data:
 This currently creates:
 
 - deterministic `database_entry_extract_v1` packets for a slice of Gap Map gaps
+- `review_extract_v1` and `primary_paper_extract_v1` metadata scaffolds from Europe PMC search results, with PMC full-text previews attached when available
 - `primary_paper_extract_v1` metadata scaffolds for a slice of OpenAlex works
 - `primary_paper_extract_v1` and `review_extract_v1` metadata scaffolds for a slice of Semantic Scholar papers
 - structured Semantic Scholar summary artifacts for fetched search hits
@@ -247,4 +274,5 @@ This command:
 - loads the seed bundle into canonical `toolkit_item` and `workflow_template` tables
 - ingests `data/extractions/*.json`
 - ingests `data/pipeline-artifacts/real-extraction-seed/gap_map/*.database_entry_extract_v1.json`
+- materializes canonical item facets, explainers, comparisons, problem links, and replication summaries
 - writes normalized packets, load plans, execution reports, and review-queue artifacts under `data/pipeline-artifacts/populate-local-db/`

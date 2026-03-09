@@ -25,6 +25,7 @@ Quick start:
 2. Start Postgres with `docker compose -f docker-compose.local.yml up -d`.
 3. Run migrations with `.venv/bin/python -m apps.worker.main run-migrations`.
 4. Populate the local database with checked-in literature and Gap Map packets using `.venv/bin/python -m apps.worker.main populate-local-db`.
+5. Recompute canonical item explainers, comparisons, facets, and scores with `.venv/bin/python -m apps.worker.main materialize-item-details` when you change derivation logic without reingesting.
 
 Recommended local `DATABASE_URL`:
 
@@ -46,7 +47,7 @@ The hosted sync model is git-driven. On each Render deploy, the API service runs
 python -m apps.worker.main populate-local-db
 ```
 
-That reruns migrations, reloads the checked-in seed bundle, and ingests the checked-in extraction artifacts into hosted Postgres before traffic shifts.
+That reruns migrations, reloads the checked-in seed bundle, ingests the checked-in extraction artifacts into hosted Postgres, and rematerializes canonical item detail outputs before traffic shifts.
 
 Practical implication:
 
@@ -58,6 +59,17 @@ Practical implication:
 The primary unit of truth is `claim + context + evidence`.
 
 Human-readable summaries such as "has mouse validation" or "used therapeutically" are derived views built from source-backed observations, not hand-entered booleans.
+
+## Hierarchy Browsing
+
+The web hierarchy is intentionally built as two branches beneath workflows:
+
+- mechanism `->` architecture `->` component
+- technique `->` method
+
+When the browse UI builds those branches, low-level items are rolled upward conservatively from explicit tags first, then from architecture/component context when needed. Top-level mechanism and technique sections also synthesize short coverage summaries so a concept like `conformational_uncaging` can explain both what it means and which current toolkit items support it.
+
+Those synthesized concepts are also available as dedicated app routes under `/mechanisms`, `/mechanisms/[slug]`, `/techniques`, and `/techniques/[slug]`.
 
 ## Current Scope
 

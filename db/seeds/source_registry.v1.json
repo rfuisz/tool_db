@@ -9,6 +9,24 @@
     "base_url": "https://optobase.org/"
   },
   {
+    "source_key": "europe_pmc",
+    "display_name": "Europe PMC",
+    "source_kind": "database_entry",
+    "sync_mode": "periodic_api_sync",
+    "role": "biomedical literature search, identifiers, annotations, and open-access metadata",
+    "status": "planned",
+    "base_url": "https://www.ebi.ac.uk/europepmc/webservices/rest"
+  },
+  {
+    "source_key": "pmc",
+    "display_name": "PubMed Central",
+    "source_kind": "database_entry",
+    "sync_mode": "periodic_api_sync",
+    "role": "open-access full text retrieval for evidence-bearing extraction",
+    "status": "planned",
+    "base_url": "https://www.ncbi.nlm.nih.gov/pmc/"
+  },
+  {
     "source_key": "openalex",
     "display_name": "OpenAlex",
     "source_kind": "database_entry",

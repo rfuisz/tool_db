@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tool-db.local/schemas/derivations/gap_item_link.v1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["gap_slug", "candidate_links"],
+  "properties": {
+    "gap_slug": {
+      "type": "string",
+      "minLength": 1
+    },
+    "candidate_links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "item_slug",
+          "mechanistic_match_score",
+          "context_match_score",
+          "throughput_match_score",
+          "time_to_first_test_score",
+          "cost_to_first_test_score",
+          "replication_confidence_modifier",
+          "practicality_modifier",
+          "translatability_modifier",
+          "overall_gap_applicability_score",
+          "why_it_might_help",
+          "assumptions",
+          "missing_evidence"
+        ],
+        "properties": {
+          "item_slug": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mechanistic_match_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "context_match_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "throughput_match_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "time_to_first_test_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "cost_to_first_test_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "replication_confidence_modifier": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "practicality_modifier": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "translatability_modifier": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "overall_gap_applicability_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "why_it_might_help": {
+            "type": "string"
+          },
+          "assumptions": {
+            "type": "string"
+          },
+          "missing_evidence": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

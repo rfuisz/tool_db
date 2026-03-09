@@ -1,4 +1,6 @@
 import type { ToolkitItem } from "./types";
+import { buildItemHierarchyAssignments } from "./item-hierarchy";
+import { isSupportedTechnique } from "./vocabularies";
 
 export function getAllFamilies(items: ToolkitItem[]): string[] {
   const families = new Set(
@@ -8,11 +10,24 @@ export function getAllFamilies(items: ToolkitItem[]): string[] {
 }
 
 export function getAllMechanisms(items: ToolkitItem[]): string[] {
-  const mechanisms = new Set(items.flatMap((item) => item.mechanisms));
+  const hierarchyAssignments = buildItemHierarchyAssignments(items);
+  const mechanisms = new Set(
+    items.flatMap(
+      (item) => hierarchyAssignments.mechanismsBySlug.get(item.slug) ?? item.mechanisms,
+    ),
+  );
   return Array.from(mechanisms).sort();
 }
 
 export function getAllTechniques(items: ToolkitItem[]): string[] {
-  const techniques = new Set(items.flatMap((item) => item.techniques));
+  const hierarchyAssignments = buildItemHierarchyAssignments(items);
+  const techniques = new Set(
+    items
+      .flatMap(
+        (item) =>
+          hierarchyAssignments.techniquesBySlug.get(item.slug) ?? item.techniques,
+      )
+      .filter(isSupportedTechnique),
+  );
   return Array.from(techniques).sort();
 }

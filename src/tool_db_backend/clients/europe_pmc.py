@@ -16,13 +16,15 @@ class EuropePMCClient:
         )
         self._client.headers.update(default_headers)
 
-    def search(self, query: str, page_size: int = 1) -> Dict[str, Any]:
+    def search(self, query: str, page_size: int = 25, page: int = 1, result_type: str = "core") -> Dict[str, Any]:
         response = self._client.get(
             "/search",
             params={
                 "query": query,
                 "format": "json",
                 "pageSize": page_size,
+                "page": page,
+                "resultType": result_type,
             },
         )
         response.raise_for_status()

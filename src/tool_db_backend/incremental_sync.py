@@ -260,8 +260,15 @@ def _upsert_table(
     )
 
     all_params = [_adapt_params(row, cols, jsonb_cols) for row in rows]
-    with remote.cursor() as rcur:
-        rcur.executemany(insert_sql, all_params)
+    try:
+        with remote.cursor() as rcur:
+            rcur.executemany(insert_sql, all_params)
+    except psycopg.errors.UniqueViolation:
+        raise RuntimeError(
+            f"UniqueViolation upserting {table} ({len(all_params)} rows). "
+            f"The remote likely has stale rows with conflicting natural keys. "
+            f"Run with --full to force a full resync."
+        )
 
     return len(rows)
 
@@ -349,17 +356,21 @@ def run_incremental_sync(
         upsert_counts: dict[str, int] = {}
         delete_counts: dict[str, int] = {}
 
-        for table in TABLES_TOPO_ORDER:
-            n = _upsert_table(local, remote, table, watermark)
-            if n:
-                upsert_counts[table] = n
-                logger.info("Upserted %d rows in %s", n, table)
-
+        # Delete rows that no longer exist locally BEFORE upserting.
+        # This avoids UniqueViolation when a row was re-created with a new
+        # PK but the same natural-key (secondary unique constraint) — the
+        # stale remote row must be gone before the new one arrives.
         for table in reversed(TABLES_TOPO_ORDER):
             n = _delete_removed_rows(local, remote, table)
             if n:
                 delete_counts[table] = n
                 logger.info("Deleted %d rows from %s", n, table)
+
+        for table in TABLES_TOPO_ORDER:
+            n = _upsert_table(local, remote, table, watermark)
+            if n:
+                upsert_counts[table] = n
+                logger.info("Upserted %d rows in %s", n, table)
 
         _write_watermark(remote, sync_start_ts)
         remote.execute("ANALYZE")

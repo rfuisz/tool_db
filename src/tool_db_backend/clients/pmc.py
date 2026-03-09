@@ -4,6 +4,8 @@ import httpx
 
 from tool_db_backend.config import Settings
 
+_TIMEOUT = httpx.Timeout(connect=10.0, read=20.0, write=10.0, pool=10.0)
+
 
 class PMCClient:
     def __init__(self, settings: Settings, client: Optional[httpx.Client] = None) -> None:
@@ -12,7 +14,7 @@ class PMCClient:
         self._client = client or httpx.Client(
             base_url=self.settings.pmc_bioc_base_url,
             headers=default_headers,
-            timeout=30.0,
+            timeout=_TIMEOUT,
         )
         self._client.headers.update(default_headers)
 

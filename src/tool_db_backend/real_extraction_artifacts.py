@@ -365,7 +365,7 @@ class RealExtractionArtifactBuilder:
         raw_search_paths: List[Path],
         output_dir: Path,
         limit: int,
-        seen_document_keys: Optional[set[str]] = None,
+        seen_document_keys: Optional[set] = None,
     ) -> Dict[str, List[Path]]:
         packets_dir = output_dir / "packets"
         jobs_dir = output_dir / "jobs"
@@ -402,22 +402,50 @@ class RealExtractionArtifactBuilder:
 
         enrichments: List[Dict[str, Any]] = [{"source": "openalex_enrichment_skipped"}] * len(pending_works)
         enrich_indices = [i for i, (_, _, _, needs) in enumerate(enrichment_keys) if needs]
-        with ThreadPoolExecutor(max_workers=self.settings.llm_max_concurrency) as pool:
-            futures = {
-                pool.submit(
-                    self._enrich_openalex_work,
-                    title=enrichment_keys[i][0],
-                    doi=enrichment_keys[i][1],
-                    pmid=enrichment_keys[i][2],
-                ): i
-                for i in enrich_indices
-            }
+
+        europe_pmc_sem = threading.Semaphore(8)
+        semantic_scholar_sem = threading.Semaphore(2)
+        pmc_bioc_sem = threading.Semaphore(4)
+        thread_local = threading.local()
+
+        def _get_thread_clients() -> tuple:
+            if not hasattr(thread_local, "europe_pmc"):
+                thread_local.europe_pmc = EuropePMCClient(self.settings)
+                thread_local.pmc = PMCClient(self.settings)
+                thread_local.semantic_scholar = SemanticScholarClient(self.settings)
+            return thread_local.europe_pmc, thread_local.pmc, thread_local.semantic_scholar
+
+        enriched_count = 0
+        enriched_lock = threading.Lock()
+
+        def _enrich_one(idx: int) -> tuple:
+            nonlocal enriched_count
+            ep, pmc, ss = _get_thread_clients()
+            title, doi, pmid = enrichment_keys[idx][0], enrichment_keys[idx][1], enrichment_keys[idx][2]
+            result = self._enrich_openalex_work_with_clients(
+                title=title, doi=doi, pmid=pmid,
+                europe_pmc_client=ep, pmc_client=pmc, semantic_scholar_client=ss,
+                europe_pmc_sem=europe_pmc_sem, pmc_bioc_sem=pmc_bioc_sem,
+                semantic_scholar_sem=semantic_scholar_sem,
+            )
+            with enriched_lock:
+                enriched_count += 1
+                if enriched_count == 1 or enriched_count % 50 == 0 or enriched_count == len(enrich_indices):
+                    logger.info("Enrichment progress: %d/%d", enriched_count, len(enrich_indices))
+            return idx, result
+
+        if enrich_indices:
+            logger.info("Enriching %d OpenAlex works (threads=%d, epmc_sem=%d, s2_sem=%d).",
+                        len(enrich_indices), min(self.settings.llm_max_concurrency, 16),
+                        8, 2)
+        with ThreadPoolExecutor(max_workers=min(self.settings.llm_max_concurrency, 16)) as pool:
+            futures = {pool.submit(_enrich_one, i): i for i in enrich_indices}
             for future in as_completed(futures):
-                idx = futures[future]
                 try:
-                    enrichments[idx] = future.result()
+                    idx, result = future.result()
+                    enrichments[idx] = result
                 except Exception:
-                    enrichments[idx] = {"source": "openalex_enrichment_error"}
+                    enrichments[futures[future]] = {"source": "openalex_enrichment_error"}
 
         packet_paths: List[Path] = []
         job_paths: List[Path] = []
@@ -497,7 +525,7 @@ class RealExtractionArtifactBuilder:
         pmc_raw_paths: Dict[str, str],
         output_dir: Path,
         limit: int,
-        seen_document_keys: Optional[set[str]] = None,
+        seen_document_keys: Optional[set] = None,
     ) -> Dict[str, List[Path]]:
         packets_dir = output_dir / "packets"
         jobs_dir = output_dir / "jobs"
@@ -594,7 +622,7 @@ class RealExtractionArtifactBuilder:
         raw_search_paths: List[Path],
         output_dir: Path,
         limit: int,
-        seen_document_keys: Optional[set[str]] = None,
+        seen_document_keys: Optional[set] = None,
     ) -> Dict[str, List[Path]]:
         packets_dir = output_dir / "packets"
         jobs_dir = output_dir / "jobs"
@@ -955,14 +983,60 @@ class RealExtractionArtifactBuilder:
         return packet_path, job_path
 
     def _enrich_openalex_work(self, title: str, doi: Optional[str], pmid: Optional[str]) -> Dict[str, Any]:
+        """Legacy single-threaded enrichment path (kept for non-batch callers)."""
+        return self._enrich_openalex_work_with_clients(
+            title=title, doi=doi, pmid=pmid,
+            europe_pmc_client=self.europe_pmc_client,
+            pmc_client=self.pmc_client,
+            semantic_scholar_client=self.semantic_scholar_client,
+        )
+
+    def _enrich_openalex_work_with_clients(
+        self,
+        *,
+        title: str,
+        doi: Optional[str],
+        pmid: Optional[str],
+        europe_pmc_client: EuropePMCClient,
+        pmc_client: PMCClient,
+        semantic_scholar_client: SemanticScholarClient,
+        europe_pmc_sem: Optional[threading.Semaphore] = None,
+        pmc_bioc_sem: Optional[threading.Semaphore] = None,
+        semantic_scholar_sem: Optional[threading.Semaphore] = None,
+    ) -> Dict[str, Any]:
         cache_path = self._enrichment_cache_path(title=title, doi=doi, pmid=pmid)
         cached = self._read_json_cache(cache_path)
         if cached is not None:
             return cached
 
-        europe_pmc_result = self.europe_pmc_client.fetch_by_doi_or_pmid(doi=doi, pmid=pmid)
-        semantic_scholar_result = self._find_semantic_scholar_match(title=title, doi=doi, pmid=pmid)
-        enrichment = {
+        europe_pmc_result = None
+        try:
+            if europe_pmc_sem:
+                europe_pmc_sem.acquire()
+            try:
+                europe_pmc_result = europe_pmc_client.fetch_by_doi_or_pmid(doi=doi, pmid=pmid)
+            finally:
+                if europe_pmc_sem:
+                    europe_pmc_sem.release()
+        except Exception as exc:
+            logger.debug("Europe PMC enrichment failed for doi=%s: %s", doi, exc)
+
+        semantic_scholar_result: Dict[str, Any] = {}
+        try:
+            if semantic_scholar_sem:
+                semantic_scholar_sem.acquire()
+            try:
+                semantic_scholar_result = self._find_semantic_scholar_match_with_client(
+                    title=title, doi=doi, pmid=pmid,
+                    client=semantic_scholar_client,
+                )
+            finally:
+                if semantic_scholar_sem:
+                    semantic_scholar_sem.release()
+        except Exception as exc:
+            logger.debug("Semantic Scholar enrichment failed for doi=%s: %s", doi, exc)
+
+        enrichment: Dict[str, Any] = {
             "source": "openalex_enrichment",
         }
         if europe_pmc_result:
@@ -970,7 +1044,13 @@ class RealExtractionArtifactBuilder:
             pmcid = europe_pmc_result.get("pmcid")
             if pmcid:
                 try:
-                    pmc_bioc_payload = self.pmc_client.fetch_bioc_fulltext(str(pmcid))
+                    if pmc_bioc_sem:
+                        pmc_bioc_sem.acquire()
+                    try:
+                        pmc_bioc_payload = pmc_client.fetch_bioc_fulltext(str(pmcid))
+                    finally:
+                        if pmc_bioc_sem:
+                            pmc_bioc_sem.release()
                 except Exception:
                     pmc_bioc_payload = None
             enrichment.update(
@@ -1031,8 +1111,21 @@ class RealExtractionArtifactBuilder:
         doi: Optional[str],
         pmid: Optional[str],
     ) -> Dict[str, Any]:
+        return self._find_semantic_scholar_match_with_client(
+            title=title, doi=doi, pmid=pmid,
+            client=self.semantic_scholar_client,
+        )
+
+    @staticmethod
+    def _find_semantic_scholar_match_with_client(
+        *,
+        title: str,
+        doi: Optional[str],
+        pmid: Optional[str],
+        client: SemanticScholarClient,
+    ) -> Dict[str, Any]:
         try:
-            payload = self.semantic_scholar_client.search_papers(
+            payload = client.search_papers(
                 query=title,
                 limit=10,
                 offset=0,
@@ -1042,7 +1135,7 @@ class RealExtractionArtifactBuilder:
             return {}
         for result in payload.get("data", []):
             external_ids = result.get("externalIds") or {}
-            result_doi = self._normalize_doi(external_ids.get("DOI"))
+            result_doi = RealExtractionArtifactBuilder._normalize_doi(external_ids.get("DOI"))
             result_pmid = str(external_ids.get("PubMed") or "").strip() or None
             if doi and result_doi and result_doi.casefold() == doi.casefold():
                 return result

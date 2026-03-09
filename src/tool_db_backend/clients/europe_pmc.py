@@ -4,6 +4,8 @@ import httpx
 
 from tool_db_backend.config import Settings
 
+_TIMEOUT = httpx.Timeout(connect=10.0, read=20.0, write=10.0, pool=10.0)
+
 
 class EuropePMCClient:
     def __init__(self, settings: Settings, client: Optional[httpx.Client] = None) -> None:
@@ -12,7 +14,7 @@ class EuropePMCClient:
         self._client = client or httpx.Client(
             base_url=self.settings.europe_pmc_base_url,
             headers=default_headers,
-            timeout=30.0,
+            timeout=_TIMEOUT,
         )
         self._client.headers.update(default_headers)
 
@@ -38,7 +40,10 @@ class EuropePMCClient:
             queries.append(f'EXT_ID:{pmid} AND SRC:MED')
 
         for query in queries:
-            payload = self.search(query=query, page_size=1)
+            try:
+                payload = self.search(query=query, page_size=1)
+            except (httpx.TimeoutException, httpx.HTTPStatusError):
+                continue
             results = ((payload.get("resultList") or {}).get("result") or [])
             if results:
                 return results[0]

@@ -336,7 +336,9 @@ Concurrency rules:
 - Always parallelize I/O-bound calls. Never loop serially over network fetches. Use `ThreadPoolExecutor` with `llm_max_concurrency` as the default pool width.
 - OpenAI API calls can handle very high parallelism. Use the full `llm_max_concurrency` (default 64) pool for LLM extraction, web-research, and repair calls.
 - OpenAlex has a low RPM limit. Live API calls are gated by a `threading.Semaphore(openalex_max_concurrency)` (default 3), but cached reads bypass the semaphore so reruns stay fast.
-- Europe PMC, PMC BioC, Semantic Scholar, and OptoBase can use the full pool width.
+- **Europe PMC enrichment** is gated by a semaphore (8 concurrent) during OpenAlex enrichment to avoid flooding. PMC BioC fulltext fetches are gated at 4 concurrent.
+- **Semantic Scholar** is gated at 2 concurrent during enrichment. S2's public API rate-limits aggressively (~1 req/s). The client retries on 429 with exponential backoff and auto-drops the API key on 403 (expired/blocked keys).
+- **httpx.Client thread safety**: each enrichment thread creates its own client instances via `threading.local()`. Never share a single `httpx.Client` across threads -- it causes connection pool corruption and indefinite hangs.
 - The `--limit` flag on `run-extraction-batch` defaults to `0` (run all eligible jobs). There is no secondary cap beyond `llm_max_concurrency`.
 
 Relevant settings:

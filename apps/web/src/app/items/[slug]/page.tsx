@@ -240,12 +240,16 @@ export default async function ItemDetailPage({
   const citationsBySourceId = new Map<string, typeof sortedCitations>();
   for (const claim of claims) {
     const existing = claimsBySourceId.get(claim.source_document.id) ?? [];
-    existing.push(claim);
+    if (!existing.some((c) => c.id === claim.id)) {
+      existing.push(claim);
+    }
     claimsBySourceId.set(claim.source_document.id, existing);
   }
   for (const citation of sortedCitations) {
     const existing = citationsBySourceId.get(citation.document.id) ?? [];
-    existing.push(citation);
+    if (!existing.some((c) => c.id === citation.id)) {
+      existing.push(citation);
+    }
     citationsBySourceId.set(citation.document.id, existing);
   }
 

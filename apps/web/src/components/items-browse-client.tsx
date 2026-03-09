@@ -344,167 +344,189 @@ export function ItemsBrowseClient({
       <section className="mb-8 grid gap-6 lg:grid-cols-2">
         <div className="border border-edge p-4">
           <p className="small-caps mb-2 text-accent">Mechanism Branch</p>
-          <div className="space-y-5">
+          <div className="space-y-4">
             {MECHANISM_HIERARCHY_SECTIONS.map((section, index) => (
-              <div key={section.id}>
-                <p className="small-caps mb-1 text-ink-muted">Layer {index + 1}</p>
-                <p className="mb-2 font-display text-lg text-ink">
-                  {section.title}
-                </p>
-                <p className="mb-3 text-sm leading-relaxed text-ink-secondary">
-                  {section.description}
-                </p>
-                {section.id === "mechanism" ? (
-                  <div className="grid gap-3">
-                    {mechanismConcepts.map((concept) => {
-                      const active = mechanismFilter === concept.key;
-                      return (
-                        <button
-                          key={concept.key}
-                          type="button"
-                          onClick={() => {
-                            setMechanismFilter(active ? "" : concept.key);
-                            setOffset(0);
-                          }}
-                          className={`rounded border p-3 text-left transition-colors ${
-                            active
-                              ? "border-accent bg-brand-light"
-                              : "border-edge hover:border-accent"
-                          }`}
-                        >
-                          <div className="flex items-baseline justify-between gap-3">
-                            <span
-                              className={`font-display text-base ${
-                                active ? "text-accent" : "text-ink"
-                              }`}
-                            >
-                              {MECHANISM_LABELS[concept.key] ?? concept.label}
-                            </span>
-                            <span className="font-data text-xs text-ink-muted">
-                              {concept.totalCount}
-                            </span>
-                          </div>
-                          <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-                            {concept.summary}
-                          </p>
-                          <p className="mt-2 font-ui text-xs text-ink-muted">
-                            {concept.architectureCount} architectures ·{" "}
-                            {concept.componentCount} components
-                          </p>
-                        </button>
-                      );
-                    })}
+              <details key={section.id} className="group/layer">
+                <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="small-caps mb-1 text-ink-muted">Layer {index + 1}</p>
+                      <p className="font-display text-lg text-ink">
+                        {section.title}
+                      </p>
+                    </div>
+                    <span className="text-ink-muted transition-transform duration-200 group-open/layer:rotate-180">
+                      ▾
+                    </span>
                   </div>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {getOrderedItemTypes(section.itemTypes ?? [])
-                      .filter((type) => filterOptions.types.includes(type))
-                      .map((type) => {
-                        const active = typeFilter === type;
+                  <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
+                    {section.description}
+                  </p>
+                </summary>
+                <div className="mt-3">
+                  {section.id === "mechanism" ? (
+                    <div className="grid gap-3">
+                      {mechanismConcepts.map((concept) => {
+                        const active = mechanismFilter === concept.key;
                         return (
                           <button
-                            key={type}
+                            key={concept.key}
                             type="button"
                             onClick={() => {
-                              setTypeFilter(active ? "" : type);
+                              setMechanismFilter(active ? "" : concept.key);
                               setOffset(0);
                             }}
-                            className={`border-b pb-0.5 font-ui text-sm transition-colors ${
+                            className={`rounded border p-3 text-left transition-colors ${
                               active
-                                ? "border-accent text-accent"
-                                : "border-edge text-ink-secondary hover:border-accent hover:text-accent"
+                                ? "border-accent bg-brand-light"
+                                : "border-edge hover:border-accent"
                             }`}
                           >
-                            {ITEM_TYPE_LABELS[type]}
+                            <div className="flex items-baseline justify-between gap-3">
+                              <span
+                                className={`font-display text-base ${
+                                  active ? "text-accent" : "text-ink"
+                                }`}
+                              >
+                                {MECHANISM_LABELS[concept.key] ?? concept.label}
+                              </span>
+                              <span className="font-data text-xs text-ink-muted">
+                                {concept.totalCount}
+                              </span>
+                            </div>
+                            <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
+                              {concept.summary}
+                            </p>
+                            <p className="mt-2 font-ui text-xs text-ink-muted">
+                              {concept.architectureCount} architectures ·{" "}
+                              {concept.componentCount} components
+                            </p>
                           </button>
                         );
                       })}
-                  </div>
-                )}
-              </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {getOrderedItemTypes(section.itemTypes ?? [])
+                        .filter((type) => filterOptions.types.includes(type))
+                        .map((type) => {
+                          const active = typeFilter === type;
+                          return (
+                            <button
+                              key={type}
+                              type="button"
+                              onClick={() => {
+                                setTypeFilter(active ? "" : type);
+                                setOffset(0);
+                              }}
+                              className={`border-b pb-0.5 font-ui text-sm transition-colors ${
+                                active
+                                  ? "border-accent text-accent"
+                                  : "border-edge text-ink-secondary hover:border-accent hover:text-accent"
+                              }`}
+                            >
+                              {ITEM_TYPE_LABELS[type]}
+                            </button>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
+              </details>
             ))}
           </div>
         </div>
 
         <div className="border border-edge p-4">
           <p className="small-caps mb-2 text-accent">Technique Branch</p>
-          <div className="space-y-5">
+          <div className="space-y-4">
             {TECHNIQUE_HIERARCHY_SECTIONS.map((section, index) => (
-              <div key={section.id}>
-                <p className="small-caps mb-1 text-ink-muted">Layer {index + 1}</p>
-                <p className="mb-2 font-display text-lg text-ink">
-                  {section.title}
-                </p>
-                <p className="mb-3 text-sm leading-relaxed text-ink-secondary">
-                  {section.description}
-                </p>
-                {section.id === "technique" ? (
-                  <div className="grid gap-3">
-                    {techniqueConcepts.map((concept) => {
-                      const active = techniqueFilter === concept.key;
-                      return (
-                        <button
-                          key={concept.key}
-                          type="button"
-                          onClick={() => {
-                            setTechniqueFilter(active ? "" : concept.key);
-                            setOffset(0);
-                          }}
-                          className={`rounded border p-3 text-left transition-colors ${
-                            active
-                              ? "border-accent bg-brand-light"
-                              : "border-edge hover:border-accent"
-                          }`}
-                        >
-                          <div className="flex items-baseline justify-between gap-3">
-                            <span
-                              className={`font-display text-base ${
-                                active ? "text-accent" : "text-ink"
-                              }`}
-                            >
-                              {TECHNIQUE_LABELS[concept.key] ?? concept.label}
-                            </span>
-                            <span className="font-data text-xs text-ink-muted">
-                              {concept.totalCount}
-                            </span>
-                          </div>
-                          <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-                            {concept.summary}
-                          </p>
-                          <p className="mt-2 font-ui text-xs text-ink-muted">
-                            {concept.methodCount} methods
-                          </p>
-                        </button>
-                      );
-                    })}
+              <details key={section.id} className="group/layer">
+                <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="small-caps mb-1 text-ink-muted">Layer {index + 1}</p>
+                      <p className="font-display text-lg text-ink">
+                        {section.title}
+                      </p>
+                    </div>
+                    <span className="text-ink-muted transition-transform duration-200 group-open/layer:rotate-180">
+                      ▾
+                    </span>
                   </div>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {getOrderedItemTypes(section.itemTypes ?? [])
-                      .filter((type) => filterOptions.types.includes(type))
-                      .map((type) => {
-                        const active = typeFilter === type;
+                  <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
+                    {section.description}
+                  </p>
+                </summary>
+                <div className="mt-3">
+                  {section.id === "technique" ? (
+                    <div className="grid gap-3">
+                      {techniqueConcepts.map((concept) => {
+                        const active = techniqueFilter === concept.key;
                         return (
                           <button
-                            key={type}
+                            key={concept.key}
                             type="button"
                             onClick={() => {
-                              setTypeFilter(active ? "" : type);
+                              setTechniqueFilter(active ? "" : concept.key);
                               setOffset(0);
                             }}
-                            className={`border-b pb-0.5 font-ui text-sm transition-colors ${
+                            className={`rounded border p-3 text-left transition-colors ${
                               active
-                                ? "border-accent text-accent"
-                                : "border-edge text-ink-secondary hover:border-accent hover:text-accent"
+                                ? "border-accent bg-brand-light"
+                                : "border-edge hover:border-accent"
                             }`}
                           >
-                            {ITEM_TYPE_LABELS[type]}
+                            <div className="flex items-baseline justify-between gap-3">
+                              <span
+                                className={`font-display text-base ${
+                                  active ? "text-accent" : "text-ink"
+                                }`}
+                              >
+                                {TECHNIQUE_LABELS[concept.key] ?? concept.label}
+                              </span>
+                              <span className="font-data text-xs text-ink-muted">
+                                {concept.totalCount}
+                              </span>
+                            </div>
+                            <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
+                              {concept.summary}
+                            </p>
+                            <p className="mt-2 font-ui text-xs text-ink-muted">
+                              {concept.methodCount} methods
+                            </p>
                           </button>
                         );
                       })}
-                  </div>
-                )}
-              </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {getOrderedItemTypes(section.itemTypes ?? [])
+                        .filter((type) => filterOptions.types.includes(type))
+                        .map((type) => {
+                          const active = typeFilter === type;
+                          return (
+                            <button
+                              key={type}
+                              type="button"
+                              onClick={() => {
+                                setTypeFilter(active ? "" : type);
+                                setOffset(0);
+                              }}
+                              className={`border-b pb-0.5 font-ui text-sm transition-colors ${
+                                active
+                                  ? "border-accent text-accent"
+                                  : "border-edge text-ink-secondary hover:border-accent hover:text-accent"
+                              }`}
+                            >
+                              {ITEM_TYPE_LABELS[type]}
+                            </button>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
+              </details>
             ))}
           </div>
         </div>

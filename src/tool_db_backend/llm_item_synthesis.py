@@ -323,23 +323,22 @@ def _apply_synthesis_result(
         body_text = _sanitize_text((body or "").strip())
         if not body_text or len(body_text) < 15:
             continue
+        evidence = json.dumps({"synthesis_source": "llm", "synthesis_version": _SYNTHESIS_VERSION})
         cursor.execute(
             """
-            update item_explainer
-            set body = %s, title = %s, derived_version = %s, derivation_model = %s,
-                evidence_payload = evidence_payload || %s::jsonb,
+            insert into item_explainer (
+              item_id, explainer_kind, title, body, evidence_payload,
+              derived_version, derivation_model, updated_at
+            )
+            values (%s, %s, %s, %s, %s::jsonb, %s, %s, now())
+            on conflict (item_id, explainer_kind)
+              do update set body = excluded.body, title = excluded.title,
+                derived_version = excluded.derived_version,
+                derivation_model = excluded.derivation_model,
+                evidence_payload = excluded.evidence_payload,
                 updated_at = now()
-            where item_id = %s and explainer_kind = %s
             """,
-            (
-                body_text,
-                title,
-                version,
-                model_name,
-                json.dumps({"synthesis_source": "llm", "synthesis_version": _SYNTHESIS_VERSION}),
-                item_id,
-                kind,
-            ),
+            (item_id, kind, title, body_text, evidence, version, model_name),
         )
 
     new_mechanisms = profile.get("mechanisms") or []

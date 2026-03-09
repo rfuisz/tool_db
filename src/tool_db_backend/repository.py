@@ -1177,12 +1177,12 @@ class KnowledgeRepository:
                     components=self._fetch_item_components(cursor, item_id),
                     mechanisms=self._fetch_scalar_list(
                         cursor,
-                        "select mechanism_name from item_mechanism where item_id = %s order by mechanism_name asc",
+                        "select distinct mechanism_name from item_mechanism where item_id = %s order by mechanism_name asc",
                         item_id,
                     ),
                     techniques=self._fetch_scalar_list(
                         cursor,
-                        "select technique_name from item_technique where item_id = %s order by technique_name asc",
+                        "select distinct technique_name from item_technique where item_id = %s order by technique_name asc",
                         item_id,
                     ),
                     target_processes=self._fetch_scalar_list(

@@ -121,129 +121,157 @@ Or am I a wild storm, or a great song?`}
         <div className="grid gap-8 lg:grid-cols-2">
           <div className="border border-edge p-5">
             <p className="small-caps mb-3 text-accent">Mechanism Branch</p>
-            <div className="space-y-6">
+            <div className="space-y-4">
               {MECHANISM_HIERARCHY_SECTIONS.map((section, index) => (
-                <div key={section.id}>
-                  <p className="small-caps mb-2 text-ink-muted">
-                    Layer {index + 1}
-                  </p>
-                  <h3 className="mb-2">{section.title}</h3>
-                  <p className="mb-3 text-sm leading-relaxed text-ink-secondary">
-                    {section.description}
-                  </p>
-                  {section.id === "mechanism" ? (
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {mechanismConcepts.map((concept) => {
-                        return (
-                          <Link
-                            key={concept.key}
-                            href={`/mechanisms/${concept.key}`}
-                            className="group rounded border border-edge p-4 transition-colors hover:border-accent"
-                          >
-                            <div className="flex items-baseline justify-between gap-3">
+                <details
+                  key={section.id}
+                  className="group/layer"
+                >
+                  <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="small-caps mb-1 text-ink-muted">
+                          Layer {index + 1}
+                        </p>
+                        <h3>{section.title}</h3>
+                      </div>
+                      <span className="text-ink-muted transition-transform duration-200 group-open/layer:rotate-180">
+                        ▾
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
+                      {section.description}
+                    </p>
+                  </summary>
+                  <div className="mt-3">
+                    {section.id === "mechanism" ? (
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {mechanismConcepts.map((concept) => {
+                          return (
+                            <Link
+                              key={concept.key}
+                              href={`/mechanisms/${concept.key}`}
+                              className="group rounded border border-edge p-4 transition-colors hover:border-accent"
+                            >
+                              <div className="flex items-baseline justify-between gap-3">
+                                <span className="font-display text-lg text-ink group-hover:text-accent">
+                                  {MECHANISM_LABELS[concept.key] ?? concept.label}
+                                </span>
+                                <span className="font-data text-xs text-ink-muted">
+                                  {concept.totalCount}
+                                </span>
+                              </div>
+                              <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
+                                {concept.summary}
+                              </p>
+                              <p className="mt-3 font-ui text-xs text-ink-muted">
+                                {concept.architectureCount} architectures ·{" "}
+                                {concept.componentCount} components
+                              </p>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {getOrderedItemTypes(section.itemTypes ?? [])
+                          .filter((type) => typeCounts[type] > 0)
+                          .map((type) => (
+                            <Link
+                              key={type}
+                              href={`/items?type=${type}`}
+                              className="group flex items-baseline justify-between border-b border-edge py-2 transition-colors hover:border-accent"
+                            >
                               <span className="font-display text-lg text-ink group-hover:text-accent">
-                                {MECHANISM_LABELS[concept.key] ?? concept.label}
+                                {ITEM_TYPE_LABELS[type as ItemType]}
                               </span>
-                              <span className="font-data text-xs text-ink-muted">
-                                {concept.totalCount}
+                              <span className="font-data text-sm tabular-nums text-ink-muted">
+                                {getItemTypeCount(items, type)}
                               </span>
-                            </div>
-                            <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-                              {concept.summary}
-                            </p>
-                            <p className="mt-3 font-ui text-xs text-ink-muted">
-                              {concept.architectureCount} architectures ·{" "}
-                              {concept.componentCount} components
-                            </p>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {getOrderedItemTypes(section.itemTypes ?? [])
-                        .filter((type) => typeCounts[type] > 0)
-                        .map((type) => (
-                          <Link
-                            key={type}
-                            href={`/items?type=${type}`}
-                            className="group flex items-baseline justify-between border-b border-edge py-2 transition-colors hover:border-accent"
-                          >
-                            <span className="font-display text-lg text-ink group-hover:text-accent">
-                              {ITEM_TYPE_LABELS[type as ItemType]}
-                            </span>
-                            <span className="font-data text-sm tabular-nums text-ink-muted">
-                              {getItemTypeCount(items, type)}
-                            </span>
-                          </Link>
-                        ))}
-                    </div>
-                  )}
-                </div>
+                            </Link>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                </details>
               ))}
             </div>
           </div>
 
           <div className="border border-edge p-5">
             <p className="small-caps mb-3 text-accent">Technique Branch</p>
-            <div className="space-y-6">
+            <div className="space-y-4">
               {TECHNIQUE_HIERARCHY_SECTIONS.map((section, index) => (
-                <div key={section.id}>
-                  <p className="small-caps mb-2 text-ink-muted">
-                    Layer {index + 1}
-                  </p>
-                  <h3 className="mb-2">{section.title}</h3>
-                  <p className="mb-3 text-sm leading-relaxed text-ink-secondary">
-                    {section.description}
-                  </p>
-                  {section.id === "technique" ? (
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {techniqueConcepts.map((concept) => {
-                        return (
-                          <Link
-                            key={concept.key}
-                            href={`/techniques/${concept.key}`}
-                            className="group rounded border border-edge p-4 transition-colors hover:border-accent"
-                          >
-                            <div className="flex items-baseline justify-between gap-3">
+                <details
+                  key={section.id}
+                  className="group/layer"
+                >
+                  <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="small-caps mb-1 text-ink-muted">
+                          Layer {index + 1}
+                        </p>
+                        <h3>{section.title}</h3>
+                      </div>
+                      <span className="text-ink-muted transition-transform duration-200 group-open/layer:rotate-180">
+                        ▾
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
+                      {section.description}
+                    </p>
+                  </summary>
+                  <div className="mt-3">
+                    {section.id === "technique" ? (
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {techniqueConcepts.map((concept) => {
+                          return (
+                            <Link
+                              key={concept.key}
+                              href={`/techniques/${concept.key}`}
+                              className="group rounded border border-edge p-4 transition-colors hover:border-accent"
+                            >
+                              <div className="flex items-baseline justify-between gap-3">
+                                <span className="font-display text-lg text-ink group-hover:text-accent">
+                                  {TECHNIQUE_LABELS[concept.key] ?? concept.label}
+                                </span>
+                                <span className="font-data text-xs text-ink-muted">
+                                  {concept.totalCount}
+                                </span>
+                              </div>
+                              <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
+                                {concept.summary}
+                              </p>
+                              <p className="mt-3 font-ui text-xs text-ink-muted">
+                                {concept.methodCount} methods
+                              </p>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {getOrderedItemTypes(section.itemTypes ?? [])
+                          .filter((type) => typeCounts[type] > 0)
+                          .map((type) => (
+                            <Link
+                              key={type}
+                              href={`/items?type=${type}`}
+                              className="group flex items-baseline justify-between border-b border-edge py-2 transition-colors hover:border-accent"
+                            >
                               <span className="font-display text-lg text-ink group-hover:text-accent">
-                                {TECHNIQUE_LABELS[concept.key] ?? concept.label}
+                                {ITEM_TYPE_LABELS[type as ItemType]}
                               </span>
-                              <span className="font-data text-xs text-ink-muted">
-                                {concept.totalCount}
+                              <span className="font-data text-sm tabular-nums text-ink-muted">
+                                {getItemTypeCount(items, type)}
                               </span>
-                            </div>
-                            <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-                              {concept.summary}
-                            </p>
-                            <p className="mt-3 font-ui text-xs text-ink-muted">
-                              {concept.methodCount} methods
-                            </p>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {getOrderedItemTypes(section.itemTypes ?? [])
-                        .filter((type) => typeCounts[type] > 0)
-                        .map((type) => (
-                          <Link
-                            key={type}
-                            href={`/items?type=${type}`}
-                            className="group flex items-baseline justify-between border-b border-edge py-2 transition-colors hover:border-accent"
-                          >
-                            <span className="font-display text-lg text-ink group-hover:text-accent">
-                              {ITEM_TYPE_LABELS[type as ItemType]}
-                            </span>
-                            <span className="font-data text-sm tabular-nums text-ink-muted">
-                              {getItemTypeCount(items, type)}
-                            </span>
-                          </Link>
-                        ))}
-                    </div>
-                  )}
-                </div>
+                            </Link>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                </details>
               ))}
             </div>
           </div>

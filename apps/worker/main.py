@@ -762,6 +762,227 @@ def synthesize_item_profiles(item_slugs: Optional[List[str]] = None, limit: Opti
     return 0
 
 
+# ---------------------------------------------------------------------------
+# Unified pipeline
+# ---------------------------------------------------------------------------
+
+def run_full_pipeline(
+    *,
+    skip_harvest: bool = False,
+    skip_extract: bool = False,
+    skip_sync: bool = False,
+    artifact_dir: Optional[str] = None,
+) -> int:
+    """Run the entire pipeline end-to-end in one shot.
+
+    Steps executed in order:
+      1. run-migrations
+      2. harvest-real-data        (skip with --skip-harvest)
+      3. build-extraction-artifacts
+      4. run-extraction-batch     (skip with --skip-extract)
+      5. ingest-packet-batch
+      6. load-first-pass-extractions
+      7. materialize-item-details
+      8. synthesize-item-profiles
+      9. materialize-gap-links
+     10. sync-render-db           (skip with --skip-sync)
+    """
+    from time import perf_counter
+
+    from tool_db_backend.render_db_sync import RenderDbSyncError, sync_render_database
+
+    settings = get_settings()
+    if not settings.database_url:
+        print("DATABASE_URL is required.", file=sys.stderr)
+        return 1
+
+    pipeline_start = perf_counter()
+    base_dir = Path(artifact_dir) if artifact_dir else Path("tmp/pipeline-run")
+    base_dir.mkdir(parents=True, exist_ok=True)
+    harvest_dir = base_dir / "harvest"
+    extraction_artifact_dir = base_dir / "extraction-artifacts"
+    manifest_dir = base_dir / "manifests"
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+
+    phase_reports: Dict[str, dict] = {}
+    errors: List[str] = []
+
+    def _phase(name: str):
+        logger.info("=" * 60)
+        logger.info("PIPELINE PHASE: %s", name)
+        logger.info("=" * 60)
+
+    # ---- 1. Migrations ----
+    _phase("migrations")
+    phase_start = perf_counter()
+    runner = MigrationRunner(settings)
+    applied = runner.apply_all()
+    phase_reports["migrations"] = {
+        "applied": applied,
+        "seconds": round(perf_counter() - phase_start, 1),
+    }
+
+    # ---- 2. Harvest ----
+    if not skip_harvest:
+        _phase("harvest")
+        phase_start = perf_counter()
+        try:
+            query_sets = build_first_pass_query_sets(settings, seed_query_limit=24)
+            harvester = RealDataHarvester(settings)
+            try:
+                harvest_result = harvester.run(
+                    artifact_dir=harvest_dir,
+                    europe_pmc_queries=query_sets["europe_pmc"],
+                    europe_pmc_pages=5,
+                    europe_pmc_page_size=100,
+                    pmc_fulltext_limit=50,
+                    openalex_queries=query_sets["openalex"],
+                    openalex_pages=5,
+                    openalex_per_page=50,
+                    semantic_scholar_queries=query_sets["semantic_scholar"],
+                    semantic_scholar_pages=3,
+                    semantic_scholar_limit=100,
+                    optobase_queries=query_sets["optobase"][:20],
+                )
+            finally:
+                harvester.close()
+            phase_reports["harvest"] = {
+                "seconds": round(perf_counter() - phase_start, 1),
+                "status": "ok",
+            }
+        except Exception as exc:
+            logger.warning("Harvest failed (non-fatal): %s", exc)
+            phase_reports["harvest"] = {"status": "error", "error": str(exc)}
+
+    # ---- 3. Build extraction artifacts ----
+    harvest_manifest = harvest_dir / "manifest.json"
+    if not skip_extract and harvest_manifest.exists():
+        _phase("build-extraction-artifacts")
+        phase_start = perf_counter()
+        builder = RealExtractionArtifactBuilder(settings)
+        try:
+            builder.build_from_smoke_test_manifest(
+                manifest_path=harvest_manifest,
+                output_dir=extraction_artifact_dir,
+            )
+        finally:
+            builder.close()
+        phase_reports["build_extraction_artifacts"] = {
+            "seconds": round(perf_counter() - phase_start, 1),
+        }
+
+        # ---- 4. Run extraction batch ----
+        _phase("extraction")
+        phase_start = perf_counter()
+        all_new_jobs: List[Path] = []
+        for jd in sorted(extraction_artifact_dir.glob("*/jobs")):
+            for jp in sorted(jd.glob("*.json")):
+                if not _existing_extraction_outputs(settings, jp):
+                    all_new_jobs.append(jp)
+        extraction_total = 0
+        extraction_failures = 0
+        if all_new_jobs:
+            logger.info("Running %d new extraction jobs at concurrency %d", len(all_new_jobs), settings.llm_max_concurrency)
+            with ThreadPoolExecutor(max_workers=settings.llm_max_concurrency) as executor:
+                futs = {executor.submit(_run_extraction_job_path, settings, jp): jp for jp in all_new_jobs}
+                for fut in as_completed(futs):
+                    try:
+                        fut.result()
+                        extraction_total += 1
+                    except Exception as exc:
+                        extraction_failures += 1
+                        logger.warning("Extraction failed for %s: %s", futs[fut].name, exc)
+        phase_reports["extraction"] = {
+            "extracted": extraction_total,
+            "failures": extraction_failures,
+            "seconds": round(perf_counter() - phase_start, 1),
+        }
+
+    # ---- 5. Ingest packets ----
+    _phase("ingest-packets")
+    phase_start = perf_counter()
+    ingest_rc = ingest_packet_batch(
+        packet_dir="data/extractions",
+        apply=True,
+        manifest_path=str(manifest_dir / "ingest.json"),
+    )
+    phase_reports["ingest"] = {
+        "return_code": ingest_rc,
+        "seconds": round(perf_counter() - phase_start, 1),
+    }
+
+    # ---- 6. First-pass extractions ----
+    _phase("first-pass-load")
+    phase_start = perf_counter()
+    fp_loader = FirstPassExtractionLoader(settings)
+    fp_result = fp_loader.load_packet_batch(
+        packet_dir=Path("data/extractions"),
+        glob_pattern="*.json",
+        manifest_path=manifest_dir / "first-pass.json",
+    )
+    phase_reports["first_pass"] = {
+        "selected": fp_result.get("selected_packet_count", 0),
+        "failed": len(fp_result.get("failed_packets", [])),
+        "seconds": round(perf_counter() - phase_start, 1),
+    }
+
+    # ---- 7. Materialize item details ----
+    _phase("materialize-item-details")
+    phase_start = perf_counter()
+    materializer = ItemMaterializer(settings)
+    mat_result = materializer.refresh()
+    phase_reports["materialize"] = {
+        "items": mat_result.get("updated_item_count", 0),
+        "seconds": round(perf_counter() - phase_start, 1),
+    }
+
+    # ---- 8. Synthesize item profiles ----
+    _phase("synthesize-item-profiles")
+    phase_start = perf_counter()
+    synth_rc = synthesize_item_profiles()
+    phase_reports["synthesize"] = {
+        "return_code": synth_rc,
+        "seconds": round(perf_counter() - phase_start, 1),
+    }
+
+    # ---- 9. Gap links ----
+    _phase("materialize-gap-links")
+    phase_start = perf_counter()
+    gap_rc = materialize_gap_links(refresh_item_details=False)
+    phase_reports["gap_links"] = {
+        "return_code": gap_rc,
+        "seconds": round(perf_counter() - phase_start, 1),
+    }
+
+    # ---- 10. Sync to Render ----
+    if not skip_sync:
+        _phase("sync-render")
+        phase_start = perf_counter()
+        try:
+            sync_result = sync_render_database(settings)
+            phase_reports["sync"] = {
+                "status": sync_result.get("status", "ok"),
+                "items": sync_result.get("target_after_summary", {}).get("toolkit_item_count"),
+                "seconds": round(perf_counter() - phase_start, 1),
+            }
+        except (RenderDbSyncError, Exception) as exc:
+            logger.warning("Render sync failed: %s", exc)
+            phase_reports["sync"] = {"status": "error", "error": str(exc)}
+            errors.append(f"sync: {exc}")
+
+    total_seconds = round(perf_counter() - pipeline_start, 1)
+    report = {
+        "status": "ok" if not errors else "partial",
+        "total_seconds": total_seconds,
+        "phases": phase_reports,
+        "errors": errors,
+    }
+    report_path = manifest_dir / "pipeline-report.json"
+    report_path.write_text(json.dumps(report, indent=2, default=str) + "\n")
+    print(json.dumps(report, indent=2, default=str))
+    return 0 if not errors else 1
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     args = argv or sys.argv[1:]
     configure_logging()
@@ -1050,6 +1271,31 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="Maximum items to synthesize; omit to process all.",
     )
 
+    pipeline_parser = subparsers.add_parser(
+        "run-pipeline",
+        help="Run the full end-to-end pipeline: harvest -> extract -> ingest -> materialize -> synthesize -> gap-links -> sync.",
+    )
+    pipeline_parser.add_argument(
+        "--skip-harvest",
+        action="store_true",
+        help="Skip the literature harvest step (use existing cached data).",
+    )
+    pipeline_parser.add_argument(
+        "--skip-extract",
+        action="store_true",
+        help="Skip extraction artifact building and LLM extraction.",
+    )
+    pipeline_parser.add_argument(
+        "--skip-sync",
+        action="store_true",
+        help="Skip the Render production database sync.",
+    )
+    pipeline_parser.add_argument(
+        "--artifact-dir",
+        default=None,
+        help="Root directory for pipeline artifacts (default: tmp/pipeline-run).",
+    )
+
     parsed = parser.parse_args(args)
 
     if parsed.command == "validate-packet":
@@ -1171,6 +1417,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         return rematerialize_stale(parsed.limit)
     if parsed.command == "synthesize-item-profiles":
         return synthesize_item_profiles(parsed.item_slugs, parsed.limit)
+    if parsed.command == "run-pipeline":
+        return run_full_pipeline(
+            skip_harvest=parsed.skip_harvest,
+            skip_extract=parsed.skip_extract,
+            skip_sync=parsed.skip_sync,
+            artifact_dir=parsed.artifact_dir,
+        )
 
     parser.print_help()
     return 2

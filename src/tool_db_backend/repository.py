@@ -1127,10 +1127,10 @@ class KnowledgeRepository:
                     return None
 
                 item_id = row[0]
-                citations = self._fetch_item_citations(cursor, item_id)
                 claims = self._fetch_item_claims(cursor, item_id)
                 validation_rollup = self._fetch_validation_rollup(cursor, item_id)
                 validations = self._fetch_validation_observations(cursor, item_id)
+                citations = self._fetch_item_citations(cursor, item_id, claims=claims, validations=validations)
                 replication_summary = self._fetch_replication_summary(cursor, item_id)
                 item_facets = self._fetch_item_facets(cursor, item_id)
                 explainers = self._fetch_item_explainers(cursor, item_id)
@@ -1420,7 +1420,14 @@ class KnowledgeRepository:
                     index_markdown=index_markdown,
                 )
 
-    def _fetch_item_citations(self, cursor: Any, item_id: Any) -> List[Dict[str, Any]]:
+    def _fetch_item_citations(
+        self,
+        cursor: Any,
+        item_id: Any,
+        *,
+        claims: Optional[List[CanonicalClaim]] = None,
+        validations: Optional[List[ValidationObservationRecord]] = None,
+    ) -> List[Dict[str, Any]]:
         cursor.execute(
             """
             select
@@ -1446,7 +1453,7 @@ class KnowledgeRepository:
             """,
             (item_id,),
         )
-        return [
+        citations = [
             {
                 "citation_role": row[0],
                 "importance_rank": row[1],
@@ -1463,6 +1470,105 @@ class KnowledgeRepository:
             }
             for row in cursor.fetchall()
         ]
+        if citations:
+            return citations
+        return self._derive_item_citations_from_evidence(claims or [], validations or [])
+
+    @staticmethod
+    def _derive_item_citations_from_evidence(
+        claims: List[CanonicalClaim],
+        validations: List[ValidationObservationRecord],
+    ) -> List[Dict[str, Any]]:
+        source_rows: Dict[str, Dict[str, Any]] = {}
+        for claim in claims:
+            source_id = claim.source_document.id
+            row = source_rows.setdefault(
+                source_id,
+                {
+                    "document": claim.source_document,
+                    "claim_count": 0,
+                    "validation_count": 0,
+                    "claim_types": set(),
+                    "example_texts": [],
+                },
+            )
+            row["claim_count"] += 1
+            row["claim_types"].add(claim.claim_type)
+            quoted_text = str(claim.source_locator.get("quoted_text") or "").strip()
+            if quoted_text:
+                row["example_texts"].append(quoted_text)
+            elif claim.claim_text_normalized:
+                row["example_texts"].append(claim.claim_text_normalized)
+        for validation in validations:
+            source_id = validation.source_document.id
+            row = source_rows.setdefault(
+                source_id,
+                {
+                    "document": validation.source_document,
+                    "claim_count": 0,
+                    "validation_count": 0,
+                    "claim_types": set(),
+                    "example_texts": [],
+                },
+            )
+            row["validation_count"] += 1
+            if validation.notes:
+                row["example_texts"].append(validation.notes)
+
+        def sort_key(row: Dict[str, Any]) -> tuple:
+            doc = row["document"]
+            return (
+                -row["validation_count"],
+                -row["claim_count"],
+                -(doc.publication_year or 0),
+                doc.title,
+            )
+
+        sorted_rows = sorted(source_rows.values(), key=sort_key)
+        citations: List[Dict[str, Any]] = []
+        primary_primary_seen = False
+        for index, row in enumerate(sorted_rows, start=1):
+            document = row["document"]
+            claim_types = row["claim_types"]
+            if document.source_type == "review":
+                citation_role = "best_review"
+            elif document.source_type == "benchmark":
+                citation_role = "benchmark"
+            elif "structure_determination" in claim_types or "structural_characterization" in claim_types:
+                citation_role = "structural"
+            elif row["validation_count"] > 0 and primary_primary_seen:
+                citation_role = "independent_validation"
+            else:
+                citation_role = "foundational"
+            if document.source_type in {"primary_paper", "preprint", "trial_record"}:
+                primary_primary_seen = True
+            example_text = _strip_inline_markup(str((row["example_texts"] or [""])[0])).strip()
+            why_this_matters = (
+                f"Derived from {row['claim_count']} linked claims"
+                + (
+                    f" and {row['validation_count']} validation observations"
+                    if row["validation_count"] > 0
+                    else ""
+                )
+                + (f". Example evidence: {example_text}" if example_text else ".")
+            )
+            citations.append(
+                {
+                    "citation_role": citation_role,
+                    "importance_rank": index,
+                    "why_this_matters": why_this_matters,
+                    "source_document_id": document.id,
+                    "label": document.title,
+                    "status": "retracted" if document.is_retracted else "derived_from_claims",
+                    "source_type": document.source_type,
+                    "publication_year": document.publication_year,
+                    "url": document.journal_or_source,
+                    "doi": document.doi,
+                    "pmid": document.pmid,
+                    "is_retracted": document.is_retracted,
+                }
+            )
+        return citations
 
     def _fetch_item_claims(self, cursor: Any, item_id: Any) -> List[CanonicalClaim]:
         cursor.execute(

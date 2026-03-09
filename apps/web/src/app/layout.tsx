@@ -35,8 +35,8 @@ export const metadata: Metadata = {
   description:
     "Evidence-first engineering knowledge system for biological control surfaces, methods, and DBTL workflows.",
   icons: {
-    icon: "/logo.svg",
-    shortcut: "/logo.svg",
+    icon: "/icon.svg",
+    apple: "/icon.svg",
   },
 };
 

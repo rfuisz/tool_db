@@ -11,7 +11,7 @@ services:
     autoDeployTrigger: commit
     plan: starter
     buildCommand: python -m pip install --upgrade pip && python -m pip install .
-    preDeployCommand: python -m apps.worker.main populate-local-db
+    preDeployCommand: python -m apps.worker.main run-migrations
     startCommand: python -m apps.api.main
     envVars:
       - key: APP_ENV

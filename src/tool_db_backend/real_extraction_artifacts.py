@@ -1,9 +1,13 @@
 import hashlib
 import json
+import logging
 import re
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 from tool_db_backend.clients.europe_pmc import EuropePMCClient
 from tool_db_backend.clients.pmc import PMCClient

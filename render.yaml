@@ -32,6 +32,7 @@ services:
     runtime: node
     autoDeployTrigger: commit
     plan: starter
+    healthCheckPath: /api/health
     buildCommand: cd apps/web && npm install && npm run build
     startCommand: cd apps/web && node .next/standalone/server.js
     envVars:

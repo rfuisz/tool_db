@@ -395,10 +395,22 @@ function collectCapabilityLabels(items: ToolkitItem[]): string[] {
     .map(([value]) => formatFallbackLabel(value));
 }
 
-function getSortedItems(items: ToolkitItem[]): ToolkitItem[] {
-  return [...items].sort((left, right) =>
-    left.canonical_name.localeCompare(right.canonical_name),
+function itemCompositeScore(item: ToolkitItem): number {
+  const rs = item.replication_summary;
+  if (!rs) return 0;
+  return (
+    (rs.evidence_strength_score ?? 0) +
+    (rs.replication_score ?? 0) +
+    (rs.practicality_score ?? 0)
   );
+}
+
+function getSortedItems(items: ToolkitItem[]): ToolkitItem[] {
+  return [...items].sort((left, right) => {
+    const scoreDelta = itemCompositeScore(right) - itemCompositeScore(left);
+    if (scoreDelta !== 0) return scoreDelta;
+    return left.canonical_name.localeCompare(right.canonical_name);
+  });
 }
 
 function buildMechanismSummary(

@@ -9,10 +9,10 @@ import type { MechanismConceptSummary } from "@/lib/item-hierarchy";
 type SortKey = "name" | "items" | "architectures" | "components";
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
-  { value: "name", label: "Name" },
   { value: "items", label: "Total Items" },
   { value: "architectures", label: "Architectures" },
   { value: "components", label: "Components" },
+  { value: "name", label: "Name" },
 ];
 
 function matchesSearch(concept: MechanismConceptSummary, query: string): boolean {
@@ -57,7 +57,7 @@ export function MechanismsBrowseClient({
   concepts: MechanismConceptSummary[];
 }) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<SortKey>("name");
+  const [sortBy, setSortBy] = useState<SortKey>("items");
 
   const filtered = useMemo(() => {
     const matched = concepts.filter((c) => matchesSearch(c, searchQuery));

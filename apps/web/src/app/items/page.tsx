@@ -28,7 +28,7 @@ export default async function ItemsPage({
     mechanism: initialFilters.mechanism ? [initialFilters.mechanism] : undefined,
     technique: initialFilters.technique ? [initialFilters.technique] : undefined,
     family: initialFilters.family ? [initialFilters.family] : undefined,
-    sort: "name",
+    sort: "score",
     limit: 50,
     offset: 0,
   });

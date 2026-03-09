@@ -245,7 +245,7 @@ export function WorkflowsBrowseClient({
   const [mechanismFilter, setMechanismFilter] = useState("");
   const [techniqueFilter, setTechniqueFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState("year");
+  const [sortBy, setSortBy] = useState("richness");
   const [hasStages, setHasStages] = useState("");
   const [pageSize, setPageSize] =
     useState<(typeof PAGE_SIZE_OPTIONS)[number]>(50);
@@ -261,7 +261,7 @@ export function WorkflowsBrowseClient({
           mechanismFilter: "",
           techniqueFilter: "",
           searchQuery: "",
-          sortBy: "year",
+          sortBy: "richness",
           hasStages: "",
           pageSize: 50,
           offset: 0,
@@ -376,10 +376,11 @@ export function WorkflowsBrowseClient({
     { value: "detailed", label: "Has steps" },
   ];
   const sortOptions = [
-    { value: "year", label: "Year" },
-    { value: "objective", label: "Objective" },
+    { value: "richness", label: "Richness" },
     { value: "stages", label: "Most stages" },
     { value: "steps", label: "Most steps" },
+    { value: "year", label: "Year" },
+    { value: "objective", label: "Objective" },
   ];
 
   const canGoPrev = offset > 0 && !isLoading;

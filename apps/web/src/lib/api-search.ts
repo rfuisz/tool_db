@@ -12,6 +12,7 @@ const MAX_LIMIT = 500;
 
 type ItemSort =
   | "name"
+  | "score"
   | "evidence"
   | "replication"
   | "practicality"
@@ -33,7 +34,7 @@ export interface ItemSearchFilters {
   offset?: number;
 }
 
-type ExtractedWorkflowSort = "year" | "stages" | "steps" | "objective";
+type ExtractedWorkflowSort = "richness" | "year" | "stages" | "steps" | "objective";
 
 export interface ExtractedWorkflowSearchFilters {
   q?: string;
@@ -53,10 +54,23 @@ export interface SearchResult<T> {
   results: T[];
 }
 
+function compositeScore(item: ToolkitItem): number {
+  const rs = item.replication_summary;
+  if (!rs) return 0;
+  return (
+    (rs.evidence_strength_score ?? 0) +
+    (rs.replication_score ?? 0) +
+    (rs.practicality_score ?? 0)
+  );
+}
+
 function sortItems(items: ToolkitItem[], sort: ItemSort | undefined): ToolkitItem[] {
   const sorted = [...items];
 
   switch (sort) {
+    case "score":
+      sorted.sort((a, b) => compositeScore(b) - compositeScore(a));
+      break;
     case "evidence":
       sorted.sort(
         (a, b) =>
@@ -85,8 +99,10 @@ function sortItems(items: ToolkitItem[], sort: ItemSort | undefined): ToolkitIte
       );
       break;
     case "name":
-    default:
       sorted.sort((a, b) => a.canonical_name.localeCompare(b.canonical_name));
+      break;
+    default:
+      sorted.sort((a, b) => compositeScore(b) - compositeScore(a));
       break;
   }
 
@@ -279,12 +295,19 @@ export function searchItems(
   return paginate(sortItems(filtered, filters.sort), filters.limit, filters.offset);
 }
 
+function workflowRichness(wf: ExtractedWorkflowSummary): number {
+  return wf.stages.length + wf.steps.length + wf.involved_items.length;
+}
+
 function sortExtractedWorkflows(
   workflows: ExtractedWorkflowSummary[],
   sort: ExtractedWorkflowSort | undefined,
 ): ExtractedWorkflowSummary[] {
   const sorted = [...workflows];
   switch (sort) {
+    case "richness":
+      sorted.sort((a, b) => workflowRichness(b) - workflowRichness(a));
+      break;
     case "stages":
       sorted.sort((a, b) => b.stages.length - a.stages.length);
       break;
@@ -297,12 +320,14 @@ function sortExtractedWorkflows(
       );
       break;
     case "year":
-    default:
       sorted.sort(
         (a, b) =>
           (b.source_document?.publication_year ?? 0) -
           (a.source_document?.publication_year ?? 0),
       );
+      break;
+    default:
+      sorted.sort((a, b) => workflowRichness(b) - workflowRichness(a));
       break;
   }
   return sorted;

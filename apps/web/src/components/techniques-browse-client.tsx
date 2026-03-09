@@ -9,9 +9,9 @@ import type { TechniqueConceptSummary } from "@/lib/item-hierarchy";
 type SortKey = "name" | "items" | "methods";
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
-  { value: "name", label: "Name" },
   { value: "items", label: "Total Items" },
   { value: "methods", label: "Methods" },
+  { value: "name", label: "Name" },
 ];
 
 function matchesSearch(concept: TechniqueConceptSummary, query: string): boolean {
@@ -52,7 +52,7 @@ export function TechniquesBrowseClient({
   concepts: TechniqueConceptSummary[];
 }) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<SortKey>("name");
+  const [sortBy, setSortBy] = useState<SortKey>("items");
 
   const filtered = useMemo(() => {
     const matched = concepts.filter((c) => matchesSearch(c, searchQuery));

@@ -50,7 +50,7 @@ function buildItemSearchParams(filters: {
   techniqueFilter: string;
   familyFilter: string;
   searchQuery: string;
-  sortBy: "name" | "evidence" | "replication" | "practicality" | "year";
+  sortBy: "name" | "score" | "evidence" | "replication" | "practicality" | "year";
   pageSize: number;
   offset: number;
 }): URLSearchParams {
@@ -92,8 +92,8 @@ export function ItemsBrowseClient({
   const [familyFilter, setFamilyFilter] = useState(initialFamily);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<
-    "name" | "evidence" | "replication" | "practicality" | "year"
-  >("name");
+    "name" | "score" | "evidence" | "replication" | "practicality" | "year"
+  >("score");
   const [pageSize, setPageSize] =
     useState<(typeof PAGE_SIZE_OPTIONS)[number]>(50);
   const [offset, setOffset] = useState(0);
@@ -110,7 +110,7 @@ export function ItemsBrowseClient({
           techniqueFilter: initialTechnique,
           familyFilter: initialFamily,
           searchQuery: "",
-          sortBy: "name",
+          sortBy: "score",
           pageSize: 50,
           offset: 0,
         }).toString(),
@@ -308,10 +308,11 @@ export function ItemsBrowseClient({
     ...filterOptions.families.map((family) => ({ value: family, label: family })),
   ];
   const sortOptions = [
-    { value: "name", label: "Name" },
+    { value: "score", label: "Score" },
     { value: "evidence", label: "Evidence" },
     { value: "replication", label: "Replication" },
     { value: "practicality", label: "Practicality" },
+    { value: "name", label: "Name" },
     { value: "year", label: "Year" },
   ];
   const canGoPrev = offset > 0 && !isLoading;

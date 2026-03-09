@@ -16,7 +16,7 @@ function collectUnique(
 export default async function WorkflowsPage() {
   const allWorkflows = await getExtractedWorkflows();
   const initial = searchExtractedWorkflows(allWorkflows, {
-    sort: "year",
+    sort: "richness",
     limit: 50,
     offset: 0,
   });

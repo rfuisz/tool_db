@@ -4,14 +4,26 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { renderInlineTitle } from "@/lib/render-inline-title";
+import type { ReplicationSummary } from "@/lib/types";
 
 interface ListableItem {
   slug: string;
   canonical_name: string;
   summary: string | null;
+  replication_summary?: ReplicationSummary | null;
 }
 
-type SortKey = "name" | "name-desc";
+type SortKey = "score" | "name" | "name-desc";
+
+function listItemScore(item: ListableItem): number {
+  const rs = item.replication_summary;
+  if (!rs) return 0;
+  return (
+    (rs.evidence_strength_score ?? 0) +
+    (rs.replication_score ?? 0) +
+    (rs.practicality_score ?? 0)
+  );
+}
 
 function matchesSearch(item: ListableItem, query: string): boolean {
   if (!query) return true;
@@ -30,15 +42,26 @@ export function SearchableItemList({
   items: ListableItem[];
 }) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<SortKey>("name");
+  const [sortBy, setSortBy] = useState<SortKey>("score");
 
   const filtered = useMemo(() => {
     const matched = items.filter((i) => matchesSearch(i, searchQuery));
     const sorted = [...matched];
-    if (sortBy === "name-desc") {
-      sorted.sort((a, b) => b.canonical_name.localeCompare(a.canonical_name));
-    } else {
-      sorted.sort((a, b) => a.canonical_name.localeCompare(b.canonical_name));
+    switch (sortBy) {
+      case "score":
+        sorted.sort((a, b) => {
+          const delta = listItemScore(b) - listItemScore(a);
+          if (delta !== 0) return delta;
+          return a.canonical_name.localeCompare(b.canonical_name);
+        });
+        break;
+      case "name-desc":
+        sorted.sort((a, b) => b.canonical_name.localeCompare(a.canonical_name));
+        break;
+      case "name":
+      default:
+        sorted.sort((a, b) => a.canonical_name.localeCompare(b.canonical_name));
+        break;
     }
     return sorted;
   }, [items, searchQuery, sortBy]);
@@ -65,10 +88,22 @@ export function SearchableItemList({
           />
           <button
             type="button"
-            onClick={() => setSortBy(sortBy === "name" ? "name-desc" : "name")}
+            onClick={() =>
+              setSortBy(
+                sortBy === "score"
+                  ? "name"
+                  : sortBy === "name"
+                    ? "name-desc"
+                    : "score",
+              )
+            }
             className="border-b border-edge pb-0.5 text-ink-muted transition-colors hover:border-accent hover:text-ink"
           >
-            {sortBy === "name" ? "A \u2192 Z" : "Z \u2192 A"}
+            {sortBy === "score"
+              ? "Score"
+              : sortBy === "name"
+                ? "A \u2192 Z"
+                : "Z \u2192 A"}
           </button>
         </div>
       )}

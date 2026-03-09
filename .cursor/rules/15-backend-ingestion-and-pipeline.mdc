@@ -6,6 +6,15 @@ alwaysApply: false
 
 # Backend Ingestion And Pipeline
 
+## Local Database Safety
+
+- NEVER run DB-mutating worker commands (`populate-local-db`, `run-migrations`, `execute-load-plan --apply`, `load-seed-bundle`, `rematerialize-stale`, `materialize-item-details`, `materialize-gap-links`, `synthesize-item-profiles`) without explicit user confirmation.
+- The local Postgres database contains curated data that is expensive to rebuild. Accidentally running populate or migration commands can overwrite or corrupt it.
+- Read-only commands (`staleness-report`, `validate-packet`, `export-seeds`, `normalize-packet`, `build-load-plan`) are safe without confirmation.
+- When diagnosing deployment issues, inspect code, config, logs, and remote endpoints — do not replay the pipeline locally as a shortcut.
+
+## Pipeline Discipline
+
 - Prefer `raw payload -> typed packet -> normalization -> load plan -> execute` over ad hoc shortcuts.
 - Do not let live LLM output write directly into canonical tables.
 - Route metadata-only or low-evidence packets into review queues instead of pretending they are ready.

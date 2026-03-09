@@ -7,6 +7,13 @@
 - Prefer derived rollups over hand-maintained summary booleans.
 - Make every public score explainable and versioned.
 
+## Database Safety
+
+- NEVER run `populate-local-db`, `run-migrations`, `execute-load-plan --apply`, `load-seed-bundle`, `rematerialize-stale`, `materialize-item-details`, `materialize-gap-links`, `synthesize-item-profiles`, or any other DB-mutating worker command without explicit user confirmation.
+- The developer's local Postgres database contains curated data that is expensive to rebuild. Accidentally running a populate or migration command can overwrite or corrupt it.
+- Read-only commands (`staleness-report`, `validate-packet`, `export-seeds`, `normalize-packet`, `build-load-plan`) are safe to run without confirmation.
+- When diagnosing deployment issues, inspect code, config, logs, and remote endpoints — do not replay the pipeline locally as a shortcut.
+
 ## Schema Safety
 
 - Never write LLM extraction output directly into canonical tables.

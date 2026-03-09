@@ -1782,15 +1782,18 @@ class ItemMaterializer:
         )
 
     def _update_item_summary(self, cursor: Any, context: ItemContext, explainers: List[Dict[str, Any]]) -> None:
+        cursor.execute(
+            "select summary_derivation_model from toolkit_item where id = %s",
+            (context.item_id,),
+        )
+        row = cursor.fetchone()
+        if row and row[0]:
+            return
         summary = self._derive_best_summary(context, explainers)
         if not summary or summary == context.summary:
             return
         cursor.execute(
-            """
-            update toolkit_item
-            set summary = %s
-            where id = %s
-            """,
+            "update toolkit_item set summary = %s where id = %s",
             (summary, context.item_id),
         )
 
@@ -1825,14 +1828,23 @@ class ItemMaterializer:
 
     @staticmethod
     def _replace_item_explainers(cursor: Any, item_id: Any, explainers: List[Dict[str, Any]]) -> None:
-        cursor.execute("delete from item_explainer where item_id = %s", (item_id,))
+        cursor.execute(
+            "delete from item_explainer where item_id = %s and derivation_model is null",
+            (item_id,),
+        )
         for explainer in explainers:
             cursor.execute(
                 """
                 insert into item_explainer (
-                  item_id, explainer_kind, title, body, evidence_payload, derived_version, updated_at
+                  item_id, explainer_kind, title, body, evidence_payload, derived_version, derivation_model, updated_at
                 )
-                values (%s, %s, %s, %s, %s::jsonb, %s, now())
+                values (%s, %s, %s, %s, %s::jsonb, %s, %s, now())
+                on conflict (item_id, explainer_kind)
+                  do update set body = excluded.body, title = excluded.title,
+                    evidence_payload = excluded.evidence_payload,
+                    derived_version = excluded.derived_version,
+                    updated_at = now()
+                  where item_explainer.derivation_model is null
                 """,
                 (
                     item_id,
@@ -1841,6 +1853,7 @@ class ItemMaterializer:
                     explainer["body"],
                     json.dumps(explainer.get("evidence_payload", {})),
                     ItemMaterializer.DERIVATION_VERSION,
+                    explainer.get("derivation_model"),
                 ),
             )
 

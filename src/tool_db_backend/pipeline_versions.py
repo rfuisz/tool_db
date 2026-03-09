@@ -28,9 +28,9 @@ EXTRACTION_VERSION = "extract_v2"
 normalization logic.  ``extract_v1`` rows lack freeform_explainers and
 structured evidence fields in raw_payload."""
 
-MATERIALIZATION_VERSION = "mat_v2"
-"""Covers ItemMaterializer derivation: explainers, facets, replication summary,
-problem links, comparisons, and summary promotion logic."""
+MATERIALIZATION_VERSION = "mat_v3_llm"
+"""Covers ItemMaterializer derivation: LLM-synthesized explainers & summaries,
+facets, replication summary, problem links, comparisons, and scores."""
 
 LEGACY_EXTRACTION_VERSION = "extract_v1"
 """Assigned to rows created before versioning was introduced."""

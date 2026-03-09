@@ -725,6 +725,43 @@ def rematerialize_stale(item_limit: Optional[int] = None) -> int:
     return 0
 
 
+def synthesize_item_profiles(item_slugs: Optional[List[str]] = None, limit: Optional[int] = None) -> int:
+    """Run LLM synthesis to produce high-quality explainers, summaries, and metadata."""
+    import psycopg
+
+    from tool_db_backend.llm_item_synthesis import run_llm_synthesis_batch
+
+    settings = get_settings()
+    if not settings.database_url:
+        print("DATABASE_URL is required.", file=sys.stderr)
+        return 1
+
+    with psycopg.connect(settings.database_url) as conn:
+        with conn.transaction():
+            with conn.cursor() as cursor:
+                if item_slugs:
+                    cursor.execute(
+                        "select id from toolkit_item where slug = any(%s) order by slug",
+                        (item_slugs,),
+                    )
+                else:
+                    query = "select id from toolkit_item order by slug"
+                    if limit:
+                        query += f" limit {int(limit)}"
+                    cursor.execute(query)
+                item_ids = [row[0] for row in cursor.fetchall()]
+
+                if not item_ids:
+                    print(json.dumps({"message": "No items found.", "count": 0}))
+                    return 0
+
+                logger.info("Synthesizing profiles for %d items with model=%s", len(item_ids), settings.llm_model)
+                report = run_llm_synthesis_batch(settings, cursor, item_ids)
+
+    print(json.dumps(report, indent=2, default=str))
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     args = argv or sys.argv[1:]
     configure_logging()
@@ -1001,6 +1038,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="Maximum items to re-materialize; omit to process all stale items.",
     )
 
+    synth_parser = subparsers.add_parser(
+        "synthesize-item-profiles",
+        help="Use the LLM to synthesize coherent explainers, summaries, and metadata for all items.",
+    )
+    synth_parser.add_argument("item_slugs", nargs="*")
+    synth_parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum items to synthesize; omit to process all.",
+    )
+
     parsed = parser.parse_args(args)
 
     if parsed.command == "validate-packet":
@@ -1120,6 +1169,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return report_staleness(parsed.output_path)
     if parsed.command == "rematerialize-stale":
         return rematerialize_stale(parsed.limit)
+    if parsed.command == "synthesize-item-profiles":
+        return synthesize_item_profiles(parsed.item_slugs, parsed.limit)
 
     parser.print_help()
     return 2

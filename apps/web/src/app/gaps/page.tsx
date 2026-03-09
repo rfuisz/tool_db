@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ScoreBreakdown } from "@/components/score-bar";
 import type { GapDetail } from "@/lib/types";
 import { getGaps } from "@/lib/backend-data";
+import { renderInlineTitle } from "@/lib/render-inline-title";
 
 function formatLabel(value: string): string {
   return value.replaceAll("_", " ");
@@ -76,7 +77,7 @@ function renderGapCard(gap: GapDetail) {
                         href={`/items/${tool.item_slug}`}
                         className="text-lg text-brand hover:text-accent"
                       >
-                        {tool.canonical_name}
+                        {renderInlineTitle(tool.canonical_name)}
                       </Link>
                       <p className="mt-1 font-ui text-xs uppercase tracking-wide text-ink-muted">
                         {formatLabel(tool.item_type)}
@@ -88,7 +89,9 @@ function renderGapCard(gap: GapDetail) {
                       </p>
                       <p className="font-data text-lg tabular-nums text-ink">
                         {tool.overall_gap_applicability_score !== null
-                          ? Math.round(tool.overall_gap_applicability_score * 100)
+                          ? Math.round(
+                              tool.overall_gap_applicability_score * 100,
+                            )
                           : "—"}
                       </p>
                     </div>
@@ -96,7 +99,7 @@ function renderGapCard(gap: GapDetail) {
 
                   {tool.summary ? (
                     <p className="mt-3 max-w-4xl text-sm leading-relaxed text-ink-secondary">
-                      {tool.summary}
+                      {renderInlineTitle(tool.summary)}
                     </p>
                   ) : null}
 
@@ -216,7 +219,7 @@ function renderGapCard(gap: GapDetail) {
                     </p>
                     {resource.summary ? (
                       <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
-                        {resource.summary}
+                        {renderInlineTitle(resource.summary)}
                       </p>
                     ) : null}
                   </li>
@@ -251,7 +254,9 @@ export default async function GapsPage() {
 
     return left.title.localeCompare(right.title);
   });
-  const connectedGaps = rankedGaps.filter((gap) => getCandidateToolCount(gap) > 0);
+  const connectedGaps = rankedGaps.filter(
+    (gap) => getCandidateToolCount(gap) > 0,
+  );
   const featuredConnectedGaps = connectedGaps.slice(0, 6);
   const remainingGaps = rankedGaps.filter(
     (gap) =>

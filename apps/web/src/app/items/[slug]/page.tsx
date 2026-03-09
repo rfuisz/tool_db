@@ -4,7 +4,7 @@ import { getItemBySlug } from "@/lib/backend-data";
 import { getItemTaxonomyPosition } from "@/lib/item-hierarchy";
 import { renderInlineTitle, stripInlineTitleMarkup } from "@/lib/render-inline-title";
 import { isSupportedTechnique } from "@/lib/vocabularies";
-import type { SourceDocument } from "@/lib/types";
+import type { SourceDocument, ExtractedWorkflow, ItemRelationLink } from "@/lib/types";
 import { ScoreBreakdown } from "@/components/score-bar";
 import { ValidationMatrix } from "@/components/validation-dots";
 import {
@@ -173,12 +173,12 @@ function EvidenceSources({
               document={source.document}
               className="font-medium text-ink-secondary"
             >
-              {source.document.title}
+              {renderInlineTitle(source.document.title)}
             </PaperLink>
           </p>
           {source.supportText && (
             <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
-              {source.supportText}
+              {renderInlineTitle(source.supportText)}
             </p>
           )}
         </div>
@@ -199,7 +199,9 @@ export default async function ItemDetailPage({
   const rep = item.replication_summary;
   const plainTitle = stripInlineTitleMarkup(item.canonical_name);
   const explainers = item.explainers ?? [];
-  const claims = item.claims ?? [];
+  const claims = (item.claims ?? []).filter(
+    (claim, i, arr) => arr.findIndex((c) => c.id === claim.id) === i,
+  );
   const itemFacets = item.item_facets ?? [];
   const comparisons = item.comparisons ?? [];
   const problemLinks = item.problem_links ?? [];
@@ -207,6 +209,7 @@ export default async function ItemDetailPage({
     (left, right) => left.importance_rank - right.importance_rank,
   );
   const workflowRecommendations = item.workflow_recommendations ?? [];
+  const extractedWorkflows: ExtractedWorkflow[] = item.extracted_workflows ?? [];
   const explainerByKind = new Map(
     explainers.map((explainer) => [explainer.explainer_kind, explainer]),
   );
@@ -220,6 +223,9 @@ export default async function ItemDetailPage({
     "Missing Evidence",
   );
   const visibleTechniques = item.techniques.filter(isSupportedTechnique);
+  const parentItems: ItemRelationLink[] = item.parent_items ?? [];
+  const childItems: ItemRelationLink[] = item.child_items ?? [];
+  const hasHierarchy = parentItems.length > 0 || childItems.length > 0;
   const approvalEvidence = item.approval_evidence;
   const sourceDocumentsById = new Map<string, SourceDocument>();
   for (const citation of sortedCitations) {
@@ -308,13 +314,82 @@ export default async function ItemDetailPage({
         </p>
       </header>
 
+      {hasHierarchy && (
+        <section className="mb-12 rounded border border-edge bg-surface-alt px-5 py-4">
+          <p className="small-caps mb-3">Assembly Hierarchy</p>
+          <div className="space-y-3">
+            {parentItems.length > 0 && (
+              <div>
+                <p className="mb-1.5 font-ui text-xs font-medium uppercase tracking-wide text-ink-muted">
+                  Part of
+                </p>
+                <ul className="space-y-1.5">
+                  {parentItems.map((parent) => (
+                    <li key={parent.slug} className="flex items-center gap-2">
+                      <span className="text-ink-faint" aria-hidden="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+                          <path fillRule="evenodd" d="M4.5 2A2.5 2.5 0 0 0 2 4.5v2.879a2.5 2.5 0 0 0 .732 1.767l4.5 4.5a2.5 2.5 0 0 0 3.536 0l2.878-2.878a2.5 2.5 0 0 0 0-3.536l-4.5-4.5A2.5 2.5 0 0 0 7.379 2H4.5ZM5 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" />
+                        </svg>
+                      </span>
+                      <Link
+                        href={`/items/${parent.slug}`}
+                        className="font-ui text-sm font-medium text-accent hover:underline"
+                      >
+                        {renderInlineTitle(parent.canonical_name)}
+                      </Link>
+                      {parent.item_type && (
+                        <span className="rounded bg-surface px-1.5 py-0.5 font-ui text-[10px] text-ink-muted">
+                          {parent.item_type.replace(/_/g, " ")}
+                        </span>
+                      )}
+                      <span className="font-ui text-xs text-ink-muted">
+                        &larr; this item is a component
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {childItems.length > 0 && (
+              <div>
+                <p className="mb-1.5 font-ui text-xs font-medium uppercase tracking-wide text-ink-muted">
+                  Components
+                </p>
+                <ul className="space-y-1.5">
+                  {childItems.map((child) => (
+                    <li key={child.slug} className="flex items-center gap-2">
+                      <span className="text-ink-faint" aria-hidden="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
+                          <path d="M8.5 4.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0ZM10.9 12.006c.11.542-.348.994-.9.994H2c-.553 0-1.01-.452-.902-.994a5.002 5.002 0 0 1 9.803 0ZM14.002 12h-1.59a2.556 2.556 0 0 0-.04-.29 6.476 6.476 0 0 0-1.167-2.603 3.002 3.002 0 0 1 3.633 1.911c.18.522-.283.982-.836.982ZM12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" />
+                        </svg>
+                      </span>
+                      <Link
+                        href={`/items/${child.slug}`}
+                        className="font-ui text-sm font-medium text-accent hover:underline"
+                      >
+                        {renderInlineTitle(child.canonical_name)}
+                      </Link>
+                      {child.item_type && (
+                        <span className="rounded bg-surface px-1.5 py-0.5 font-ui text-[10px] text-ink-muted">
+                          {child.item_type.replace(/_/g, " ")}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
       <div className="grid gap-16 lg:grid-cols-[1fr_280px]">
         {/* Main column */}
         <div>
           {/* Summary */}
           <Section title="Summary">
             <p className="text-lg leading-relaxed text-ink-secondary">
-              {item.summary ?? "No summary available."}
+              {item.summary ? renderInlineTitle(item.summary) : "No summary available."}
             </p>
           </Section>
 
@@ -326,7 +401,7 @@ export default async function ItemDetailPage({
                     Why this is useful
                   </p>
                   <p className="text-sm leading-relaxed text-ink-secondary">
-                    {explainerByKind.get("usefulness")?.body}
+                    {renderInlineTitle(explainerByKind.get("usefulness")!.body)}
                   </p>
                   <EvidenceSources
                     payload={explainerByKind.get("usefulness")?.evidence_payload}
@@ -339,7 +414,7 @@ export default async function ItemDetailPage({
                     Problem solved
                   </p>
                   <p className="text-sm leading-relaxed text-ink-secondary">
-                    {explainerByKind.get("problem_solved")?.body}
+                    {renderInlineTitle(explainerByKind.get("problem_solved")!.body)}
                   </p>
                   <EvidenceSources
                     payload={explainerByKind.get("problem_solved")?.evidence_payload}
@@ -378,7 +453,7 @@ export default async function ItemDetailPage({
                           )}
                         </div>
                         <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
-                          {problem.why_this_item_helps}
+                          {renderInlineTitle(problem.why_this_item_helps)}
                         </p>
                         <EvidenceSources payload={problem.evidence_payload} />
                       </div>
@@ -397,69 +472,228 @@ export default async function ItemDetailPage({
             </div>
           </Section>
 
-          {(workflowRecommendations.length > 0 ||
+          {(extractedWorkflows.length > 0 ||
+            workflowRecommendations.length > 0 ||
             workflowLikelyFit.length > 0 ||
             workflowMissingEvidence.length > 0) && (
-            <Section title="Workflow Fit">
-              <div className="space-y-3">
-                {workflowRecommendations.map((recommendation) => (
-                  <div
-                    key={`${recommendation.workflow_slug}-${recommendation.role_name}-${recommendation.step_name ?? "step"}`}
-                    className="rounded border border-edge px-4 py-3"
-                  >
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <Link
-                        href={`/workflows#${recommendation.workflow_slug}`}
-                        className="font-ui text-sm font-medium text-accent hover:underline"
-                      >
-                        {recommendation.workflow_name}
-                      </Link>
-                      <span className="font-ui text-xs text-ink-muted">
-                        {recommendation.role_name.replace(/_/g, " ")}
-                      </span>
-                      {recommendation.stage_name && (
-                        <span className="font-ui text-xs text-ink-muted">
-                          Stage: {recommendation.stage_name}
-                        </span>
+            <Section title="Published Workflows">
+              <div className="space-y-4">
+                {extractedWorkflows.map((wf, index) => {
+                  const doc = wf.source_document;
+                  const year = doc?.publication_year;
+                  return (
+                    <div
+                      key={`extracted-wf-${index}`}
+                      className="rounded border border-edge px-4 py-3"
+                    >
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        {doc?.title && (
+                          <p className="font-ui text-sm font-medium text-ink">
+                            {doc.doi ? (
+                              <a
+                                href={`https://doi.org/${doc.doi}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-accent hover:underline"
+                              >
+                                {doc.title}
+                              </a>
+                            ) : (
+                              doc.title
+                            )}
+                          </p>
+                        )}
+                        {year && (
+                          <span className="font-ui text-xs text-ink-muted">
+                            {year}
+                          </span>
+                        )}
+                      </div>
+
+                      {wf.workflow_objective && (
+                        <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
+                          <span className="font-ui text-xs font-medium uppercase text-ink-muted">
+                            Objective:{" "}
+                          </span>
+                          {wf.workflow_objective}
+                        </p>
+                      )}
+
+                      {wf.why_workflow_works && (
+                        <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
+                          <span className="font-ui text-xs font-medium uppercase text-ink-muted">
+                            Why it works:{" "}
+                          </span>
+                          {wf.why_workflow_works}
+                        </p>
+                      )}
+
+                      {(wf.target_mechanisms.length > 0 ||
+                        wf.target_techniques.length > 0) && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {wf.target_mechanisms.map((m) => (
+                            <span
+                              key={m}
+                              className="rounded bg-violet-50 px-2 py-0.5 font-ui text-xs text-violet-800"
+                            >
+                              {m}
+                            </span>
+                          ))}
+                          {wf.target_techniques.map((t) => (
+                            <span
+                              key={t}
+                              className="rounded bg-emerald-50 px-2 py-0.5 font-ui text-xs text-emerald-800"
+                            >
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {wf.stages.length > 0 && (
+                        <div className="mt-3">
+                          <p className="mb-1.5 font-ui text-xs font-medium uppercase tracking-wide text-ink-muted">
+                            Stages
+                          </p>
+                          <ol className="space-y-1.5 text-sm">
+                            {wf.stages.map((stage, si) => (
+                              <li key={si} className="flex gap-2">
+                                <span className="shrink-0 font-data text-xs text-ink-faint">
+                                  {stage.stage_order}.
+                                </span>
+                                <div>
+                                  <span className="font-ui font-medium text-ink">
+                                    {stage.stage_name}
+                                  </span>
+                                  <span className="ml-1 font-ui text-xs text-ink-muted">
+                                    ({stage.stage_kind})
+                                  </span>
+                                  {stage.why_stage_exists && (
+                                    <p className="mt-0.5 text-ink-secondary">
+                                      {stage.why_stage_exists}
+                                    </p>
+                                  )}
+                                  {stage.selection_basis && (
+                                    <p className="mt-0.5 text-xs text-ink-muted">
+                                      Selection: {stage.selection_basis}
+                                    </p>
+                                  )}
+                                </div>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      )}
+
+                      {wf.steps.length > 0 && (
+                        <div className="mt-3">
+                          <p className="mb-1.5 font-ui text-xs font-medium uppercase tracking-wide text-ink-muted">
+                            Steps
+                          </p>
+                          <ol className="space-y-1.5 text-sm">
+                            {wf.steps.map((step, si) => (
+                              <li key={si} className="flex gap-2">
+                                <span className="shrink-0 font-data text-xs text-ink-faint">
+                                  {step.step_order}.
+                                </span>
+                                <div>
+                                  <span className="font-ui font-medium text-ink">
+                                    {step.step_name}
+                                  </span>
+                                  {step.item_role && (
+                                    <span className="ml-1.5 rounded bg-blue-50 px-1.5 py-0.5 font-ui text-xs text-blue-800">
+                                      {step.item_role}
+                                    </span>
+                                  )}
+                                  {step.purpose && (
+                                    <p className="mt-0.5 text-ink-secondary">
+                                      {step.purpose}
+                                    </p>
+                                  )}
+                                  {step.why_this_step_now && (
+                                    <p className="mt-0.5 text-xs text-ink-muted">
+                                      {step.why_this_step_now}
+                                    </p>
+                                  )}
+                                </div>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
                       )}
                     </div>
-                    <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
-                      {recommendation.notes ??
-                        recommendation.objective ??
-                        "Workflow-linked evidence is available for this item."}
-                    </p>
-                  </div>
-                ))}
-                {workflowLikelyFit.length > 0 && (
-                  <div>
-                    <p className="mb-2 text-xs uppercase tracking-wide text-ink-muted">
-                      Likely fit
-                    </p>
-                    <ul className="space-y-2 text-sm leading-relaxed text-ink-secondary">
-                      {workflowLikelyFit.map((note) => (
-                        <li key={note} className="flex gap-2">
-                          <span className="shrink-0 text-ink-faint">&bull;</span>
-                          <span>{note}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {workflowMissingEvidence.length > 0 && (
-                  <div>
-                    <p className="mb-2 text-xs uppercase tracking-wide text-ink-muted">
-                      Missing evidence
-                    </p>
-                    <ul className="space-y-2 text-sm leading-relaxed text-ink-muted">
-                      {workflowMissingEvidence.map((note) => (
-                        <li key={note} className="flex gap-2">
-                          <span className="shrink-0 text-ink-faint">&bull;</span>
-                          <span>{note}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                  );
+                })}
+
+                {extractedWorkflows.length === 0 &&
+                  workflowRecommendations.length > 0 &&
+                  workflowRecommendations.map((recommendation) => (
+                    <div
+                      key={`${recommendation.workflow_slug}-${recommendation.role_name}-${recommendation.step_name ?? "step"}`}
+                      className="rounded border border-edge px-4 py-3"
+                    >
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <Link
+                          href={`/workflows#${recommendation.workflow_slug}`}
+                          className="font-ui text-sm font-medium text-accent hover:underline"
+                        >
+                          {recommendation.workflow_name}
+                        </Link>
+                        <span className="font-ui text-xs text-ink-muted">
+                          {recommendation.role_name.replace(/_/g, " ")}
+                        </span>
+                        {recommendation.stage_name && (
+                          <span className="font-ui text-xs text-ink-muted">
+                            Stage: {recommendation.stage_name}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
+                        {recommendation.notes ??
+                          recommendation.objective ??
+                          "Workflow-linked evidence is available for this item."}
+                      </p>
+                    </div>
+                  ))}
+
+                {extractedWorkflows.length === 0 &&
+                  workflowRecommendations.length === 0 &&
+                  workflowLikelyFit.length > 0 && (
+                    <div>
+                      <p className="mb-2 text-xs uppercase tracking-wide text-ink-muted">
+                        Likely fit
+                      </p>
+                      <ul className="space-y-2 text-sm leading-relaxed text-ink-secondary">
+                        {workflowLikelyFit.map((note) => (
+                          <li key={note} className="flex gap-2">
+                            <span className="shrink-0 text-ink-faint">
+                              &bull;
+                            </span>
+                            <span>{note}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                {extractedWorkflows.length === 0 &&
+                  workflowMissingEvidence.length > 0 && (
+                    <div>
+                      <p className="mb-2 text-xs uppercase tracking-wide text-ink-muted">
+                        Missing evidence
+                      </p>
+                      <ul className="space-y-2 text-sm leading-relaxed text-ink-muted">
+                        {workflowMissingEvidence.map((note) => (
+                          <li key={note} className="flex gap-2">
+                            <span className="shrink-0 text-ink-faint">
+                              &bull;
+                            </span>
+                            <span>{note}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
               </div>
             </Section>
           )}
@@ -544,12 +778,12 @@ export default async function ItemDetailPage({
                 )}
                 {explainerByKind.get("implementation_constraints") && (
                   <p className="text-sm leading-relaxed text-ink-secondary">
-                    {explainerByKind.get("implementation_constraints")?.body}
+                    {renderInlineTitle(explainerByKind.get("implementation_constraints")!.body)}
                   </p>
                 )}
                 {explainerByKind.get("limitations") && (
                   <p className="text-sm leading-relaxed text-ink-secondary">
-                    {explainerByKind.get("limitations")?.body}
+                    {renderInlineTitle(explainerByKind.get("limitations")!.body)}
                   </p>
                 )}
               </div>
@@ -683,19 +917,19 @@ export default async function ItemDetailPage({
                         document={claim.source_document}
                         className="font-medium text-ink-secondary"
                       >
-                        {claim.source_document.title}
+                        {renderInlineTitle(claim.source_document.title)}
                       </PaperLink>
                       {claim.needs_review && (
                         <span className="text-caution">needs review</span>
                       )}
                     </div>
                     <p className="text-sm leading-relaxed text-ink">
-                      {claim.claim_text_normalized}
+                      {renderInlineTitle(claim.claim_text_normalized)}
                     </p>
                     {typeof claim.source_locator?.quoted_text === "string" &&
                       claim.source_locator.quoted_text && (
                         <blockquote className="mt-3 border-l-2 border-edge pl-4 text-sm italic text-ink-secondary">
-                          {claim.source_locator.quoted_text}
+                          {renderInlineTitle(claim.source_locator.quoted_text)}
                         </blockquote>
                       )}
                     {locatorRows.length > 0 && (
@@ -761,7 +995,7 @@ export default async function ItemDetailPage({
                         className="rounded border border-edge px-4 py-4"
                       >
                         <blockquote className="border-l-2 border-accent/30 pl-4 text-sm leading-relaxed text-ink-secondary">
-                          {snippet.text}
+                          {renderInlineTitle(snippet.text)}
                         </blockquote>
                         <p className="mt-3 font-ui text-xs text-ink-muted">
                           Source:{" "}
@@ -769,7 +1003,7 @@ export default async function ItemDetailPage({
                             document={snippet.source_document}
                             className="font-medium text-ink-secondary"
                           >
-                            {snippet.source_document.title}
+                            {renderInlineTitle(snippet.source_document.title)}
                           </PaperLink>
                         </p>
                       </article>
@@ -801,12 +1035,12 @@ export default async function ItemDetailPage({
                           </span>
                         </div>
                         <p className="text-sm leading-relaxed text-ink">
-                          {claim.claim_text_normalized}
+                          {renderInlineTitle(claim.claim_text_normalized)}
                         </p>
                         {typeof claim.source_locator?.quoted_text === "string" &&
                           claim.source_locator.quoted_text && (
                             <blockquote className="mt-3 border-l-2 border-edge pl-4 text-sm italic text-ink-secondary">
-                              {claim.source_locator.quoted_text}
+                              {renderInlineTitle(claim.source_locator.quoted_text)}
                             </blockquote>
                           )}
                         <p className="mt-3 font-ui text-xs text-ink-muted">
@@ -815,7 +1049,7 @@ export default async function ItemDetailPage({
                             document={claim.source_document}
                             className="font-medium text-ink-secondary"
                           >
-                            {claim.source_document.title}
+                            {renderInlineTitle(claim.source_document.title)}
                           </PaperLink>
                         </p>
                       </article>
@@ -833,7 +1067,7 @@ export default async function ItemDetailPage({
                     Source-stated alternatives
                   </p>
                   <p className="text-sm leading-relaxed text-ink-secondary">
-                    {explainerByKind.get("alternatives")?.body}
+                    {renderInlineTitle(explainerByKind.get("alternatives")!.body)}
                   </p>
                   <EvidenceSources
                     payload={explainerByKind.get("alternatives")?.evidence_payload}
@@ -846,7 +1080,7 @@ export default async function ItemDetailPage({
                     Source-backed strengths
                   </p>
                   <p className="text-sm leading-relaxed text-ink-secondary">
-                    {explainerByKind.get("strengths")?.body}
+                    {renderInlineTitle(explainerByKind.get("strengths")!.body)}
                   </p>
                   <EvidenceSources
                     payload={explainerByKind.get("strengths")?.evidence_payload}
@@ -870,7 +1104,7 @@ export default async function ItemDetailPage({
                     </p>
                   </div>
                   <p className="text-sm leading-relaxed text-ink-secondary">
-                    {comparison.summary}
+                    {renderInlineTitle(comparison.summary)}
                   </p>
                   {comparison.overlap_reasons.length > 0 && (
                     <p className="mt-2 font-ui text-xs text-ink-muted">
@@ -961,7 +1195,7 @@ export default async function ItemDetailPage({
                           )}
                         </div>
                         <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
-                          {citation.why_this_matters}
+                          {renderInlineTitle(citation.why_this_matters)}
                         </p>
                       </div>
                     </li>

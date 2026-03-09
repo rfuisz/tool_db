@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from tool_db_backend.config import Settings, get_settings
 from tool_db_backend.models import (
+    ExtractedWorkflowSummary,
     FirstPassEntityDetail,
     FirstPassEntitySummary,
     FirstPassItemDetail,
@@ -167,6 +168,10 @@ def create_app() -> FastAPI:
             return repo.get_workflow(slug)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=f"Unknown workflow slug: {slug}") from exc
+
+    @app.get("/api/v1/extracted-workflows", response_model=list[ExtractedWorkflowSummary])
+    def list_extracted_workflows(repo: KnowledgeRepository = Depends(get_repository)) -> list[ExtractedWorkflowSummary]:
+        return repo.list_extracted_workflows()
 
     @app.post("/api/v1/admin/sync-render-db")
     def sync_render_db(request: Request, settings: Settings = Depends(get_settings)) -> dict:

@@ -31,7 +31,7 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BioControl Toolkit DB",
+  title: "1e26 / BioControl Toolkit DB",
   description:
     "Evidence-first engineering knowledge system for biological control surfaces, methods, and DBTL workflows.",
   icons: {
@@ -94,6 +94,15 @@ export default async function RootLayout({
                 >
                   fuisz.xyz
                 </a>
+              </div>
+              <div className="mt-8 max-w-2xl border-t border-edge pt-6">
+                <p className="font-data text-sm text-ink-muted">
+                  <span className="text-ink">1e26</span> &mdash; 10<sup>26</sup>{" "}
+                  is the rough parameter count above which an AI system is
+                  complex enough to do hard, potentially dangerous things.
+                  1e26 is a pet domain for weird AI projects that live at that
+                  frontier.
+                </p>
               </div>
               <div className="mt-6">
                 <DeploymentBadge />

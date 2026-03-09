@@ -121,6 +121,13 @@ class ItemBrowse(ItemSummary):
     replication_summary: Optional[ReplicationSummaryRecord] = None
 
 
+class ItemRelationLink(BaseModel):
+    slug: str
+    canonical_name: str
+    item_type: Optional[str] = None
+    relation_label: Optional[str] = None
+
+
 class ItemFacet(BaseModel):
     facet_name: str
     facet_value: str
@@ -197,10 +204,13 @@ class ItemDetail(ItemSummary):
     mechanisms: List[str] = Field(default_factory=list)
     techniques: List[str] = Field(default_factory=list)
     target_processes: List[str] = Field(default_factory=list)
+    parent_items: List[ItemRelationLink] = Field(default_factory=list)
+    child_items: List[ItemRelationLink] = Field(default_factory=list)
     external_ids: Dict[str, Any] = Field(default_factory=dict)
     source_status: Dict[str, Any] = Field(default_factory=dict)
     citation_candidates: List[Dict[str, Any]] = Field(default_factory=list)
     workflow_recommendations: List[Dict[str, Any]] = Field(default_factory=list)
+    extracted_workflows: List[Dict[str, Any]] = Field(default_factory=list)
     claims: List[CanonicalClaim] = Field(default_factory=list)
     validation_rollup: Optional[ValidationRollupRecord] = None
     validations: List[ValidationObservationRecord] = Field(default_factory=list)
@@ -240,6 +250,24 @@ class WorkflowDetail(WorkflowSummary):
     step_templates: List[Dict[str, Any]] = Field(default_factory=list)
     assumption_notes: List[str] = Field(default_factory=list)
     index_markdown: str
+
+
+class ExtractedWorkflowSummary(BaseModel):
+    workflow_id: str
+    workflow_objective: Optional[str] = None
+    protocol_family: Optional[str] = None
+    engineered_system_family: Optional[str] = None
+    target_mechanisms: List[str] = Field(default_factory=list)
+    target_techniques: List[str] = Field(default_factory=list)
+    why_workflow_works: Optional[str] = None
+    workflow_priority_logic: Optional[str] = None
+    validation_strategy: Optional[str] = None
+    decision_gate_strategy: Optional[str] = None
+    evidence_text: Optional[str] = None
+    source_document: Dict[str, Any] = Field(default_factory=dict)
+    stages: List[Dict[str, Any]] = Field(default_factory=list)
+    steps: List[Dict[str, Any]] = Field(default_factory=list)
+    involved_items: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class GapFieldSummary(BaseModel):

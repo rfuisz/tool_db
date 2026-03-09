@@ -796,6 +796,8 @@ def run_full_pipeline(
         print("DATABASE_URL is required.", file=sys.stderr)
         return 1
 
+    import psycopg
+
     pipeline_start = perf_counter()
     base_dir = Path(artifact_dir) if artifact_dir else Path("tmp/pipeline-run")
     base_dir.mkdir(parents=True, exist_ok=True)
@@ -811,6 +813,22 @@ def run_full_pipeline(
         logger.info("=" * 60)
         logger.info("PIPELINE PHASE: %s", name)
         logger.info("=" * 60)
+
+    # Clean up any stale DB transactions left by killed processes
+    try:
+        with psycopg.connect(settings.database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "select pg_terminate_backend(pid) from pg_stat_activity "
+                    "where datname = current_database() and pid != pg_backend_pid() "
+                    "and state = 'idle in transaction'"
+                )
+                stale = cur.rowcount
+                if stale:
+                    logger.info("Terminated %d stale DB connections.", stale)
+            conn.commit()
+    except Exception:
+        pass
 
     # ---- 1. Migrations ----
     _phase("migrations")
@@ -901,13 +919,28 @@ def run_full_pipeline(
     # ---- 5. Ingest packets ----
     _phase("ingest-packets")
     phase_start = perf_counter()
-    ingest_rc = ingest_packet_batch(
-        packet_dir="data/extractions",
-        apply=True,
-        manifest_path=str(manifest_dir / "ingest.json"),
-    )
+    pipeline_obj = PacketIngestPipeline(settings)
+    packet_paths = sorted(Path("data/extractions").glob("*.json"))
+    ingest_ok = 0
+    ingest_fail = 0
+    for i, packet_path in enumerate(packet_paths, 1):
+        try:
+            packet_kind = _infer_packet_kind(packet_path)
+            pipeline_obj.ingest_packet_file(
+                packet_kind=packet_kind,
+                packet_path=packet_path,
+                apply=True,
+                artifact_dir=settings.pipeline_artifact_root / build_artifact_basename(packet_path),
+            )
+            ingest_ok += 1
+        except Exception:
+            ingest_fail += 1
+        if i == 1 or i % 200 == 0 or i == len(packet_paths):
+            logger.info("Ingest progress: %d/%d (ok=%d fail=%d)", i, len(packet_paths), ingest_ok, ingest_fail)
     phase_reports["ingest"] = {
-        "return_code": ingest_rc,
+        "total": len(packet_paths),
+        "ok": ingest_ok,
+        "failed": ingest_fail,
         "seconds": round(perf_counter() - phase_start, 1),
     }
 
@@ -939,18 +972,29 @@ def run_full_pipeline(
     # ---- 8. Synthesize item profiles ----
     _phase("synthesize-item-profiles")
     phase_start = perf_counter()
-    synth_rc = synthesize_item_profiles()
+    from tool_db_backend.llm_item_synthesis import run_llm_synthesis_batch
+    with psycopg.connect(settings.database_url) as synth_conn:
+        with synth_conn.transaction():
+            with synth_conn.cursor() as synth_cur:
+                synth_cur.execute("select id from toolkit_item order by slug")
+                all_item_ids = [row[0] for row in synth_cur.fetchall()]
+                logger.info("Synthesizing profiles for %d items with model=%s", len(all_item_ids), settings.llm_model)
+                synth_result = run_llm_synthesis_batch(settings, synth_cur, all_item_ids)
     phase_reports["synthesize"] = {
-        "return_code": synth_rc,
+        **synth_result,
         "seconds": round(perf_counter() - phase_start, 1),
     }
 
     # ---- 9. Gap links ----
     _phase("materialize-gap-links")
     phase_start = perf_counter()
-    gap_rc = materialize_gap_links(refresh_item_details=False)
+    gap_materializer = GapLinkMaterializer(settings)
+    try:
+        gap_result = gap_materializer.refresh(refresh_item_details=False)
+    finally:
+        gap_materializer.close()
     phase_reports["gap_links"] = {
-        "return_code": gap_rc,
+        "inserted": gap_result.get("inserted_link_count", 0),
         "seconds": round(perf_counter() - phase_start, 1),
     }
 

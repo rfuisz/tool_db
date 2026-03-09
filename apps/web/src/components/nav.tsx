@@ -43,6 +43,8 @@ export function Nav({
             className="h-9 w-9 shrink-0"
           />
           <span className="font-display text-xl font-bold tracking-tight">
+            <span className="font-data text-base font-normal text-ink-muted">1e26</span>
+            <span className="mx-1.5 text-edge-strong">/</span>
             BioControl<span className="text-accent">Toolkit</span>
           </span>
         </Link>
@@ -88,7 +90,7 @@ export function Nav({
                 className={`small-caps transition-colors ${
                   active
                     ? "text-ink"
-                    : "text-ink-muted hover:text-ink-secondary"
+                    : "text-ink-muted hover:text-accent"
                 }`}
               >
                 {item.label}
@@ -132,7 +134,7 @@ export function Nav({
           </div>
         </div>
       )}
-      <div className="rule-accent mx-auto h-px max-w-5xl" />
+      <div className="rule-accent h-px" />
     </nav>
   );
 }

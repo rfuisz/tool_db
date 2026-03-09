@@ -21,6 +21,7 @@ import type {
   ItemExplainer,
   ItemFacet,
   ItemProblemLink,
+  ItemRelationLink,
   ItemStatus,
   MaturityStage,
   Modality,
@@ -29,6 +30,8 @@ import type {
   ValidationObservation,
   ValidationRollup,
   WorkflowFamily,
+  ExtractedWorkflow,
+  ExtractedWorkflowSummary,
   WorkflowRecommendation,
   WorkflowSearchModality,
   WorkflowStage,
@@ -115,10 +118,13 @@ type BackendItemDetail = BackendItemSummary & {
   mechanisms?: string[];
   techniques?: string[];
   target_processes?: string[];
+  parent_items?: ItemRelationLink[];
+  child_items?: ItemRelationLink[];
   external_ids?: Record<string, unknown>;
   source_status?: Record<string, unknown>;
   citation_candidates?: CitationCandidate[];
   workflow_recommendations?: BackendWorkflowRecommendation[];
+  extracted_workflows?: ExtractedWorkflow[];
   claims?: BackendItemClaim[];
   validation_rollup?: BackendValidationRollup | null;
   validations?: BackendValidationObservation[];
@@ -438,6 +444,8 @@ function mapBackendItem(detail: BackendItemDetail): ToolkitItem {
     primary_input_modality: coerceModality(detail.primary_input_modality),
     primary_output_modality: coerceModality(detail.primary_output_modality),
     components: detail.components ?? [],
+    parent_items: detail.parent_items ?? [],
+    child_items: detail.child_items ?? [],
     mechanisms: detail.mechanisms ?? [],
     techniques: detail.techniques ?? [],
     target_processes: detail.target_processes ?? [],
@@ -452,6 +460,7 @@ function mapBackendItem(detail: BackendItemDetail): ToolkitItem {
     comparisons: detail.comparisons ?? [],
     problem_links: detail.problem_links ?? [],
     workflow_recommendations: detail.workflow_recommendations ?? [],
+    extracted_workflows: detail.extracted_workflows ?? [],
     approval_evidence: detail.approval_evidence ?? null,
     index_markdown: detail.index_markdown,
     evidence_markdown: detail.evidence_markdown,
@@ -495,6 +504,7 @@ function mapBackendBrowseItem(detail: BackendItemBrowse): ToolkitItem {
     comparisons: [],
     problem_links: [],
     workflow_recommendations: [],
+    extracted_workflows: [],
     approval_evidence: null,
     index_markdown: null,
     evidence_markdown: null,
@@ -551,6 +561,7 @@ function mapSeedItem(item: SeedBundleItem): ToolkitItem {
     workflow_recommendations:
       (structured.workflow_recommendations as ToolkitItem["workflow_recommendations"]) ??
       [],
+    extracted_workflows: [],
     approval_evidence: null,
     index_markdown:
       (structured.index_markdown as string | null | undefined) ?? null,
@@ -843,6 +854,16 @@ export async function getWorkflows(): Promise<WorkflowTemplate[]> {
       return getSeedWorkflows();
     }
     throw backendUnavailableError("workflow listing", error);
+  }
+}
+
+export async function getExtractedWorkflows(): Promise<ExtractedWorkflowSummary[]> {
+  try {
+    return await fetchBackendJson<ExtractedWorkflowSummary[]>(
+      "/api/v1/extracted-workflows",
+    );
+  } catch {
+    return [];
   }
 }
 

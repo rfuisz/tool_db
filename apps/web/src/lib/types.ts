@@ -242,6 +242,13 @@ export interface ApprovedItemEvidence {
   claims: ApprovedItemClaim[];
 }
 
+export interface ItemRelationLink {
+  slug: string;
+  canonical_name: string;
+  item_type: string | null;
+  relation_label: string | null;
+}
+
 export interface ItemFacet {
   facet_name: string;
   facet_value: string;
@@ -286,6 +293,66 @@ export interface WorkflowRecommendation {
   objective?: string | null;
 }
 
+export interface ExtractedWorkflowStage {
+  stage_name: string;
+  stage_kind: string;
+  stage_order: number;
+  search_modality?: string | null;
+  input_candidate_count?: number | null;
+  output_candidate_count?: number | null;
+  selection_basis?: string | null;
+  counterselection_basis?: string | null;
+  enriches_for_axes: string[];
+  guards_against_axes: string[];
+  why_stage_exists?: string | null;
+  advance_criteria?: string | null;
+  bottleneck_risk?: string | null;
+}
+
+export interface ExtractedWorkflowStep {
+  step_name: string;
+  step_order: number;
+  step_type?: string | null;
+  stage_name?: string | null;
+  item_local_ids: string[];
+  item_role?: string | null;
+  purpose?: string | null;
+  why_this_step_now?: string | null;
+  advance_criteria?: string | null;
+  input_artifact?: string | null;
+  output_artifact?: string | null;
+  duration_hours?: number | null;
+  success?: boolean | null;
+}
+
+export interface ExtractedWorkflow {
+  workflow_objective?: string | null;
+  protocol_family?: string | null;
+  engineered_system_family?: string | null;
+  target_mechanisms: string[];
+  target_techniques: string[];
+  why_workflow_works?: string | null;
+  workflow_priority_logic?: string | null;
+  validation_strategy?: string | null;
+  decision_gate_strategy?: string | null;
+  evidence_text?: string | null;
+  source_document: SourceDocument;
+  stages: ExtractedWorkflowStage[];
+  steps: ExtractedWorkflowStep[];
+}
+
+export interface ExtractedWorkflowInvolvedItem {
+  slug: string;
+  canonical_name: string;
+  display_name: string;
+  item_slug: string | null;
+}
+
+export interface ExtractedWorkflowSummary extends ExtractedWorkflow {
+  workflow_id: string;
+  involved_items: ExtractedWorkflowInvolvedItem[];
+}
+
 export interface ValidationMetric {
   metric_name: string;
   value_num: number | null;
@@ -306,6 +373,8 @@ export interface ToolkitItem {
   primary_input_modality: Modality | null;
   primary_output_modality: Modality | null;
   components?: string[];
+  parent_items?: ItemRelationLink[];
+  child_items?: ItemRelationLink[];
   mechanisms: string[];
   techniques: string[];
   target_processes: string[];
@@ -320,6 +389,7 @@ export interface ToolkitItem {
   comparisons?: ItemComparison[];
   problem_links?: ItemProblemLink[];
   workflow_recommendations?: WorkflowRecommendation[];
+  extracted_workflows?: ExtractedWorkflow[];
   approval_evidence?: ApprovedItemEvidence | null;
   index_markdown?: string | null;
   evidence_markdown?: string | null;

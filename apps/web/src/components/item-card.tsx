@@ -59,7 +59,7 @@ export function ItemCard({ item }: { item: ToolkitItem }) {
           router.push(`/items/${item.slug}`);
         }
       }}
-      className="group block rounded-sm border-b border-edge py-6 outline-none transition-colors hover:border-accent focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-brand/30"
+      className="group block cursor-pointer rounded-sm border-b border-edge py-6 outline-none transition-colors hover:border-accent focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-brand/30"
     >
       {/* Top line: name + type */}
       <div className="mb-1.5 flex items-baseline justify-between gap-4">

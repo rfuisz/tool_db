@@ -1,4 +1,4 @@
-import type { ToolkitItem, WorkflowTemplate } from "./types";
+import type { ExtractedWorkflowSummary, ToolkitItem, WorkflowTemplate } from "./types";
 import { buildItemHierarchyAssignments } from "./item-hierarchy";
 
 const DEFAULT_LIMIT = 20;
@@ -30,6 +30,19 @@ export interface ItemSearchFilters {
 export interface WorkflowSearchFilters {
   q?: string;
   workflow_family?: string[];
+  limit?: number;
+  offset?: number;
+}
+
+type ExtractedWorkflowSort = "year" | "stages" | "steps" | "objective";
+
+export interface ExtractedWorkflowSearchFilters {
+  q?: string;
+  mechanism?: string[];
+  technique?: string[];
+  has_stages?: boolean;
+  has_steps?: boolean;
+  sort?: ExtractedWorkflowSort;
   limit?: number;
   offset?: number;
 }
@@ -300,4 +313,82 @@ export function searchWorkflows(
   });
 
   return paginate(filtered, filters.limit, filters.offset);
+}
+
+function sortExtractedWorkflows(
+  workflows: ExtractedWorkflowSummary[],
+  sort: ExtractedWorkflowSort | undefined,
+): ExtractedWorkflowSummary[] {
+  const sorted = [...workflows];
+  switch (sort) {
+    case "stages":
+      sorted.sort((a, b) => b.stages.length - a.stages.length);
+      break;
+    case "steps":
+      sorted.sort((a, b) => b.steps.length - a.steps.length);
+      break;
+    case "objective":
+      sorted.sort((a, b) =>
+        (a.workflow_objective ?? "").localeCompare(b.workflow_objective ?? ""),
+      );
+      break;
+    case "year":
+    default:
+      sorted.sort(
+        (a, b) =>
+          (b.source_document?.publication_year ?? 0) -
+          (a.source_document?.publication_year ?? 0),
+      );
+      break;
+  }
+  return sorted;
+}
+
+export function searchExtractedWorkflows(
+  workflows: ExtractedWorkflowSummary[],
+  filters: ExtractedWorkflowSearchFilters,
+): SearchResult<ExtractedWorkflowSummary> {
+  const filtered = workflows.filter((wf) => {
+    if (
+      !matchesQuery(
+        [
+          wf.workflow_objective,
+          wf.protocol_family,
+          wf.engineered_system_family,
+          wf.why_workflow_works,
+          wf.evidence_text,
+          wf.source_document?.title,
+          wf.source_document?.journal_or_source,
+          ...wf.target_mechanisms,
+          ...wf.target_techniques,
+          ...wf.stages.map((s) => s.stage_name),
+          ...wf.steps.map((s) => s.step_name),
+          ...wf.involved_items.map((i) => i.display_name),
+        ],
+        filters.q,
+      )
+    ) {
+      return false;
+    }
+
+    if (!matchesAny(wf.target_mechanisms, filters.mechanism)) {
+      return false;
+    }
+    if (!matchesAny(wf.target_techniques, filters.technique)) {
+      return false;
+    }
+    if (filters.has_stages === true && wf.stages.length === 0) {
+      return false;
+    }
+    if (filters.has_steps === true && wf.steps.length === 0) {
+      return false;
+    }
+    return true;
+  });
+
+  return paginate(
+    sortExtractedWorkflows(filtered, filters.sort),
+    filters.limit,
+    filters.offset,
+  );
 }

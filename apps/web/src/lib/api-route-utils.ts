@@ -1,4 +1,4 @@
-import type { ItemSearchFilters, WorkflowSearchFilters } from "./api-search";
+import type { ExtractedWorkflowSearchFilters, ItemSearchFilters, WorkflowSearchFilters } from "./api-search";
 import { parseBooleanParam, splitMultiValue } from "./api-search";
 
 function parseOptionalNumber(rawValue: string | null): number | undefined {
@@ -37,6 +37,19 @@ export function parseWorkflowSearchFilters(searchParams: URLSearchParams): Workf
   return {
     q: searchParams.get("q")?.trim() || undefined,
     workflow_family: parseMultiValueParams(searchParams, "workflow_family"),
+    limit: parseOptionalNumber(searchParams.get("limit")),
+    offset: parseOptionalNumber(searchParams.get("offset")),
+  };
+}
+
+export function parseExtractedWorkflowSearchFilters(searchParams: URLSearchParams): ExtractedWorkflowSearchFilters {
+  return {
+    q: searchParams.get("q")?.trim() || undefined,
+    mechanism: parseMultiValueParams(searchParams, "mechanism"),
+    technique: parseMultiValueParams(searchParams, "technique"),
+    has_stages: parseBooleanParam(searchParams.get("has_stages")),
+    has_steps: parseBooleanParam(searchParams.get("has_steps")),
+    sort: (searchParams.get("sort") as ExtractedWorkflowSearchFilters["sort"] | null) ?? undefined,
     limit: parseOptionalNumber(searchParams.get("limit")),
     offset: parseOptionalNumber(searchParams.get("offset")),
   };

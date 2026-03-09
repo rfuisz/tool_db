@@ -278,7 +278,7 @@ class LoadPlanBuilder:
                     {
                         "action": "manual_resolution_required",
                         "local_id": local_id,
-                        "candidate_matches": resolution["candidate_matches"],
+                        "candidate_matches": resolution.get("candidate_matches", []),
                     }
                 )
         return actions
@@ -1151,7 +1151,7 @@ class LoadPlanBuilder:
                     {
                         "action": "manual_workflow_resolution_required",
                         "local_id": local_id,
-                        "candidate_matches": resolution["candidate_matches"],
+                        "candidate_matches": resolution.get("candidate_matches", []),
                         "workflow_observations": observations,
                         "stages": stages,
                         "steps": steps,

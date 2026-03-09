@@ -1,21 +1,34 @@
-import { WorkflowAccordion } from "@/components/workflow-accordion";
-import { getWorkflows } from "@/lib/backend-data";
+import { getExtractedWorkflows } from "@/lib/backend-data";
+import { searchExtractedWorkflows } from "@/lib/api-search";
+import { WorkflowsBrowseClient } from "@/components/workflows-browse-client";
+
+function collectUnique(
+  workflows: { target_mechanisms: string[]; target_techniques: string[] }[],
+  key: "target_mechanisms" | "target_techniques",
+): string[] {
+  const set = new Set<string>();
+  for (const wf of workflows) {
+    for (const v of wf[key]) set.add(v);
+  }
+  return Array.from(set).sort();
+}
 
 export default async function WorkflowsPage() {
-  const workflows = await getWorkflows();
+  const allWorkflows = await getExtractedWorkflows();
+  const initial = searchExtractedWorkflows(allWorkflows, {
+    sort: "year",
+    limit: 50,
+    offset: 0,
+  });
 
   return (
-    <div>
-      <header className="mb-16">
-        <h1 className="mb-3">Workflows</h1>
-        <p className="max-w-xl text-lg text-ink-secondary">
-          Design&#x2013;Build&#x2013;Test&#x2013;Learn loop archetypes with
-          step-level timing, testing order, and rationale for how mechanism and
-          technique choices come together.
-        </p>
-      </header>
-
-      <WorkflowAccordion workflows={workflows} />
-    </div>
+    <WorkflowsBrowseClient
+      initialWorkflows={initial.results}
+      initialTotal={initial.total}
+      filterOptions={{
+        mechanisms: collectUnique(allWorkflows, "target_mechanisms"),
+        techniques: collectUnique(allWorkflows, "target_techniques"),
+      }}
+    />
   );
 }

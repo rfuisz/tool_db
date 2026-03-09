@@ -16,6 +16,7 @@ from tool_db_backend.models import (
     ApprovedItemSourceDocument,
     CanonicalClaim,
     CanonicalClaimMetric,
+    ExtractedWorkflowSummary,
     FirstPassExplainer,
     FirstPassEntityDetail,
     FirstPassEntitySummary,
@@ -132,6 +133,11 @@ class KnowledgeRepository:
             except Exception:
                 logger.exception("Database workflow detail failed for slug=%s, falling back to files", slug)
         return self._get_workflow_from_files(slug)
+
+    def list_extracted_workflows(self) -> List[ExtractedWorkflowSummary]:
+        if not self._should_use_database():
+            return []
+        return self._list_extracted_workflows_from_database()
 
     def get_vocabularies(self) -> VocabularyPayload:
         vocab_path = self.settings.schema_root / "canonical" / "controlled_vocabularies.v1.json"
@@ -841,10 +847,13 @@ class KnowledgeRepository:
             mechanisms=structured.get("mechanisms", []),
             techniques=structured.get("techniques", []),
             target_processes=structured.get("target_processes", []),
+            parent_items=[],
+            child_items=[],
             external_ids=structured.get("external_ids", {}),
             source_status=structured.get("source_status", {}),
             citation_candidates=structured.get("citation_candidates", []),
             workflow_recommendations=structured.get("workflow_recommendations", []),
+            extracted_workflows=[],
             claims=[],
             validation_rollup=None,
             validations=[],
@@ -1155,8 +1164,13 @@ class KnowledgeRepository:
                 comparisons = self._fetch_item_comparisons(cursor, item_id)
                 problem_links = self._fetch_item_problem_links(cursor, item_id)
                 workflow_recommendations = self._fetch_item_workflow_recommendations(cursor, item_id)
+                extracted_workflows = self._fetch_extracted_workflows(cursor, item_id, row[1])
                 approval_evidence = self._fetch_item_approval_evidence(cursor, item_id, row[1])
-                markdown = self._get_item_markdown(slug, row[2], row[6], workflow_recommendations)
+                markdown = self._get_item_markdown(
+                    slug, row[2], row[6],
+                    workflow_recommendations=workflow_recommendations,
+                    extracted_workflows=extracted_workflows,
+                )
 
                 return ItemDetail(
                     slug=row[1],
@@ -1190,10 +1204,13 @@ class KnowledgeRepository:
                         "select target_process from item_target_process where item_id = %s order by target_process asc",
                         item_id,
                     ),
+                    parent_items=self._fetch_parent_item_links(cursor, item_id),
+                    child_items=self._fetch_child_item_links(cursor, item_id),
                     external_ids=row[11] or {},
                     source_status={},
                     citation_candidates=citations,
                     workflow_recommendations=workflow_recommendations,
+                    extracted_workflows=extracted_workflows,
                     claims=claims,
                     validation_rollup=validation_rollup,
                     validations=validations,
@@ -1437,6 +1454,153 @@ class KnowledgeRepository:
                     assumption_notes=self._fetch_workflow_assumptions(cursor, workflow_id),
                     index_markdown=index_markdown,
                 )
+
+    def _list_extracted_workflows_from_database(self) -> List[ExtractedWorkflowSummary]:
+        with self._connect() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    select
+                      ewo.id, ewo.packet_fingerprint, ewo.local_id,
+                      ewo.workflow_local_id, ewo.workflow_objective,
+                      ewo.protocol_family, ewo.engineered_system_family,
+                      ewo.target_mechanisms, ewo.target_techniques,
+                      ewo.why_workflow_works, ewo.workflow_priority_logic,
+                      ewo.validation_strategy, ewo.decision_gate_strategy,
+                      ewo.evidence_text,
+                      sd.id, sd.title, sd.source_type::text,
+                      sd.publication_year, sd.journal_or_source, sd.doi, sd.pmid
+                    from extracted_workflow_observation ewo
+                    join source_document sd on sd.id = ewo.source_document_id
+                    order by sd.publication_year desc nulls last, sd.title asc
+                """)
+                workflow_rows = cursor.fetchall()
+                results: List[ExtractedWorkflowSummary] = []
+                for row in workflow_rows:
+                    wf_id = str(row[0])
+                    packet_fp = row[1]
+                    workflow_local_id = row[3]
+
+                    cursor.execute(
+                        """
+                        select stage_name, stage_kind, stage_order, search_modality,
+                          input_candidate_count, output_candidate_count,
+                          selection_basis, counterselection_basis,
+                          enriches_for_axes, guards_against_axes,
+                          why_stage_exists, advance_criteria, bottleneck_risk
+                        from extracted_workflow_stage_observation
+                        where packet_fingerprint = %s
+                          and (workflow_local_id is not distinct from %s)
+                        order by stage_order asc
+                        """,
+                        (packet_fp, workflow_local_id),
+                    )
+                    stages = [
+                        {
+                            "stage_name": s[0],
+                            "stage_kind": s[1],
+                            "stage_order": s[2],
+                            "search_modality": s[3],
+                            "input_candidate_count": s[4],
+                            "output_candidate_count": s[5],
+                            "selection_basis": s[6],
+                            "counterselection_basis": s[7],
+                            "enriches_for_axes": list(s[8] or []),
+                            "guards_against_axes": list(s[9] or []),
+                            "why_stage_exists": s[10],
+                            "advance_criteria": s[11],
+                            "bottleneck_risk": s[12],
+                        }
+                        for s in cursor.fetchall()
+                    ]
+
+                    obs_local_id = row[2]
+                    cursor.execute(
+                        """
+                        select step_name, step_order, step_type, stage_name,
+                          item_local_ids, item_role, purpose, why_this_step_now,
+                          advance_criteria, input_artifact, output_artifact,
+                          duration_hours, success
+                        from extracted_workflow_step_observation
+                        where packet_fingerprint = %s
+                          and (
+                            workflow_observation_local_id = %s
+                            or (workflow_local_id is not distinct from %s
+                                and workflow_observation_local_id is null)
+                          )
+                        order by step_order asc
+                        """,
+                        (packet_fp, obs_local_id, workflow_local_id),
+                    )
+                    steps = [
+                        {
+                            "step_name": st[0],
+                            "step_order": st[1],
+                            "step_type": st[2],
+                            "stage_name": st[3],
+                            "item_local_ids": list(st[4] or []),
+                            "item_role": st[5],
+                            "purpose": st[6],
+                            "why_this_step_now": st[7],
+                            "advance_criteria": st[8],
+                            "input_artifact": st[9],
+                            "output_artifact": st[10],
+                            "duration_hours": st[11],
+                            "success": st[12],
+                        }
+                        for st in cursor.fetchall()
+                    ]
+
+                    cursor.execute(
+                        """
+                        select eic.slug, eic.canonical_name,
+                          coalesce(ti.canonical_name, eic.canonical_name) as display_name,
+                          ti.slug as item_slug
+                        from extracted_item_candidate eic
+                        left join toolkit_item ti on ti.id = eic.matched_item_id
+                        where eic.packet_fingerprint = %s
+                          and eic.candidate_type = 'toolkit_item'
+                        order by eic.canonical_name asc
+                        """,
+                        (packet_fp,),
+                    )
+                    involved_items = [
+                        {
+                            "slug": it[0],
+                            "canonical_name": it[1],
+                            "display_name": it[2],
+                            "item_slug": it[3],
+                        }
+                        for it in cursor.fetchall()
+                    ]
+
+                    results.append(
+                        ExtractedWorkflowSummary(
+                            workflow_id=wf_id,
+                            workflow_objective=row[4],
+                            protocol_family=row[5],
+                            engineered_system_family=row[6],
+                            target_mechanisms=list(row[7] or []),
+                            target_techniques=list(row[8] or []),
+                            why_workflow_works=row[9],
+                            workflow_priority_logic=row[10],
+                            validation_strategy=row[11],
+                            decision_gate_strategy=row[12],
+                            evidence_text=row[13],
+                            source_document={
+                                "id": str(row[14]),
+                                "title": row[15],
+                                "source_type": row[16],
+                                "publication_year": row[17],
+                                "journal_or_source": row[18],
+                                "doi": row[19],
+                                "pmid": row[20],
+                            },
+                            stages=stages,
+                            steps=steps,
+                            involved_items=involved_items,
+                        )
+                    )
+                return results
 
     def _fetch_item_citations(
         self,
@@ -2220,6 +2384,136 @@ class KnowledgeRepository:
         ]
 
     @staticmethod
+    def _fetch_extracted_workflows(cursor: Any, item_id: Any, item_slug: str) -> List[Dict[str, Any]]:
+        """Fetch real workflow observations from papers that mention this item."""
+        cursor.execute(
+            """
+            select distinct ewo.id, ewo.packet_fingerprint, ewo.local_id,
+              ewo.workflow_local_id, ewo.workflow_objective,
+              ewo.protocol_family, ewo.engineered_system_family,
+              ewo.target_mechanisms, ewo.target_techniques,
+              ewo.why_workflow_works, ewo.workflow_priority_logic,
+              ewo.validation_strategy, ewo.decision_gate_strategy,
+              ewo.evidence_text,
+              sd.id, sd.title, sd.source_type::text,
+              sd.publication_year, sd.journal_or_source, sd.doi, sd.pmid
+            from extracted_workflow_observation ewo
+            join source_document sd on sd.id = ewo.source_document_id
+            where ewo.packet_fingerprint in (
+              select packet_fingerprint
+              from extracted_item_candidate
+              where matched_item_id = %s
+                or matched_slug = %s
+                or (slug = %s and matched_item_id is null
+                    and coalesce(matched_slug, '') = '')
+            )
+            order by sd.publication_year desc nulls last
+            """,
+            (item_id, item_slug, item_slug),
+        )
+        workflows = []
+        for row in cursor.fetchall():
+            packet_fp = row[1]
+            obs_local_id = row[2]
+            workflow_local_id = row[3]
+
+            cursor.execute(
+                """
+                select stage_name, stage_kind, stage_order, search_modality,
+                  input_candidate_count, output_candidate_count,
+                  selection_basis, counterselection_basis,
+                  enriches_for_axes, guards_against_axes,
+                  why_stage_exists, advance_criteria, bottleneck_risk
+                from extracted_workflow_stage_observation
+                where packet_fingerprint = %s
+                  and (workflow_local_id is not distinct from %s)
+                order by stage_order asc
+                """,
+                (packet_fp, workflow_local_id),
+            )
+            stages = [
+                {
+                    "stage_name": s[0],
+                    "stage_kind": s[1],
+                    "stage_order": s[2],
+                    "search_modality": s[3],
+                    "input_candidate_count": s[4],
+                    "output_candidate_count": s[5],
+                    "selection_basis": s[6],
+                    "counterselection_basis": s[7],
+                    "enriches_for_axes": list(s[8] or []),
+                    "guards_against_axes": list(s[9] or []),
+                    "why_stage_exists": s[10],
+                    "advance_criteria": s[11],
+                    "bottleneck_risk": s[12],
+                }
+                for s in cursor.fetchall()
+            ]
+
+            cursor.execute(
+                """
+                select step_name, step_order, step_type, stage_name,
+                  item_local_ids, item_role, purpose, why_this_step_now,
+                  advance_criteria, input_artifact, output_artifact,
+                  duration_hours, success
+                from extracted_workflow_step_observation
+                where packet_fingerprint = %s
+                  and (
+                    workflow_observation_local_id = %s
+                    or (workflow_local_id is not distinct from %s
+                        and workflow_observation_local_id is null)
+                  )
+                order by step_order asc
+                """,
+                (packet_fp, obs_local_id, workflow_local_id),
+            )
+            steps = [
+                {
+                    "step_name": st[0],
+                    "step_order": st[1],
+                    "step_type": st[2],
+                    "stage_name": st[3],
+                    "item_local_ids": list(st[4] or []),
+                    "item_role": st[5],
+                    "purpose": st[6],
+                    "why_this_step_now": st[7],
+                    "advance_criteria": st[8],
+                    "input_artifact": st[9],
+                    "output_artifact": st[10],
+                    "duration_hours": st[11],
+                    "success": st[12],
+                }
+                for st in cursor.fetchall()
+            ]
+
+            workflows.append(
+                {
+                    "workflow_objective": row[4],
+                    "protocol_family": row[5],
+                    "engineered_system_family": row[6],
+                    "target_mechanisms": list(row[7] or []),
+                    "target_techniques": list(row[8] or []),
+                    "why_workflow_works": row[9],
+                    "workflow_priority_logic": row[10],
+                    "validation_strategy": row[11],
+                    "decision_gate_strategy": row[12],
+                    "evidence_text": row[13],
+                    "source_document": {
+                        "id": str(row[14]),
+                        "title": row[15],
+                        "source_type": row[16],
+                        "publication_year": row[17],
+                        "journal_or_source": row[18],
+                        "doi": row[19],
+                        "pmid": row[20],
+                    },
+                    "stages": stages,
+                    "steps": steps,
+                }
+            )
+        return workflows
+
+    @staticmethod
     def _fetch_item_components(cursor: Any, item_id: Any) -> List[str]:
         cursor.execute(
             """
@@ -2232,6 +2526,44 @@ class KnowledgeRepository:
             (item_id,),
         )
         return [row[0] for row in cursor.fetchall()]
+
+    @staticmethod
+    def _fetch_child_item_links(cursor: Any, item_id: Any) -> list:
+        from tool_db_backend.models import ItemRelationLink
+
+        cursor.execute(
+            """
+            select distinct component.slug, component.canonical_name, component.item_type
+            from item_component ic
+            join toolkit_item component on component.id = ic.component_item_id
+            where ic.parent_item_id = %s
+            order by component.canonical_name asc
+            """,
+            (item_id,),
+        )
+        return [
+            ItemRelationLink(slug=row[0], canonical_name=row[1], item_type=row[2], relation_label="component")
+            for row in cursor.fetchall()
+        ]
+
+    @staticmethod
+    def _fetch_parent_item_links(cursor: Any, item_id: Any) -> list:
+        from tool_db_backend.models import ItemRelationLink
+
+        cursor.execute(
+            """
+            select distinct parent.slug, parent.canonical_name, parent.item_type
+            from item_component ic
+            join toolkit_item parent on parent.id = ic.parent_item_id
+            where ic.component_item_id = %s
+            order by parent.canonical_name asc
+            """,
+            (item_id,),
+        )
+        return [
+            ItemRelationLink(slug=row[0], canonical_name=row[1], item_type=row[2], relation_label="assembly")
+            for row in cursor.fetchall()
+        ]
 
     @staticmethod
     def _fetch_grouped_scalar_lists(cursor: Any, query: str) -> Dict[Any, List[str]]:
@@ -2452,6 +2784,7 @@ class KnowledgeRepository:
         canonical_name: str,
         summary: Optional[str],
         workflow_recommendations: Optional[List[Dict[str, Any]]] = None,
+        extracted_workflows: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, str]:
         item_dir = self.settings.knowledge_root / "items" / slug
         if item_dir.exists():
@@ -2463,21 +2796,82 @@ class KnowledgeRepository:
             }
 
         summary_text = summary or "Postgres-backed canonical item record."
-        workflow_lines = [
-            f"- `{recommendation['workflow_slug']}`: {recommendation.get('notes') or recommendation.get('objective') or recommendation['role_name']}"
-            for recommendation in (workflow_recommendations or [])
-        ]
-        workflow_body = (
-            "\n".join(workflow_lines)
-            if workflow_lines
-            else "Workflow fit notes are not yet available for this Postgres-backed record."
+        workflow_body = self._build_workflow_fit_markdown(
+            canonical_name, workflow_recommendations or [], extracted_workflows or [],
         )
         return {
             "index_markdown": f"# {canonical_name}\n\n{summary_text}\n",
             "evidence_markdown": f"# {canonical_name} Evidence\n\nEvidence is currently being served from the hosted Postgres canonical store.\n",
             "replication_markdown": f"# {canonical_name} Replication\n\nReplication details are currently being served from the hosted Postgres canonical store.\n",
-            "workflow_fit_markdown": f"# {canonical_name} Workflow Fit\n\n{workflow_body}\n",
+            "workflow_fit_markdown": workflow_body,
         }
+
+    @staticmethod
+    def _build_workflow_fit_markdown(
+        canonical_name: str,
+        workflow_recommendations: List[Dict[str, Any]],
+        extracted_workflows: List[Dict[str, Any]],
+    ) -> str:
+        parts: List[str] = [f"# {canonical_name} Workflows"]
+
+        if extracted_workflows:
+            for wf in extracted_workflows:
+                doc = wf.get("source_document") or {}
+                title = doc.get("title") or "Untitled source"
+                year = doc.get("publication_year")
+                header = f"{title} ({year})" if year else title
+                parts.append(f"\n## {header}")
+
+                objective = wf.get("workflow_objective")
+                if objective:
+                    parts.append(f"\n**Objective:** {objective}")
+
+                why = wf.get("why_workflow_works")
+                if why:
+                    parts.append(f"\n**Why it works:** {why}")
+
+                mechs = wf.get("target_mechanisms") or []
+                techs = wf.get("target_techniques") or []
+                if mechs:
+                    parts.append(f"\n**Target mechanisms:** {', '.join(mechs)}")
+                if techs:
+                    parts.append(f"\n**Techniques:** {', '.join(techs)}")
+
+                stages = wf.get("stages") or []
+                if stages:
+                    parts.append("\n### Stages")
+                    for stage in stages:
+                        name = stage.get("stage_name", "Stage")
+                        kind = stage.get("stage_kind", "")
+                        why_exists = stage.get("why_stage_exists") or ""
+                        line = f"- **{name}** ({kind})"
+                        if why_exists:
+                            line += f": {why_exists}"
+                        parts.append(line)
+
+                steps = wf.get("steps") or []
+                if steps:
+                    parts.append("\n### Steps")
+                    for step in steps:
+                        name = step.get("step_name", "Step")
+                        purpose = step.get("purpose") or ""
+                        role = step.get("item_role") or ""
+                        line = f"- **{name}**"
+                        if purpose:
+                            line += f": {purpose}"
+                        if role:
+                            line += f" (role: {role})"
+                        parts.append(line)
+
+        elif workflow_recommendations:
+            parts.append("\n## Likely Fit")
+            for rec in workflow_recommendations:
+                notes = rec.get("notes") or rec.get("objective") or rec.get("role_name", "")
+                parts.append(f"- `{rec.get('workflow_slug', '')}`: {notes}")
+        else:
+            parts.append("\nNo workflow evidence has been extracted from literature for this record yet.")
+
+        return "\n".join(parts) + "\n"
 
     def _get_workflow_index_markdown(self, slug: str, name: str, objective: str) -> str:
         workflow_dir = self.settings.knowledge_root / "workflows" / slug

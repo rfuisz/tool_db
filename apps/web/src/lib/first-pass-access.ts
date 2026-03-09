@@ -19,5 +19,5 @@ export async function isLocalAdminEnabled(): Promise<boolean> {
 }
 
 export async function isFirstPassEnabled(): Promise<boolean> {
-  return isLocalAdminEnabled();
+  return true;
 }

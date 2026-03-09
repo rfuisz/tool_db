@@ -58,7 +58,7 @@ export function SearchableItemList({
         <div className="mb-4 flex flex-wrap items-center gap-3 font-ui text-sm">
           <input
             type="text"
-            placeholder="Search\u2026"
+            placeholder="Search…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-8 w-48 border-b border-edge bg-transparent px-0 text-ink placeholder-ink-muted outline-none transition-colors focus:border-accent"

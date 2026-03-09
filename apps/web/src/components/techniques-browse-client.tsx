@@ -64,7 +64,7 @@ export function TechniquesBrowseClient({
       <div className="mb-8 flex flex-wrap items-center gap-3 font-ui text-sm">
         <input
           type="text"
-          placeholder="Search techniques\u2026"
+          placeholder="Search techniques…"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="h-9 w-64 border-b border-edge bg-transparent px-0 text-ink placeholder-ink-muted outline-none transition-colors focus:border-accent"

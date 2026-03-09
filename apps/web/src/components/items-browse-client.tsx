@@ -396,7 +396,7 @@ export function ItemsBrowseClient({
                     <div className="space-y-3">
                       <input
                         type="text"
-                        placeholder="Filter mechanisms\u2026"
+                        placeholder="Filter mechanisms…"
                         value={mechanismSearch}
                         onChange={(e) => setMechanismSearch(e.target.value)}
                         className="h-8 w-full border-b border-edge bg-transparent px-0 font-ui text-sm text-ink placeholder-ink-muted outline-none transition-colors focus:border-accent"
@@ -506,7 +506,7 @@ export function ItemsBrowseClient({
                     <div className="space-y-3">
                       <input
                         type="text"
-                        placeholder="Filter techniques\u2026"
+                        placeholder="Filter techniques…"
                         value={techniqueSearch}
                         onChange={(e) => setTechniqueSearch(e.target.value)}
                         className="h-8 w-full border-b border-edge bg-transparent px-0 font-ui text-sm text-ink placeholder-ink-muted outline-none transition-colors focus:border-accent"

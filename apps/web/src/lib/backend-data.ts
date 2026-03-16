@@ -747,13 +747,18 @@ export async function getExtractedWorkflows(
 export async function getGaps(): Promise<GapDetail[]> {
   try {
     const summaries = await fetchBackendJson<BackendGapSummary[]>("/api/v1/gaps");
-    const details = await Promise.all(
-      summaries
-        .filter((summary) => summary.slug)
-        .map((summary) =>
-          fetchBackendJson<BackendGapDetail>(`/api/v1/gaps/${summary.slug}`),
+    const slugs = summaries.filter((s) => s.slug).map((s) => s.slug);
+    const details: BackendGapDetail[] = [];
+    const BATCH = 5;
+    for (let i = 0; i < slugs.length; i += BATCH) {
+      const batch = slugs.slice(i, i + BATCH);
+      const results = await Promise.all(
+        batch.map((slug) =>
+          fetchBackendJson<BackendGapDetail>(`/api/v1/gaps/${slug}`),
         ),
-    );
+      );
+      details.push(...results);
+    }
     return details.map(normalizeGapDetail);
   } catch (error) {
     throw backendUnavailableError("gap listing", error);

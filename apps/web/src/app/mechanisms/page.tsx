@@ -1,10 +1,21 @@
-import { getItems } from "@/lib/backend-data";
-import { buildMechanismConceptSummaries } from "@/lib/item-hierarchy";
+import { getItemAggregates } from "@/lib/backend-data";
+import { MECHANISM_LABELS } from "@/lib/vocabularies";
+import { MECHANISM_DESCRIPTIONS } from "@/lib/explanations";
 import { MechanismsBrowseClient } from "@/components/mechanisms-browse-client";
 
 export default async function MechanismsPage() {
-  const items = await getItems();
-  const concepts = buildMechanismConceptSummaries(items);
+  const aggregates = await getItemAggregates();
+
+  const concepts = aggregates.by_mechanism
+    .map((b) => ({
+      key: b.value,
+      label: MECHANISM_LABELS[b.value] ?? b.value.replace(/_/g, " "),
+      description:
+        MECHANISM_DESCRIPTIONS[b.value] ??
+        "A mechanism-level grouping derived from the current toolkit evidence.",
+      totalCount: b.count,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
   return (
     <div>

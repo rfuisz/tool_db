@@ -1,29 +1,25 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-import { parseMechanismConceptSearchFilters } from "@/lib/api-route-utils";
-import { getItems } from "@/lib/backend-data";
-import { searchMechanismConcepts } from "@/lib/api-search";
+import { getItemAggregates } from "@/lib/backend-data";
+import { MECHANISM_LABELS } from "@/lib/vocabularies";
+import { MECHANISM_DESCRIPTIONS } from "@/lib/explanations";
 
-export async function GET(request: NextRequest) {
-  const filters = parseMechanismConceptSearchFilters(request.nextUrl.searchParams);
-  const items = await getItems();
-  const result = searchMechanismConcepts(items, filters);
+export async function GET() {
+  const aggregates = await getItemAggregates();
+
+  const mechanisms = aggregates.by_mechanism
+    .map((b) => ({
+      key: b.value,
+      label: MECHANISM_LABELS[b.value] ?? b.value.replace(/_/g, " "),
+      description:
+        MECHANISM_DESCRIPTIONS[b.value] ??
+        "A mechanism-level grouping derived from the current toolkit evidence.",
+      total_count: b.count,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
   return NextResponse.json({
-    filters,
-    total: result.total,
-    limit: result.limit,
-    offset: result.offset,
-    mechanisms: result.results.map((c) => ({
-      key: c.key,
-      label: c.label,
-      description: c.description,
-      summary: c.summary,
-      total_count: c.totalCount,
-      architecture_count: c.architectureCount,
-      component_count: c.componentCount,
-      capabilities: c.capabilities,
-      component_names: c.componentNames,
-    })),
+    total: mechanisms.length,
+    mechanisms,
   });
 }

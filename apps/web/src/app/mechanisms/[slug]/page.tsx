@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getItems } from "@/lib/backend-data";
-import { getMechanismConceptSummary } from "@/lib/item-hierarchy";
+import { getItemsBrowse } from "@/lib/backend-data";
+import {
+  ARCHITECTURE_ITEM_TYPES,
+  COMPONENT_ITEM_TYPES,
+} from "@/lib/item-hierarchy";
+import { MECHANISM_LABELS } from "@/lib/vocabularies";
+import { MECHANISM_DESCRIPTIONS } from "@/lib/explanations";
 import { SearchableItemList } from "@/components/searchable-item-list";
 
 export default async function MechanismDetailPage({
@@ -10,12 +15,29 @@ export default async function MechanismDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const items = await getItems();
-  const concept = getMechanismConceptSummary(items, slug);
 
-  if (!concept) {
+  const label = MECHANISM_LABELS[slug];
+  if (!label) {
     notFound();
   }
+
+  const description =
+    MECHANISM_DESCRIPTIONS[slug] ??
+    "A mechanism-level grouping derived from the current toolkit evidence.";
+
+  const result = await getItemsBrowse({
+    mechanism: [slug],
+    sort: "score",
+    limit: 500,
+    offset: 0,
+  });
+
+  const architectureItems = result.items.filter((i) =>
+    (ARCHITECTURE_ITEM_TYPES as readonly string[]).includes(i.item_type),
+  );
+  const componentItems = result.items.filter((i) =>
+    (COMPONENT_ITEM_TYPES as readonly string[]).includes(i.item_type),
+  );
 
   return (
     <div>
@@ -28,28 +50,23 @@ export default async function MechanismDetailPage({
           Mechanisms
         </Link>
         <span className="mx-2 text-ink-faint">/</span>
-        <span className="text-ink-secondary">{concept.label}</span>
+        <span className="text-ink-secondary">{label}</span>
       </p>
 
       <header className="mb-12">
         <p className="small-caps mb-3 text-accent">Mechanism Concept</p>
-        <h1 className="mb-3">{concept.label}</h1>
+        <h1 className="mb-3">{label}</h1>
         <p className="max-w-3xl text-lg leading-relaxed text-ink-secondary">
-          {concept.summary}
+          {description}
         </p>
         <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 font-data text-sm text-ink-muted">
-          <span>{concept.totalCount} total items</span>
-          <span>{concept.architectureCount} architectures</span>
-          <span>{concept.componentCount} components</span>
+          <span>{result.total} total items</span>
+          <span>{architectureItems.length} architectures</span>
+          <span>{componentItems.length} components</span>
         </div>
-        {concept.capabilities.length > 0 ? (
-          <p className="mt-4 font-ui text-sm text-ink-secondary">
-            Main enabled capabilities: {concept.capabilities.join(", ")}.
-          </p>
-        ) : null}
         <p className="mt-6">
           <Link
-            href={`/items?mechanism=${encodeURIComponent(concept.key)}`}
+            href={`/items?mechanism=${encodeURIComponent(slug)}`}
             className="small-caps text-accent hover:text-accent-hover"
           >
             Browse All Matching Toolkit Items
@@ -57,8 +74,8 @@ export default async function MechanismDetailPage({
         </p>
       </header>
 
-      <SearchableItemList title="Architectures" items={concept.architectureItems} />
-      <SearchableItemList title="Components" items={concept.componentItems} />
+      <SearchableItemList title="Architectures" items={architectureItems} />
+      <SearchableItemList title="Components" items={componentItems} />
     </div>
   );
 }

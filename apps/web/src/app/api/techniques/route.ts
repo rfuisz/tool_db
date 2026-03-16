@@ -1,27 +1,25 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-import { parseTechniqueConceptSearchFilters } from "@/lib/api-route-utils";
-import { getItems } from "@/lib/backend-data";
-import { searchTechniqueConcepts } from "@/lib/api-search";
+import { getItemAggregates } from "@/lib/backend-data";
+import { TECHNIQUE_LABELS } from "@/lib/vocabularies";
+import { TECHNIQUE_DESCRIPTIONS } from "@/lib/explanations";
 
-export async function GET(request: NextRequest) {
-  const filters = parseTechniqueConceptSearchFilters(request.nextUrl.searchParams);
-  const items = await getItems();
-  const result = searchTechniqueConcepts(items, filters);
+export async function GET() {
+  const aggregates = await getItemAggregates();
+
+  const techniques = aggregates.by_technique
+    .map((b) => ({
+      key: b.value,
+      label: TECHNIQUE_LABELS[b.value] ?? b.value.replace(/_/g, " "),
+      description:
+        TECHNIQUE_DESCRIPTIONS[b.value] ??
+        "A technique-level grouping derived from the current toolkit evidence.",
+      total_count: b.count,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
   return NextResponse.json({
-    filters,
-    total: result.total,
-    limit: result.limit,
-    offset: result.offset,
-    techniques: result.results.map((c) => ({
-      key: c.key,
-      label: c.label,
-      description: c.description,
-      summary: c.summary,
-      total_count: c.totalCount,
-      method_count: c.methodCount,
-      capabilities: c.capabilities,
-    })),
+    total: techniques.length,
+    techniques,
   });
 }

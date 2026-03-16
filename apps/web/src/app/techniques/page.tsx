@@ -1,10 +1,21 @@
-import { getItems } from "@/lib/backend-data";
-import { buildTechniqueConceptSummaries } from "@/lib/item-hierarchy";
+import { getItemAggregates } from "@/lib/backend-data";
+import { TECHNIQUE_LABELS } from "@/lib/vocabularies";
+import { TECHNIQUE_DESCRIPTIONS } from "@/lib/explanations";
 import { TechniquesBrowseClient } from "@/components/techniques-browse-client";
 
 export default async function TechniquesPage() {
-  const items = await getItems();
-  const concepts = buildTechniqueConceptSummaries(items);
+  const aggregates = await getItemAggregates();
+
+  const concepts = aggregates.by_technique
+    .map((b) => ({
+      key: b.value,
+      label: TECHNIQUE_LABELS[b.value] ?? b.value.replace(/_/g, " "),
+      description:
+        TECHNIQUE_DESCRIPTIONS[b.value] ??
+        "A technique-level grouping derived from the current toolkit evidence.",
+      totalCount: b.count,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
   return (
     <div>

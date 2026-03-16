@@ -4,64 +4,48 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { FilterSelect } from "@/components/filter-select";
-import type { MechanismConceptSummary } from "@/lib/item-hierarchy";
 
-type SortKey = "name" | "items" | "architectures" | "components";
+type MechanismConcept = {
+  key: string;
+  label: string;
+  description: string;
+  totalCount: number;
+};
+
+type SortKey = "name" | "items";
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "items", label: "Total Items" },
-  { value: "architectures", label: "Architectures" },
-  { value: "components", label: "Components" },
   { value: "name", label: "Name" },
 ];
 
-function matchesSearch(concept: MechanismConceptSummary, query: string): boolean {
+function matchesSearch(concept: MechanismConcept, query: string): boolean {
   if (!query) return true;
   const lower = query.toLowerCase();
   return (
     concept.label.toLowerCase().includes(lower) ||
     concept.key.toLowerCase().includes(lower) ||
-    concept.description.toLowerCase().includes(lower) ||
-    concept.summary.toLowerCase().includes(lower) ||
-    concept.capabilities.some((c) => c.toLowerCase().includes(lower)) ||
-    concept.componentNames.some((c) => c.toLowerCase().includes(lower))
+    concept.description.toLowerCase().includes(lower)
   );
-}
-
-function sortConcepts(
-  concepts: MechanismConceptSummary[],
-  sort: SortKey,
-): MechanismConceptSummary[] {
-  const sorted = [...concepts];
-  switch (sort) {
-    case "items":
-      sorted.sort((a, b) => b.totalCount - a.totalCount);
-      break;
-    case "architectures":
-      sorted.sort((a, b) => b.architectureCount - a.architectureCount);
-      break;
-    case "components":
-      sorted.sort((a, b) => b.componentCount - a.componentCount);
-      break;
-    case "name":
-    default:
-      sorted.sort((a, b) => a.label.localeCompare(b.label));
-      break;
-  }
-  return sorted;
 }
 
 export function MechanismsBrowseClient({
   concepts,
 }: {
-  concepts: MechanismConceptSummary[];
+  concepts: MechanismConcept[];
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>("items");
 
   const filtered = useMemo(() => {
     const matched = concepts.filter((c) => matchesSearch(c, searchQuery));
-    return sortConcepts(matched, sortBy);
+    const sorted = [...matched];
+    if (sortBy === "items") {
+      sorted.sort((a, b) => b.totalCount - a.totalCount);
+    } else {
+      sorted.sort((a, b) => a.label.localeCompare(b.label));
+    }
+    return sorted;
   }, [concepts, searchQuery, sortBy]);
 
   return (
@@ -108,21 +92,12 @@ export function MechanismsBrowseClient({
                   {concept.label}
                 </h2>
                 <span className="font-data text-xs text-ink-muted">
-                  {concept.totalCount}
+                  {concept.totalCount} items
                 </span>
               </div>
               <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
                 {concept.description}
               </p>
-              {concept.capabilities.length > 0 && (
-                <p className="mt-2 font-ui text-xs text-ink-muted">
-                  {concept.capabilities.join(" · ")}
-                </p>
-              )}
-              <div className="mt-3 flex gap-4 font-data text-xs text-ink-muted">
-                <span>{concept.architectureCount} architectures</span>
-                <span>{concept.componentCount} components</span>
-              </div>
             </Link>
           ))}
         </div>

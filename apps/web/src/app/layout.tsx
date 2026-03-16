@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import { EB_Garamond, Jost, Inter, JetBrains_Mono } from "next/font/google";
+import Script from "next/script";
 import { DeploymentBadge } from "@/components/deployment-badge";
 import { Nav } from "@/components/nav";
 import { PaperModalProvider } from "@/components/paper-modal";
 import { isFirstPassEnabled, isLocalAdminEnabled } from "@/lib/first-pass-access";
 import "./globals.css";
+
+const GA_ID = "G-R96DQFCEEC";
 
 const ebGaramond = EB_Garamond({
   variable: "--font-eb-garamond",
@@ -55,6 +58,20 @@ export default async function RootLayout({
       lang="en"
       className={`${ebGaramond.variable} ${jost.variable} ${inter.variable} ${jetbrains.variable}`}
     >
+      <head>
+        <Script
+          src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', '${GA_ID}');
+          `}
+        </Script>
+      </head>
       <body className="min-h-screen">
         <PaperModalProvider>
           <Nav showFirstPass={showFirstPass} showLocalAdmin={showLocalAdmin} />
